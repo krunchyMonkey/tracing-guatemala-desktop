@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, SourceTag, StatusBadge, formatDate } from '../clients/components'
@@ -91,17 +91,26 @@ export function ClientsScreen() {
   const query = readQuery(params)
   const directory = useDirectoryResults(query)
   const search = params.toString()
+  // URL updates commit asynchronously, so quick successive changes (a filter
+  // click, then typing) build on the last query written, not the last rendered.
+  const pending = useRef(query)
 
-  useEffect(() => rememberDirectorySearch(search ? `?${search}` : ''), [search, rememberDirectorySearch])
+  useEffect(() => {
+    pending.current = readQuery(new URLSearchParams(search))
+    rememberDirectorySearch(search ? `?${search}` : '')
+  }, [search, rememberDirectorySearch])
   const results = directory.clients
   const isFiltered = query.text !== '' || query.sources.length > 0 || query.status !== defaultQuery.status
   const activeCount = clients.filter((c) => c.status === 'active').length
 
-  const update = (patch: Partial<DirectoryQuery>) => setParams(writeQuery({ ...query, ...patch }), { replace: true })
-  const toggleSource = (source: ClientSource) =>
-    update({
-      sources: query.sources.includes(source) ? query.sources.filter((s) => s !== source) : [...query.sources, source]
-    })
+  const update = (patch: Partial<DirectoryQuery>) => {
+    pending.current = { ...pending.current, ...patch }
+    setParams(writeQuery(pending.current), { replace: true })
+  }
+  const toggleSource = (source: ClientSource) => {
+    const { sources } = pending.current
+    update({ sources: sources.includes(source) ? sources.filter((s) => s !== source) : [...sources, source] })
+  }
 
   return (
     <section aria-labelledby="clients-heading" className="clients">
@@ -211,7 +220,7 @@ export function ClientsScreen() {
             {isFiltered && (
               <>
                 {' · '}
-                <button type="button" className="link-button" onClick={() => setParams(new URLSearchParams())}>
+                <button type="button" className="link-button" onClick={() => update(defaultQuery)}>
                   Clear search and filters
                 </button>
               </>
