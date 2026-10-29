@@ -52,7 +52,7 @@ All data shown is fictional.
 | Archived, read-only profile ![](../screenshots/issue-3/09-archived-profile.png) | Edit: preferred-channel rule ![](../screenshots/issue-3/10-edit-validation.png) |
 | Save failure keeps your text ![](../screenshots/issue-3/11-save-error.png) | |
 
-To refresh them after a design change: `npm run build`, then `CAPTURE_SCREENSHOTS=1 npx playwright test prototype-screenshots`.
+These screenshots were captured from the #3 prototype and are no longer regenerated (see the update note above).
 
 ## Coverage of the #3 acceptance criteria
 
