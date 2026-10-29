@@ -1,6 +1,6 @@
-# Phase 1 — Client Management: proposed baseline and Claude handoff
+# Phase 1 — Client Management: build-first MVP specification
 
-**Status:** Engineering proposal based on the researcher-confirmed workflow; **not yet approved by the researcher**.  
+**Status:** Project-owner-authorized **implementation baseline**. Researcher feedback and actual approval are deferred to the integrated MVP pilot (#12), not gates for #5–#11.  
 **Source of truth:** [Completed workflow review](./researcher-workflow-review-2026-10-28.md) and GitHub issues #1–#12.  
 **Goal:** Ship a secure, local-first, single-user client directory useful on its own, without requiring genealogy AI, document syncing, or Fiverr APIs.
 
@@ -13,17 +13,17 @@
 - Saving the same materials repeatedly, preparing detailed research notes, and writing client messages are the three highest frustrations.
 - All ten current research steps were confirmed. The questionnaire did not define inactive-client, cancellation, permission, or case completion policies.
 
-**Proposed for MVP, pending confirmation**
+**Working MVP defaults (project-owner-authorized; subject to pilot feedback)**
 - One client profile can represent many past and future engagements; the app will not automate Fiverr orders.
 - A client is **active** by default and may be **archived** and **restored**; no hard deletion UI.
 - A small client directory and internal contact notes are sufficient for the first pilot.
 - The researcher must approve any external send or inferred genealogical conclusion; Phase 1 has no automated sends, uploads, AI calls, or data merges.
 
-## Client data model v1 — proposal for #2
+## Client data model v1 — implementation baseline (#2)
 
 > **Superseded by the detailed #2 proposal:** [client-data-model.md](./client-data-model.md) (field rules, validation, personal-data classes, lifecycle and approval checklist). The table below is kept as the original baseline.
 
-These are suggested fields, **not** claims about the researcher's preferences:
+These are working implementation defaults, **not** evidence that the researcher endorsed individual fields:
 
 | Field | Required | Purpose / notes |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ These are suggested fields, **not** claims about the researcher's preferences:
 - `hard delete`, `merge`, and batch actions: **out of scope** for Phase 1.
 - Archive behavior for active research cases must be revisited in Phase 2; avoid schema design that cascades hard deletes.
 
-## UI contract for #3 — researcher review required
+## UI contract for #3 — working prototype, pilot feedback later
 
 Single-window desktop navigation: **Clients**, client profile, and lightweight Settings/Backup route.
 
@@ -74,23 +74,25 @@ Single-window desktop navigation: **Clients**, client profile, and lightweight S
 - Tests: unit (validation/domain), integration (SQLite, migration, persistence), UI smoke (CRUD, search/notes), backup/restore regression.
 - Packaging: choose the researcher's target OS and installer **before** claiming installation acceptance; development can begin on the engineer's OS.
 
-## Execution order / gates
+## Execution order — build-first
 
-| Work | Ticket | Prerequisite | Ready to start? |
+The project owner authorizes the working v1 data model and merged UI prototype for implementation. Researcher approval is **not a prerequisite** for #5–#11. Validate the integrated app with the researcher at #12; record actual feedback there and create focused follow-ups.
+
+| Work | Ticket | Dependency | Next action |
 | --- | --- | --- | --- |
-| Document lifecycle and fields | #2 | #1's documented survey | **Yes — draft proposal and request researcher decisions** |
-| Wireframes/clickable mockup | #3 | #2 proposed fields | **Yes — exploratory design; signoff before final UI** |
-| Secure Electron shell | #4 | None | **Yes — isolated foundation only** |
-| SQLite persistence/migrations | #5 | Approved #2; #4 | **Blocked on #2 signoff and #4** |
-| Client CRUD/archive | #6 | Approved #3; #5 | **Blocked** |
-| Search/filter directory | #7 | Approved #3; #5 | **Blocked** |
-| Client profile | #8 | Approved #3; #5 | **Blocked** |
-| Notes/contact activity | #9 | #5; #8 | **Blocked** |
-| Validation/duplicate advisory | #10 | Approved #2; #6 | **Blocked** |
-| Backup/restore/privacy | #11 | #5 | **Blocked** |
-| Installer/pilot | #12 | #4–#11 | **Blocked** |
+| Client model defaults (PR #96) | #2 | Survey documented | **Complete for implementation**; actual feedback at #12 |
+| Prototype (PR #97) | #3 | Working #2 model | **Complete as UI baseline**; actual feedback at #12 |
+| Secure Electron shell (PR #95) | #4 | None | **Complete** |
+| SQLite storage and migrations | #5 | #2 working model; #4 shell | **Ready now** |
+| Client create/edit/archive/restore | #6 | #5 | Start after persistence |
+| Search/filter directory | #7 | #5 | Start after persistence |
+| Client profile | #8 | #5 | Start after persistence |
+| Notes and contact activity | #9 | #5, #8 | Start after profile |
+| Validation and duplicate advisory | #10 | #5, #6 | Start after lifecycle |
+| Backup/restore/privacy | #11 | #5 | Start after persistence; required before real-data pilot |
+| Packaged integrated pilot | #12 | #4–#11 | Collect real researcher feedback and signoff; iterate |
 
-**Parallelism:** Claude may work on **#2 and #4** immediately, and prototype #3 with explicitly provisional fields. Do not have Claude silently resolve questions reserved for the researcher.
+Work in small reviewable PRs; do not invent real user acceptance. External APIs, cloud AI and automatic sends remain out of Phase 1.
 
 ## Shared definition of done for implementation tickets
 
@@ -101,7 +103,7 @@ Single-window desktop navigation: **Clients**, client profile, and lightweight S
 5. No cloud/AI/network access or external sends introduced under a Phase 1 ticket.
 6. Documentation updated when introducing commands, schema migrations, or behavior differences.
 
-## Researcher approval checklist (#2/#3)
+## Questions for the researcher during the integrated pilot (#12)
 
 - [ ] Are the proposed required/optional fields right?
 - [ ] How are inactive, archived, repeat, and prospective clients represented?
@@ -112,4 +114,4 @@ Single-window desktop navigation: **Clients**, client profile, and lightweight S
 - [ ] Which actions require confirmation? (Survey answer: *not sure*; default to conservative)
 - [ ] Which OS will she use for the first installed pilot?
 
-Record concrete answers in #2 and #3; unresolved choices should remain open, not treated as approval.
+These questions **do not block implementation**. Record her actual answers and usability feedback during #12, then refine the model/UI in follow-up tickets. Until then, retain the working defaults and avoid claims of researcher signoff.
