@@ -41,6 +41,28 @@ test('launches from app://renderer and navigates between placeholder screens', a
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
 })
 
+test('client prototype screens render under the production CSP without violations', async () => {
+  await page.evaluate(() => {
+    const w = window as unknown as { __cspViolations: string[] }
+    w.__cspViolations = []
+    document.addEventListener('securitypolicyviolation', (event) => w.__cspViolations.push(event.violatedDirective))
+  })
+
+  const nav = page.getByRole('navigation', { name: 'Main' })
+  await nav.getByRole('link', { name: 'Clients' }).click()
+  await page.getByRole('link', { name: 'Daniel Ochoa' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Daniel Ochoa' })).toBeVisible()
+  await page.getByRole('button', { name: 'Archive' }).click()
+  await expect(page.getByRole('alertdialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByRole('link', { name: 'Edit details' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Edit Daniel Ochoa' })).toBeVisible()
+
+  const violations = await page.evaluate(() => (window as unknown as { __cspViolations: string[] }).__cspViolations)
+  expect(violations).toEqual([])
+  await nav.getByRole('link', { name: 'Home' }).click()
+})
+
 test('main window uses hardened web preferences', async () => {
   const prefs = await app.evaluate(({ BrowserWindow }) => {
     // Undocumented but stable WebContents API that reports the effective preferences.
