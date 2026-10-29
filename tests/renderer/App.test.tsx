@@ -2,12 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/renderer/src/App'
+import { createFakeApi } from './fakeApi'
 
 beforeEach(() => {
   window.location.hash = ''
-  vi.stubGlobal('tracingGuatemala', {
-    getAppInfo: vi.fn().mockResolvedValue({ name: 'Tracing Guatemala', version: '0.1.0', platform: 'win32' })
-  })
+  vi.stubGlobal('tracingGuatemala', createFakeApi().api)
 })
 
 afterEach(() => {
@@ -26,7 +25,7 @@ describe('App navigation', () => {
     const nav = screen.getByRole('navigation', { name: 'Main' })
 
     fireEvent.click(within(nav, 'Clients'))
-    expect(screen.getByRole('heading', { level: 1, name: 'Clients' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Clients' })).toBeTruthy()
 
     fireEvent.click(within(nav, 'Settings & Backup'))
     expect(screen.getByRole('heading', { level: 1, name: 'Settings & Backup' })).toBeTruthy()
@@ -37,7 +36,9 @@ describe('App navigation', () => {
   })
 
   it('shows a friendly message when app info cannot be loaded', async () => {
-    vi.stubGlobal('tracingGuatemala', { getAppInfo: vi.fn().mockRejectedValue(new Error('rejected')) })
+    const { api } = createFakeApi()
+    vi.mocked(api.getAppInfo).mockRejectedValue(new Error('rejected'))
+    vi.stubGlobal('tracingGuatemala', api)
     window.location.hash = '#/settings'
     render(<App />)
     expect(await screen.findByText('Version information is unavailable.')).toBeTruthy()

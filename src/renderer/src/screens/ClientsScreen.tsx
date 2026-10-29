@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
-import { PrototypeBanner, SourceTag, StatusBadge, formatDate } from '../clients/components'
+import { SourceTag, StatusBadge, formatDate } from '../clients/components'
 import {
   defaultQuery,
   queryClients,
@@ -11,8 +11,7 @@ import {
   type StatusFilter
 } from '../clients/model'
 
-// PROVISIONAL client directory (#3), built on the draft #2 model. Uses in-memory
-// fictional data only; see docs/prototypes/client-directory.md.
+// Client directory (#3 baseline) over the saved clients loaded by ClientStore.
 
 const statusOptions: { value: StatusFilter; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -65,7 +64,6 @@ export function ClientsScreen() {
 
   return (
     <section aria-labelledby="clients-heading" className="clients">
-      <PrototypeBanner />
 
       <header className="page-header">
         <div>

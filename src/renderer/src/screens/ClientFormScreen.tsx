@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { useClientStore } from '../clients/ClientStore'
-import { Alert, ConfirmDialog, PrototypeBanner, StatusBadge } from '../clients/components'
+import { useClientStore, type SaveResult } from '../clients/ClientStore'
+import { Alert, ConfirmDialog, StatusBadge } from '../clients/components'
 import {
   NAME_MAX,
   channelLabels,
@@ -9,6 +9,7 @@ import {
   findDuplicates,
   sourceLabels,
   toFormValues,
+  toValidationIssues,
   validateClient,
   type ClientFormValues,
   type ClientInput,
@@ -19,7 +20,16 @@ import {
   type ValidationIssue
 } from '../clients/model'
 
-// PROVISIONAL add/edit form (#3). Fields and rules follow the draft #2 model.
+// Add/edit form (#3 baseline, saved through the main process since #6). Fields and
+// rules follow client-model/v1; the main process re-checks every save.
+
+type SaveError = 'failed' | 'not-found' | 'wrong-status'
+
+const saveErrorMessages: Record<SaveError, string> = {
+  failed: 'Something went wrong while saving. Your changes are still here, so you can try again.',
+  'not-found': 'This client couldn’t be found any more. Your changes are still here; copy anything you need.',
+  'wrong-status': 'This client was archived, so it can’t be edited. Restore it from the profile first.'
+}
 
 const signalLabels = { email: 'same email', fiverrUsername: 'same Fiverr username', displayName: 'same name' }
 
@@ -51,7 +61,7 @@ function NotFound() {
   return (
     <section aria-labelledby="form-heading">
       <h1 id="form-heading">Client not found</h1>
-      <p>This client may have been removed from the prototype’s sample data.</p>
+      <p>This link doesn’t match any saved client.</p>
       <Link to="/clients">Back to clients</Link>
     </section>
   )
@@ -63,7 +73,9 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
   const [values, setValues] = useState(initial)
   const [submitted, setSubmitted] = useState(false)
   const [duplicates, setDuplicates] = useState<DuplicateCandidate[] | null>(null)
-  const [saveFailed, setSaveFailed] = useState(false)
+  const [saveError, setSaveError] = useState<SaveError | null>(null)
+  const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([])
+  const [saving, setSaving] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const summaryRef = useRef<HTMLDivElement>(null)
   const duplicatesRef = useRef<HTMLDivElement>(null)
@@ -71,7 +83,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
   const isEdit = clientId !== undefined
   const dirty = (Object.keys(values) as FieldName[]).some((key) => values[key] !== initial[key])
   const { issues, input } = validateClient(values)
-  const errors = submitted ? issues.filter((i) => i.severity === 'error') : []
+  const errors = submitted ? [...issues.filter((i) => i.severity === 'error'), ...serverIssues] : []
   const issuesFor = (field: FieldName) =>
     issues.filter((i) => i.field === field && (i.severity !== 'error' || submitted))
   const exitTo = isEdit ? `/clients/${clientId}` : '/clients'
@@ -79,22 +91,39 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
   const set = <K extends FieldName>(field: K, value: ClientFormValues[K]) => {
     setValues((v) => ({ ...v, [field]: value }))
     setDuplicates(null)
-    setSaveFailed(false)
+    setSaveError(null)
+    setServerIssues([])
   }
 
-  function save(valid: ClientInput) {
-    const result = clientId !== undefined ? store.updateClient(clientId, valid) : store.createClient(valid)
-    if (!result.ok) {
-      setSaveFailed(true)
+  async function save(valid: ClientInput) {
+    if (saving) return
+    setSaving(true)
+    setDuplicates(null)
+    let result: SaveResult
+    try {
+      result = clientId !== undefined ? await store.updateClient(clientId, valid) : await store.createClient(valid)
+    } finally {
+      setSaving(false)
+    }
+    if (result.ok) {
+      navigate(`/clients/${result.client.id}`, { state: { flash: isEdit ? 'Changes saved.' : 'Client added.' } })
       return
     }
-    navigate(`/clients/${result.value.id}`, { state: { flash: isEdit ? 'Changes saved.' : 'Client added.' } })
+    // The form keeps every value so nothing typed is lost.
+    if (result.reason === 'invalid') {
+      setServerIssues(toValidationIssues(result.issues).filter((i) => i.severity === 'error'))
+      requestAnimationFrame(() => summaryRef.current?.focus())
+    } else {
+      setSaveError(result.reason)
+    }
   }
 
   function onSubmit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     setSubmitted(true)
-    setSaveFailed(false)
+    setSaveError(null)
+    setServerIssues([])
     if (!input) {
       requestAnimationFrame(() => summaryRef.current?.focus())
       return
@@ -105,7 +134,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
       requestAnimationFrame(() => duplicatesRef.current?.focus())
       return
     }
-    save(input)
+    void save(input)
   }
 
   function onCancel() {
@@ -118,7 +147,6 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
 
   return (
     <section aria-labelledby="form-heading" className="client-form-page">
-      <PrototypeBanner />
       <p className="breadcrumb">
         <Link to={exitTo}>{isEdit ? '← Back to profile' : '← Clients'}</Link>
       </p>
@@ -142,9 +170,9 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
         </div>
       )}
 
-      {saveFailed && (
+      {saveError && (
         <Alert tone="error" title="Couldn’t save this client">
-          Something went wrong while saving. Your changes are still here, so you can try again.
+          {saveErrorMessages[saveError]}
         </Alert>
       )}
 
@@ -163,7 +191,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
             ))}
           </ul>
           <div className="button-row">
-            <button type="button" className="button button-secondary" onClick={() => save(input)}>
+            <button type="button" className="button button-secondary" disabled={saving} onClick={() => void save(input)}>
               {isEdit ? 'Save anyway' : 'Save as a new client anyway'}
             </button>
             <button type="button" className="button button-ghost" onClick={() => setDuplicates(null)}>
@@ -320,8 +348,8 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
         </fieldset>
 
         <div className="form-actions">
-          <button type="submit" className="button button-primary">
-            {isEdit ? 'Save changes' : 'Save client'}
+          <button type="submit" className="button button-primary" disabled={saving} aria-busy={saving}>
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Save client'}
           </button>
           <button type="button" className="button button-secondary" onClick={onCancel}>
             Cancel

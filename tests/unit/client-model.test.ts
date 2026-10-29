@@ -8,7 +8,7 @@ import {
   validateClient,
   type ClientFormValues
 } from '../../src/renderer/src/clients/model'
-import { sampleClients } from '../../src/renderer/src/clients/sampleData'
+import { sampleClients } from '../renderer/fixtures/sampleClients'
 
 const valid: ClientFormValues = { ...emptyFormValues, displayName: '  Ana   Ejemplo ', source: 'fiverr' }
 

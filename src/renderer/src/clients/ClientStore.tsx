@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { Client, ClientInput, ClientNote, NoteChannel, NoteDirection } from './model'
-import { sampleClients, sampleNotes } from './sampleData'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { ClientMutationResult, TracingGuatemalaApi } from '../../../shared/ipc'
+import type { Client, ClientInput, ClientNote, DirectoryQuery, NoteChannel, NoteDirection } from './model'
 
-// In-memory store for the #3 prototype. Nothing is persisted: closing or
-// reloading the app resets to the fictional sample data. #5 replaces this with
-// typed IPC calls to the main process once the model is approved.
+// Client state for the renderer. Clients are persisted by the main process
+// (#5/#6): this store caches every client, archived included (the duplicate
+// advisory needs them), and updates the cache from each saved result. Notes are
+// still session-only until #9 adds note storage.
 
 export interface NewNote {
   kind: 'note' | 'contact'
@@ -14,90 +15,107 @@ export interface NewNote {
   body: string
 }
 
-/** Every mutation can fail; the prototype can simulate that to show error states. */
-export type MutationResult<T = void> = { ok: true; value: T } | { ok: false }
+/** A main-process outcome, or `failed` when the call itself did not complete. */
+export type SaveResult = ClientMutationResult | { ok: false; reason: 'failed' }
+
+export type LoadState = 'loading' | 'ready' | 'error'
 
 export interface ClientStore {
   clients: Client[]
   notes: ClientNote[]
-  simulateFailures: boolean
-  setSimulateFailures(value: boolean): void
-  loadSample(): void
-  clearAll(): void
-  createClient(input: ClientInput): MutationResult<Client>
-  updateClient(id: string, input: ClientInput): MutationResult<Client>
-  archiveClient(id: string): MutationResult
-  restoreClient(id: string): MutationResult
-  addNote(clientId: string, note: NewNote): MutationResult
+  loadState: LoadState
+  reload(): void
+  createClient(input: ClientInput): Promise<SaveResult>
+  updateClient(id: string, input: ClientInput): Promise<SaveResult>
+  archiveClient(id: string): Promise<SaveResult>
+  restoreClient(id: string): Promise<SaveResult>
+  addNote(clientId: string, note: NewNote): void
 }
 
 const ClientStoreContext = createContext<ClientStore | null>(null)
 
-function newId(): string {
-  return crypto.randomUUID()
+const everyClient: DirectoryQuery = { text: '', status: 'all', sources: [], sort: 'name' }
+
+function api(): TracingGuatemalaApi {
+  return window.tracingGuatemala
 }
 
 function systemNote(clientId: string, body: string, at: string): ClientNote {
-  return { id: newId(), clientId, kind: 'system', occurredAt: at, channel: null, direction: null, body }
+  return { id: crypto.randomUUID(), clientId, kind: 'system', occurredAt: at, channel: null, direction: null, body }
 }
 
-export function ClientStoreProvider({ children, initialEmpty = false }: { children: ReactNode; initialEmpty?: boolean }) {
-  const [clients, setClients] = useState<Client[]>(() => (initialEmpty ? [] : sampleClients))
-  const [notes, setNotes] = useState<ClientNote[]>(() => (initialEmpty ? [] : sampleNotes))
-  const [simulateFailures, setSimulateFailures] = useState(false)
+export function ClientStoreProvider({ children }: { children: ReactNode }) {
+  const [clients, setClients] = useState<Client[]>([])
+  const [notes, setNotes] = useState<ClientNote[]>([])
+  const [loadState, setLoadState] = useState<LoadState>('loading')
+  const [loadAttempt, setLoadAttempt] = useState(0)
+
+  useEffect(() => {
+    let current = true
+    api()
+      .listClients(everyClient)
+      .then(
+        (list) => {
+          if (!current) return
+          setClients(list)
+          setLoadState('ready')
+        },
+        () => {
+          if (current) setLoadState('error')
+        }
+      )
+    return () => {
+      current = false
+    }
+  }, [loadAttempt])
+
+  const reload = useCallback(() => {
+    setLoadState('loading')
+    setLoadAttempt((n) => n + 1)
+  }, [])
+
+  const mutate = useCallback(async (call: () => Promise<ClientMutationResult>): Promise<SaveResult> => {
+    let result: ClientMutationResult
+    try {
+      result = await call()
+    } catch {
+      return { ok: false, reason: 'failed' }
+    }
+    if (result.ok) {
+      const saved = result.client
+      setClients((list) =>
+        list.some((c) => c.id === saved.id) ? list.map((c) => (c.id === saved.id ? saved : c)) : [...list, saved]
+      )
+    }
+    return result
+  }, [])
 
   const setStatus = useCallback(
-    (id: string, status: Client['status']): MutationResult => {
-      if (simulateFailures) return { ok: false }
-      const now = new Date().toISOString()
-      setClients((list) =>
-        list.map((c) =>
-          c.id === id ? { ...c, status, updatedAt: now, archivedAt: status === 'archived' ? now : null } : c
-        )
-      )
-      setNotes((list) => [...list, systemNote(id, status === 'archived' ? 'Archived.' : 'Restored.', now)])
-      return { ok: true, value: undefined }
+    async (id: string, archive: boolean): Promise<SaveResult> => {
+      const result = await mutate(() => (archive ? api().archiveClient(id) : api().restoreClient(id)))
+      // The main process stores this system note too; #9 shows notes from storage instead.
+      if (result.ok)
+        setNotes((list) => [...list, systemNote(id, archive ? 'Archived.' : 'Restored.', result.client.updatedAt)])
+      return result
     },
-    [simulateFailures]
+    [mutate]
   )
 
   const store = useMemo<ClientStore>(
     () => ({
       clients,
       notes,
-      simulateFailures,
-      setSimulateFailures,
-      loadSample() {
-        setClients(sampleClients)
-        setNotes(sampleNotes)
-      },
-      clearAll() {
-        setClients([])
-        setNotes([])
-      },
-      createClient(input) {
-        if (simulateFailures) return { ok: false }
-        const now = new Date().toISOString()
-        const created: Client = { ...input, id: newId(), status: 'active', createdAt: now, updatedAt: now, archivedAt: null }
-        setClients((list) => [...list, created])
-        return { ok: true, value: created }
-      },
-      updateClient(id, input) {
-        const existing = clients.find((c) => c.id === id)
-        if (simulateFailures || !existing || existing.status !== 'active') return { ok: false }
-        const updated: Client = { ...existing, ...input, updatedAt: new Date().toISOString() }
-        setClients((list) => list.map((c) => (c.id === id ? updated : c)))
-        return { ok: true, value: updated }
-      },
-      archiveClient: (id) => setStatus(id, 'archived'),
-      restoreClient: (id) => setStatus(id, 'active'),
+      loadState,
+      reload,
+      createClient: (input) => mutate(() => api().createClient(input)),
+      updateClient: (id, input) => mutate(() => api().updateClient(id, input)),
+      archiveClient: (id) => setStatus(id, true),
+      restoreClient: (id) => setStatus(id, false),
       addNote(clientId, note) {
-        if (simulateFailures) return { ok: false }
-        setNotes((list) => [...list, { ...note, id: newId(), clientId }])
-        return { ok: true, value: undefined }
+        setNotes((list) => [...list, { ...note, id: crypto.randomUUID(), clientId }])
       }
     }),
-    [clients, notes, simulateFailures, setStatus]
+    [clients, notes, loadState, reload, mutate, setStatus]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>

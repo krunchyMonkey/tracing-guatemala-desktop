@@ -4,7 +4,6 @@ import { useClientStore } from '../clients/ClientStore'
 import {
   Alert,
   ConfirmDialog,
-  PrototypeBanner,
   SourceTag,
   StatusBadge,
   formatDate,
@@ -19,8 +18,9 @@ import {
   type NoteDirection
 } from '../clients/model'
 
-// PROVISIONAL client profile (#3). Notes/contact log preview #9; orders and
-// research cases are a labeled placeholder for later phases.
+// Client profile (#3 baseline). Client details and archive/restore are saved
+// (#6); notes are session-only until #9. Orders and research cases are a
+// labeled placeholder for later phases.
 
 type HistoryFilter = 'all' | 'note' | 'contact'
 
@@ -31,6 +31,7 @@ export function ClientProfileScreen() {
   const flash = (location.state as { flash?: string } | null)?.flash
   const [pending, setPending] = useState<'archive' | 'restore' | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
+  const [working, setWorking] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const client = store.clients.find((c) => c.id === id)
@@ -38,7 +39,7 @@ export function ClientProfileScreen() {
     return (
       <section aria-labelledby="profile-heading">
         <h1 id="profile-heading">Client not found</h1>
-        <p>This client isn’t in the prototype’s sample data.</p>
+        <p>This link doesn’t match any saved client.</p>
         <Link to="/clients">Back to clients</Link>
       </section>
     )
@@ -49,17 +50,20 @@ export function ClientProfileScreen() {
     .filter((n) => n.clientId === client.id)
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
 
-  function confirmStatusChange() {
-    if (!client || !pending) return
-    const result = pending === 'archive' ? store.archiveClient(client.id) : store.restoreClient(client.id)
+  async function confirmStatusChange() {
+    if (!client || !pending || working) return
+    const action = pending
     setPending(null)
+    setWorking(true)
+    setStatusMessage(null)
+    const result = action === 'archive' ? await store.archiveClient(client.id) : await store.restoreClient(client.id)
+    setWorking(false)
     setActionFailed(!result.ok)
-    if (result.ok) setStatusMessage(pending === 'archive' ? 'Client archived.' : 'Client restored.')
+    if (result.ok) setStatusMessage(action === 'archive' ? 'Client archived.' : 'Client restored.')
   }
 
   return (
     <section aria-labelledby="profile-heading" className="profile">
-      <PrototypeBanner />
       <p className="breadcrumb">
         <Link to="/clients">← Clients</Link>
       </p>
@@ -95,7 +99,7 @@ export function ClientProfileScreen() {
         </div>
         <div className="profile-actions">
           {isArchived ? (
-            <button type="button" className="button button-primary" onClick={() => setPending('restore')}>
+            <button type="button" className="button button-primary" disabled={working} onClick={() => setPending('restore')}>
               Restore client
             </button>
           ) : (
@@ -103,7 +107,12 @@ export function ClientProfileScreen() {
               <Link className="button button-primary" to={`/clients/${client.id}/edit`}>
                 Edit details
               </Link>
-              <button type="button" className="button button-secondary" onClick={() => setPending('archive')}>
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={working}
+                onClick={() => setPending('archive')}
+              >
                 Archive
               </button>
             </>
@@ -131,7 +140,7 @@ export function ClientProfileScreen() {
           title={pending === 'archive' ? `Archive ${client.displayName}?` : `Restore ${client.displayName}?`}
           confirmLabel={pending === 'archive' ? 'Archive client' : 'Restore client'}
           onCancel={() => setPending(null)}
-          onConfirm={confirmStatusChange}
+          onConfirm={() => void confirmStatusChange()}
         >
           {pending === 'archive' ? (
             <p>
@@ -237,6 +246,11 @@ function History({ clientId, history, readOnly }: { clientId: string; history: C
         </fieldset>
       </div>
 
+      <p className="hint-inline">
+        Notes aren’t saved yet in this version: they disappear when you close the app. Client details and archive
+        status are saved.
+      </p>
+
       {!readOnly && <AddNoteForm clientId={clientId} />}
 
       {visible.length === 0 ? (
@@ -278,14 +292,13 @@ function AddNoteForm({ clientId }: { clientId: string }) {
     const text = body.trim()
     if (text === '') return setError('Write something before adding it.')
     if (text.length > NOTE_MAX) return setError(`Keep entries under ${NOTE_MAX.toLocaleString()} characters.`)
-    const result = addNote(clientId, {
+    addNote(clientId, {
       kind,
       occurredAt: new Date().toISOString(),
       channel: kind === 'contact' ? channel : null,
       direction: kind === 'contact' ? direction : null,
       body: text
     })
-    if (!result.ok) return setError('Couldn’t add this entry. Your text is still here; please try again.')
     setBody('')
     setError(null)
   }

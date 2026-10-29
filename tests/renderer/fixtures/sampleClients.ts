@@ -1,6 +1,6 @@
-import type { Client, ClientNote } from './model'
+import type { Client, ClientNote } from '../../../src/renderer/src/clients/model'
 
-// Entirely FICTIONAL sample clients for the #3 prototype. Any resemblance to real
+// Entirely FICTIONAL sample clients used by tests and screenshots. Any resemblance to real
 // people is coincidental. Emails use the reserved example.com/example.org domains.
 
 function client(partial: Partial<Client> & Pick<Client, 'id' | 'displayName' | 'source' | 'createdAt'>): Client {
