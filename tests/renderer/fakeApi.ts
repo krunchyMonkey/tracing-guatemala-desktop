@@ -53,5 +53,10 @@ export function createFakeApi(initial: Client[] = sampleClients) {
     restoreClient: vi.fn((id) => guard(() => setStatus(id, false)))
   }
 
-  return { api, state, clients: () => clients }
+  /** Changes stored data behind the renderer's back, as another save or a restart would. */
+  function replace(client: Client) {
+    clients = clients.map((c) => (c.id === client.id ? client : c))
+  }
+
+  return { api, state, clients: () => clients, replace }
 }

@@ -982,3 +982,8 @@ fieldset {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Headings receive focus programmatically after an action; they are not controls. */
+h1[tabindex='-1']:focus {
+  outline: none;
+}
