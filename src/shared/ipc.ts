@@ -21,6 +21,9 @@ export const IpcChannel = {
   archiveClient: 'clients:archive',
   restoreClient: 'clients:restore',
   findDuplicateClients: 'clients:find-duplicates',
+  createBackup: 'backup:create',
+  chooseBackupToRestore: 'backup:choose-restore',
+  restoreBackup: 'backup:restore',
   listNotes: 'notes:list',
   createNote: 'notes:create',
   updateNote: 'notes:update'
@@ -53,6 +56,23 @@ export type NoteMutationResult =
   /** The client is archived (read-only), or the entry is a system entry. */
   | { ok: false; reason: 'wrong-status' }
 
+/** Why a chosen file cannot be restored. */
+export type BackupProblem = 'not-a-backup' | 'damaged' | 'too-new'
+
+export type BackupCreateResult =
+  | { ok: true; fileName: string; clients: number; notes: number }
+  | { ok: false; reason: 'cancelled' | 'failed' }
+
+/** A checked backup waiting for confirmation. The renderer gets a token and the file name, never the path. */
+export type BackupChoice =
+  | { ok: true; token: string; fileName: string; savedAt: string; clients: number; notes: number }
+  | { ok: false; reason: 'cancelled' | 'failed' | BackupProblem }
+
+export type BackupRestoreResult =
+  | { ok: true; clients: number; notes: number }
+  /** `expired`: the token is unknown or was already used. `failed`: the previous data was kept. */
+  | { ok: false; reason: 'expired' | 'failed' | BackupProblem }
+
 /** The only surface the renderer has into the main process (window.tracingGuatemala). */
 export interface TracingGuatemalaApi {
   getAppInfo(): Promise<AppInfo>
@@ -64,6 +84,12 @@ export interface TracingGuatemalaApi {
   restoreClient(id: string): Promise<ClientMutationResult>
   /** Possible duplicates of `input` (archived included), ignoring the client being edited. */
   findDuplicateClients(input: ClientInput, excludeId: string | null): Promise<DuplicateCandidate[]>
+  /** Asks where to save, then writes a verified backup of all data. */
+  createBackup(): Promise<BackupCreateResult>
+  /** Asks for a backup file and checks it, without changing any data. */
+  chooseBackupToRestore(): Promise<BackupChoice>
+  /** Replaces all data with the chosen backup, after a safety copy of the current data. */
+  restoreBackup(token: string): Promise<BackupRestoreResult>
   listNotes(clientId: string): Promise<ClientNote[]>
   createNote(clientId: string, input: NoteInput): Promise<NoteMutationResult>
   updateNote(clientId: string, noteId: string, input: NoteInput): Promise<NoteMutationResult>

@@ -9,6 +9,9 @@ import { migrate, type MigrationOutcome } from './migrations'
 
 export const DATABASE_FILE_NAME = 'tracing-guatemala.sqlite'
 
+/** SQLite application_id ("TGD1"), so a backup can be told apart from any other SQLite file. */
+export const APPLICATION_ID = 0x54474431
+
 export interface OpenedDatabase {
   db: DatabaseSync
   file: string
@@ -45,6 +48,7 @@ export function openAppDatabase(userDataDir: string, now: () => Date = () => new
         db.prepare('VACUUM INTO ?').run(target)
       }
     })
+    db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
     return { db, file, migration }
   } catch (error) {
     db.close()
