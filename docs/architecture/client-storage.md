@@ -27,6 +27,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | `src/main/database/migrations.ts` | Forward-only numbered migrations and the runner. |
 | `src/main/database/connection.ts` | Opens the database file, sets pragmas, runs migrations, takes the pre-migration copy. The only place the driver is configured. |
 | `src/main/database/client-repository.ts` | Client reads and writes. Re-runs `checkClient` on every write; renderer checks are never trusted. |
+| `src/main/database/note-repository.ts` | Notes and contact log (#9). Every query is scoped by client id. Re-runs `checkNote`. |
 | `src/main/ipc.ts` | zod contracts for the `clients:*` channels. |
 | `scripts/packaged-smoke.mjs` | Packaged-app database smoke test. |
 
@@ -46,7 +47,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | Version | Content |
 | --- | --- |
 | 1 `clients` | `client-model/v1` §2.1 columns, `STRICT` table, `CHECK` constraints for enums, lengths and the `status`/`archived_at` invariant. Triggers forbid `DELETE` and changes to `id`. |
-| 2 `client_notes` | §2.3 notes table, `ON DELETE RESTRICT` to `clients`. #5 writes only the `system` archive/restore notes; #9 adds note IPC. |
+| 2 `client_notes` | §2.3 notes table, `ON DELETE RESTRICT` to `clients`. Archive and restore write `system` entries; notes and logged contacts come through the `notes:*` channels (#9). |
 
 ## IPC
 
@@ -57,6 +58,9 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | `clients:create` | `ClientInput` | `ClientMutationResult` |
 | `clients:update` | UUID, `ClientInput` | `ClientMutationResult` |
 | `clients:archive` / `clients:restore` | UUID | `ClientMutationResult` |
+| `notes:list` | client UUID | `ClientNote[]`, newest first |
+| `notes:create` | client UUID, `NoteInput` | `NoteMutationResult` |
+| `notes:update` | client UUID, note UUID, `NoteInput` | `NoteMutationResult` |
 
 - `ClientInput` is a strict object: an `id`, `status`, timestamp or any other extra key rejects the whole call (`invalid-arguments`) before it reaches storage. Raw strings are capped at 1,000 characters to stop oversized payloads. The real field limits are rule checks.
 - `ClientMutationResult` is `{ ok: true, client }` or `{ ok: false, reason }` with `reason` one of `invalid` (plus `issues: { field, severity, code }[]`), `not-found`, `wrong-status`. Expected failures are results, not exceptions, and never contain submitted values.
@@ -67,7 +71,10 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | Decision | Why | Revisit when |
 | --- | --- | --- |
 | `clients:list` loads all rows and filters in JS with the shared `queryClients`. | Keeps accent-insensitive search and locale collation identical to the prototype. Phase 1 volumes are hundreds of clients. | Directory reaches thousands of clients: add a folded-name column or FTS5. |
-| `clients:get` returns the client only. Notes come with #9. | Keeps #5 focused. | #8/#9. |
+| Notes are scoped by client id in every query. An update through the wrong client returns `not-found`. | No cross-client leakage, even with a valid note id. | Never. |
+| Notes and contact entries can be edited, never deleted. Only the latest text is kept; the entry shows "Edited <date>". | Matches "no hard delete" and keeps Phase 1 simple. | #12 feedback (full revision history if wanted). |
+| Entries can be back-dated; dates more than a day ahead are rejected. | Logging a message after the fact is common; a day of tolerance covers time zones. | #12 feedback. |
+| System entries (archive/restore) cannot be edited. Archived clients' entries are read-only. | Model §5.2/§5.4. | #12 feedback (checklist Q5). |
 | Duplicate advisory is not on the IPC surface yet. `findDuplicates` is shared and ready. | Belongs to #10. | #10. |
 | Control characters are also rejected in `sourceDetail` and `otherContact`. | The model calls them single-line fields (§4.1). Previously only `displayName` was checked. | Pilot feedback. |
 | `synchronous=FULL` | Safety over write speed. Writes are rare and small. | Never, unless profiling says otherwise. |

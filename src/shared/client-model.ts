@@ -207,3 +207,83 @@ export function queryClients(clients: Client[], query: DirectoryQuery): Client[]
     return byName(a, b)
   })
 }
+
+// ---------- notes and contact log (§2.3, #9) ----------
+
+export type NoteKind = 'note' | 'contact' | 'system'
+export type NoteChannel = 'fiverr' | 'email' | 'other'
+export type NoteDirection = 'inbound' | 'outbound'
+
+export const NOTE_CHANNELS: readonly NoteChannel[] = ['fiverr', 'email', 'other']
+export const NOTE_DIRECTIONS: readonly NoteDirection[] = ['inbound', 'outbound']
+
+export interface ClientNote {
+  id: string
+  clientId: string
+  kind: NoteKind
+  occurredAt: string
+  channel: NoteChannel | null
+  direction: NoteDirection | null
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** What the renderer may send for a note or logged contact. `system` entries are written only by the main process. */
+export interface NoteInput {
+  kind: 'note' | 'contact'
+  occurredAt: string
+  channel: NoteChannel | null
+  direction: NoteDirection | null
+  body: string
+}
+
+export type NoteField = keyof NoteInput
+
+export interface NoteIssue {
+  field: NoteField
+  code: 'required' | 'too-long' | 'invalid-format' | 'in-future'
+}
+
+export interface NoteCheck {
+  input: NoteInput | null
+  issues: NoteIssue[]
+}
+
+/** Entries may be back-dated, but not dated more than a day ahead (time zones and clock drift). */
+const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
+
+/** Normalize and validate a note. Contact entries need a channel and direction; notes have neither. */
+export function checkNote(raw: NoteInput, now: Date = new Date()): NoteCheck {
+  const issues: NoteIssue[] = []
+  const body = raw.body.trim()
+  if (body === '') issues.push({ field: 'body', code: 'required' })
+  else if (body.length > NOTE_MAX) issues.push({ field: 'body', code: 'too-long' })
+
+  const occurred = new Date(raw.occurredAt)
+  if (Number.isNaN(occurred.getTime())) issues.push({ field: 'occurredAt', code: 'invalid-format' })
+  else if (occurred.getTime() > now.getTime() + FUTURE_TOLERANCE_MS) issues.push({ field: 'occurredAt', code: 'in-future' })
+
+  const isContact = raw.kind === 'contact'
+  if (isContact && !raw.channel) issues.push({ field: 'channel', code: 'required' })
+  if (isContact && !raw.direction) issues.push({ field: 'direction', code: 'required' })
+
+  if (issues.length > 0) return { input: null, issues }
+  return {
+    issues,
+    input: {
+      kind: raw.kind,
+      occurredAt: occurred.toISOString(),
+      channel: isContact ? raw.channel : null,
+      direction: isContact ? raw.direction : null,
+      body
+    }
+  }
+}
+
+/** Newest first; ties (same minute) keep the order they were written in, newest first. */
+export function compareNotes(a: ClientNote, b: ClientNote): number {
+  return b.occurredAt.localeCompare(a.occurredAt) || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)
+}
+
+export const isEdited = (note: ClientNote) => note.kind !== 'system' && note.updatedAt !== note.createdAt

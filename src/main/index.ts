@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session } from 'el
 import { registerAppProtocol } from './app-protocol'
 import { ClientRepository } from './database/client-repository'
 import { openAppDatabase, type OpenedDatabase } from './database/connection'
+import { NoteRepository } from './database/note-repository'
 import { DatabaseTooNewError } from './database/migrations'
 import { registerIpcHandlers } from './ipc'
 import { buildApplicationMenu } from './menu'
@@ -58,6 +59,7 @@ void app.whenReady().then(() => {
   database = openDatabaseOrQuit()
   if (!database) return
   const clients = new ClientRepository(database.db)
+  const notes = new NoteRepository(database.db)
 
   hardenSession(session.defaultSession, target)
   if (target.mode === 'production') {
@@ -66,7 +68,8 @@ void app.whenReady().then(() => {
   registerIpcHandlers(ipcMain, {
     isTrustedSender: (url) => isSameOrigin(url, target.origin),
     getAppInfo: () => ({ name: app.getName(), version: app.getVersion(), platform: process.platform }),
-    clients
+    clients,
+    notes
   })
   Menu.setApplicationMenu(buildApplicationMenu(target.mode === 'development'))
 

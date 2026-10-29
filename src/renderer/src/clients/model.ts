@@ -15,7 +15,10 @@ import {
 } from '../../../shared/client-model'
 
 export {
+  checkNote,
+  compareNotes,
   defaultQuery,
+  isEdited,
   findDuplicates,
   foldText,
   NAME_MAX,
@@ -26,6 +29,12 @@ export {
 export type {
   Client,
   ClientInput,
+  ClientNote,
+  NoteChannel,
+  NoteDirection,
+  NoteInput,
+  NoteIssue,
+  NoteKind,
   ClientSource,
   ClientStatus,
   ContactChannel,
@@ -46,20 +55,6 @@ export interface ClientFormValues {
   email: string
   otherContact: string
   preferredContactChannel: ContactChannel
-}
-
-export type NoteKind = 'note' | 'contact' | 'system'
-export type NoteChannel = 'fiverr' | 'email' | 'other'
-export type NoteDirection = 'inbound' | 'outbound'
-
-export interface ClientNote {
-  id: string
-  clientId: string
-  kind: NoteKind
-  occurredAt: string
-  channel: NoteChannel | null
-  direction: NoteDirection | null
-  body: string
 }
 
 export const sourceLabels: Record<ClientSource, string> = {

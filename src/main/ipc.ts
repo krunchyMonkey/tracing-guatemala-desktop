@@ -4,13 +4,26 @@ import {
   CLIENT_SOURCES,
   CLIENT_STATUSES,
   CONTACT_CHANNELS,
+  NOTE_CHANNELS,
+  NOTE_DIRECTIONS,
+  NOTE_MAX,
   type Client,
   type ClientInput,
+  type ClientNote,
+  type NoteChannel,
+  type NoteDirection,
+  type NoteInput,
   type ClientSource,
   type ContactChannel,
   type DirectoryQuery
 } from '../shared/client-model'
-import { IpcChannel, type AppInfo, type ClientMutationResult, type IpcChannelName } from '../shared/ipc'
+import {
+  IpcChannel,
+  type AppInfo,
+  type ClientMutationResult,
+  type IpcChannelName,
+  type NoteMutationResult
+} from '../shared/ipc'
 
 /** Thrown to the renderer without echoing its input (which may contain personal data). */
 export class IpcRejectedError extends Error {
@@ -92,6 +105,46 @@ const mutationResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<ClientMutationResult>
 
+const noteChannelSchema = z.enum(NOTE_CHANNELS as [NoteChannel, ...NoteChannel[]])
+const noteDirectionSchema = z.enum(NOTE_DIRECTIONS as [NoteDirection, ...NoteDirection[]])
+
+/** Strict: ids, timestamps, the client id and `system` entries cannot come from the renderer. */
+const noteInputSchema = z.strictObject({
+  kind: z.enum(['note', 'contact']),
+  occurredAt: z.string().max(64),
+  channel: noteChannelSchema.nullable(),
+  direction: noteDirectionSchema.nullable(),
+  // Room for surrounding whitespace; the trimmed length rule runs in the repository.
+  body: z.string().max(NOTE_MAX * 2)
+}) satisfies z.ZodType<NoteInput>
+
+const noteSchema = z.strictObject({
+  id: idSchema,
+  clientId: idSchema,
+  kind: z.enum(['note', 'contact', 'system']),
+  occurredAt: timestamp,
+  channel: noteChannelSchema.nullable(),
+  direction: noteDirectionSchema.nullable(),
+  body: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp
+}) satisfies z.ZodType<ClientNote>
+
+const noteResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), note: noteSchema }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.literal('invalid'),
+    issues: z.array(
+      z.strictObject({
+        field: z.enum(['kind', 'occurredAt', 'channel', 'direction', 'body']),
+        code: z.enum(['required', 'too-long', 'invalid-format', 'in-future'])
+      })
+    )
+  }),
+  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
+]) satisfies z.ZodType<NoteMutationResult>
+
 export const contracts = {
   getAppInfo: {
     channel: IpcChannel.getAppInfo,
@@ -131,6 +184,21 @@ export const contracts = {
     channel: IpcChannel.restoreClient,
     args: z.tuple([idSchema]),
     result: mutationResultSchema
+  },
+  listNotes: {
+    channel: IpcChannel.listNotes,
+    args: z.tuple([idSchema]),
+    result: z.array(noteSchema)
+  },
+  createNote: {
+    channel: IpcChannel.createNote,
+    args: z.tuple([idSchema, noteInputSchema]),
+    result: noteResultSchema
+  },
+  updateNote: {
+    channel: IpcChannel.updateNote,
+    args: z.tuple([idSchema, idSchema, noteInputSchema]),
+    result: noteResultSchema
   }
 } as const
 
@@ -171,15 +239,23 @@ export interface ClientService {
   restore(id: string): ClientMutationResult
 }
 
+/** Note operations backing the notes:* channels (NoteRepository in production). */
+export interface NoteService {
+  list(clientId: string): ClientNote[]
+  create(clientId: string, input: NoteInput): NoteMutationResult
+  update(clientId: string, noteId: string, input: NoteInput): NoteMutationResult
+}
+
 export interface IpcDependencies {
   isTrustedSender: (url: string) => boolean
   getAppInfo: () => AppInfo
   clients: ClientService
+  notes: NoteService
 }
 
 export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcDependencies): void {
   const c = contracts
-  const { isTrustedSender, clients } = deps
+  const { isTrustedSender, clients, notes } = deps
   const register = <Args extends z.ZodTuple, Result extends z.ZodType>(
     contract: ChannelContract<Args, Result>,
     impl: (args: z.output<Args>) => z.input<Result>
@@ -192,4 +268,7 @@ export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcD
   register(c.updateClient, ([id, input]) => clients.update(id, input))
   register(c.archiveClient, ([id]) => clients.archive(id))
   register(c.restoreClient, ([id]) => clients.restore(id))
+  register(c.listNotes, ([clientId]) => notes.list(clientId))
+  register(c.createNote, ([clientId, input]) => notes.create(clientId, input))
+  register(c.updateNote, ([clientId, noteId, input]) => notes.update(clientId, noteId, input))
 }

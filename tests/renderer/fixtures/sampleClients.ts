@@ -108,9 +108,9 @@ const lucia = '7b0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a01'
 const daniel = '7b0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a02'
 const rebecca = '7b0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a08'
 
-export const sampleNotes: ClientNote[] = [
+const rawNotes: Omit<ClientNote, 'createdAt' | 'updatedAt'>[] = [
   {
-    id: 'note-01',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a01',
     clientId: lucia,
     kind: 'contact',
     occurredAt: '2026-02-03T15:30:00.000Z',
@@ -119,7 +119,7 @@ export const sampleNotes: ClientNote[] = [
     body: 'First order: Standard package. Wants to trace her great-grandmother’s family in Quetzaltenango.'
   },
   {
-    id: 'note-02',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a02',
     clientId: lucia,
     kind: 'note',
     occurredAt: '2026-02-10T21:00:00.000Z',
@@ -128,7 +128,7 @@ export const sampleNotes: ClientNote[] = [
     body: 'Questionnaire lists two possible spellings of the surname. Check both in baptism records.'
   },
   {
-    id: 'note-03',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a03',
     clientId: lucia,
     kind: 'contact',
     occurredAt: '2026-03-01T16:00:00.000Z',
@@ -137,7 +137,7 @@ export const sampleNotes: ClientNote[] = [
     body: 'Delivered final report through Fiverr.'
   },
   {
-    id: 'note-04',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a04',
     clientId: lucia,
     kind: 'contact',
     occurredAt: '2026-10-21T18:00:00.000Z',
@@ -146,7 +146,7 @@ export const sampleNotes: ClientNote[] = [
     body: 'Repeat client: sent a custom offer (Premium package, adjusted price) for the paternal line.'
   },
   {
-    id: 'note-05',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a05',
     clientId: daniel,
     kind: 'note',
     occurredAt: '2026-09-30T14:10:00.000Z',
@@ -155,7 +155,7 @@ export const sampleNotes: ClientNote[] = [
     body: 'Waiting on the scanned family bible pages he mentioned.'
   },
   {
-    id: 'note-06',
+    id: '9e0d1a52-3c1e-4c0a-9a51-0f6f1d2b1a06',
     clientId: rebecca,
     kind: 'system',
     occurredAt: '2026-05-01T11:00:00.000Z',
@@ -164,3 +164,10 @@ export const sampleNotes: ClientNote[] = [
     body: 'Archived.'
   }
 ]
+
+/** Written when they happened and never edited. */
+export const sampleNotes: ClientNote[] = rawNotes.map((note) => ({
+  ...note,
+  createdAt: note.occurredAt,
+  updatedAt: note.occurredAt
+}))

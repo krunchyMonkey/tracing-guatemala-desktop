@@ -1,19 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ClientMutationResult, TracingGuatemalaApi } from '../../../shared/ipc'
-import type { Client, ClientInput, ClientNote, DirectoryQuery, NoteChannel, NoteDirection } from './model'
+import type { Client, ClientInput, DirectoryQuery } from './model'
 
 // Client state for the renderer. Clients are persisted by the main process
 // (#5/#6): this store caches every client, archived included (the duplicate
 // advisory needs them), and updates the cache from each saved result. Notes are
-// still session-only until #9 adds note storage.
-
-export interface NewNote {
-  kind: 'note' | 'contact'
-  occurredAt: string
-  channel: NoteChannel | null
-  direction: NoteDirection | null
-  body: string
-}
+// loaded per profile (useClientNotes).
 
 /** A main-process outcome, or `failed` when the call itself did not complete. */
 export type SaveResult = ClientMutationResult | { ok: false; reason: 'failed' }
@@ -22,7 +14,6 @@ export type LoadState = 'loading' | 'ready' | 'error'
 
 export interface ClientStore {
   clients: Client[]
-  notes: ClientNote[]
   loadState: LoadState
   reload(): void
   /** Re-reads one client from the main process into the cache (or drops it if it no longer exists). */
@@ -36,7 +27,6 @@ export interface ClientStore {
   updateClient(id: string, input: ClientInput): Promise<SaveResult>
   archiveClient(id: string): Promise<SaveResult>
   restoreClient(id: string): Promise<SaveResult>
-  addNote(clientId: string, note: NewNote): void
 }
 
 const ClientStoreContext = createContext<ClientStore | null>(null)
@@ -47,13 +37,8 @@ function api(): TracingGuatemalaApi {
   return window.tracingGuatemala
 }
 
-function systemNote(clientId: string, body: string, at: string): ClientNote {
-  return { id: crypto.randomUUID(), clientId, kind: 'system', occurredAt: at, channel: null, direction: null, body }
-}
-
 export function ClientStoreProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>([])
-  const [notes, setNotes] = useState<ClientNote[]>([])
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [directorySearch, setDirectorySearch] = useState('')
@@ -111,21 +96,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const setStatus = useCallback(
-    async (id: string, archive: boolean): Promise<SaveResult> => {
-      const result = await mutate(() => (archive ? api().archiveClient(id) : api().restoreClient(id)))
-      // The main process stores this system note too; #9 shows notes from storage instead.
-      if (result.ok)
-        setNotes((list) => [...list, systemNote(id, archive ? 'Archived.' : 'Restored.', result.client.updatedAt)])
-      return result
-    },
-    [mutate]
-  )
-
   const store = useMemo<ClientStore>(
     () => ({
       clients,
-      notes,
       loadState,
       reload,
       refreshClient,
@@ -134,13 +107,10 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       rememberDirectorySearch: setDirectorySearch,
       createClient: (input) => mutate(() => api().createClient(input)),
       updateClient: (id, input) => mutate(() => api().updateClient(id, input)),
-      archiveClient: (id) => setStatus(id, true),
-      restoreClient: (id) => setStatus(id, false),
-      addNote(clientId, note) {
-        setNotes((list) => [...list, { ...note, id: crypto.randomUUID(), clientId }])
-      }
+      archiveClient: (id) => mutate(() => api().archiveClient(id)),
+      restoreClient: (id) => mutate(() => api().restoreClient(id))
     }),
-    [clients, notes, loadState, directorySearch, reload, refreshClient, mutate, setStatus]
+    [clients, loadState, directorySearch, reload, refreshClient, mutate]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import {
@@ -12,15 +12,20 @@ import {
 import {
   NOTE_MAX,
   channelLabels,
+  checkNote,
+  isEdited,
   type Client,
   type ClientNote,
   type NoteChannel,
-  type NoteDirection
+  type NoteDirection,
+  type NoteInput,
+  type NoteIssue
 } from '../clients/model'
+import { useClientNotes, type NoteSaveResult } from '../clients/useClientNotes'
 
-// Client profile (#3 baseline). Reads the saved client from the main process
-// when opened (#8); archive/restore are saved (#6); notes are session-only until #9. Orders and research cases are a
-// labeled placeholder for later phases.
+// Client profile (#3 baseline). Reads the saved client when opened (#8);
+// archive/restore (#6) and notes/contact log (#9) are saved through the main
+// process. Orders and research cases are a labeled placeholder for later phases.
 
 type HistoryFilter = 'all' | 'note' | 'contact'
 
@@ -52,9 +57,6 @@ export function ClientProfileScreen() {
   }
 
   const isArchived = client.status === 'archived'
-  const history = store.notes
-    .filter((n) => n.clientId === client.id)
-    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
 
   async function confirmStatusChange() {
     if (!client || !pending || working) return
@@ -143,7 +145,8 @@ export function ClientProfileScreen() {
         </p>
       </section>
 
-      <History clientId={client.id} history={history} readOnly={isArchived} />
+      {/* Archive and restore add system entries, so the history re-reads when the client changes. */}
+      <History clientId={client.id} version={client.updatedAt} readOnly={isArchived} />
 
       {pending && (
         <ConfirmDialog
@@ -231,9 +234,36 @@ const kindLabels: Record<ClientNote['kind'], string> = { note: 'Note', contact: 
 const directionLabels: Record<NoteDirection, string> = { inbound: 'Received', outbound: 'Sent' }
 const noteChannelLabels: Record<NoteChannel, string> = { fiverr: 'Fiverr', email: 'Email', other: 'Other' }
 
-function History({ clientId, history, readOnly }: { clientId: string; history: ClientNote[]; readOnly: boolean }) {
+const noteIssueMessages: Record<NoteIssue['code'], string> = {
+  required: 'Write something before adding it.',
+  'too-long': `Keep entries under ${NOTE_MAX.toLocaleString()} characters.`,
+  'invalid-format': 'Choose a date and time.',
+  'in-future': 'This date is in the future. Choose when it happened.'
+}
+
+const noteSaveMessages: Record<'failed' | 'not-found' | 'wrong-status', string> = {
+  failed: 'Couldn’t save this entry. Your text is still here; please try again.',
+  'not-found': 'This entry or client couldn’t be found any more. Copy your text if you need it.',
+  'wrong-status': 'This client is archived, so entries can’t be changed. Restore the client first.'
+}
+
+/** "2026-10-29T14:05" in local time, for <input type="datetime-local">. */
+function toLocalInput(iso: string): string {
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function fromLocalInput(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+}
+
+function History({ clientId, version, readOnly }: { clientId: string; version: string; readOnly: boolean }) {
+  const notes = useClientNotes(clientId, version)
   const [filter, setFilter] = useState<HistoryFilter>('all')
-  const visible = history.filter((n) => filter === 'all' || n.kind === filter)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const visible = notes.notes.filter((n) => filter === 'all' || n.kind === filter)
 
   return (
     <section className="card history" aria-labelledby="history-heading">
@@ -256,31 +286,43 @@ function History({ clientId, history, readOnly }: { clientId: string; history: C
         </fieldset>
       </div>
 
-      <p className="hint-inline">
-        Notes aren’t saved yet in this version: they disappear when you close the app. Client details and archive
-        status are saved.
-      </p>
+      {!readOnly && <NoteEditor key="new" onSave={notes.create} />}
 
-      {!readOnly && <AddNoteForm clientId={clientId} />}
-
-      {visible.length === 0 ? (
+      {notes.state === 'error' ? (
+        <Alert tone="error" title="Notes couldn’t be loaded">
+          <p>Nothing was changed or lost.</p>
+          <button type="button" className="button button-secondary" onClick={notes.retry}>
+            Try again
+          </button>
+        </Alert>
+      ) : notes.state === 'loading' ? (
+        <p className="muted empty-history" role="status">
+          Loading notes…
+        </p>
+      ) : visible.length === 0 ? (
         <p className="muted empty-history">
-          {history.length === 0 ? 'No notes or contact history yet.' : 'Nothing of this kind yet.'}
+          {notes.notes.length === 0 ? 'No notes or contact history yet.' : 'Nothing of this kind yet.'}
         </p>
       ) : (
         <ol className="timeline">
           {visible.map((note) => (
             <li key={note.id} className={`timeline-item kind-${note.kind}`}>
-              <p className="timeline-meta">
-                <span className="kind-label">{kindLabels[note.kind]}</span>
-                {note.kind === 'contact' && note.direction && note.channel && (
-                  <span>
-                    {directionLabels[note.direction]} · {noteChannelLabels[note.channel]}
-                  </span>
-                )}
-                <time dateTime={note.occurredAt}>{formatDateTime(note.occurredAt)}</time>
-              </p>
-              <p className="timeline-body">{note.body}</p>
+              {editingId === note.id ? (
+                <NoteEditor
+                  note={note}
+                  onSave={async (input) => {
+                    const result = await notes.update(note.id, input)
+                    if (result.ok) setEditingId(null)
+                    return result
+                  }}
+                  onCancel={() => setEditingId(null)}
+                />
+              ) : (
+                <NoteView
+                  note={note}
+                  onEdit={readOnly || note.kind === 'system' || editingId !== null ? null : () => setEditingId(note.id)}
+                />
+              )}
             </li>
           ))}
         </ol>
@@ -289,96 +331,231 @@ function History({ clientId, history, readOnly }: { clientId: string; history: C
   )
 }
 
-function AddNoteForm({ clientId }: { clientId: string }) {
-  const { addNote } = useClientStore()
-  const [kind, setKind] = useState<'note' | 'contact'>('note')
-  const [channel, setChannel] = useState<NoteChannel>('fiverr')
-  const [direction, setDirection] = useState<NoteDirection>('outbound')
-  const [body, setBody] = useState('')
-  const [error, setError] = useState<string | null>(null)
+function NoteView({ note, onEdit }: { note: ClientNote; onEdit: (() => void) | null }) {
+  return (
+    <>
+      <p className="timeline-meta">
+        <span className="kind-label">{kindLabels[note.kind]}</span>
+        {note.kind === 'contact' && note.direction && note.channel && (
+          <span>
+            {directionLabels[note.direction]} · {noteChannelLabels[note.channel]}
+          </span>
+        )}
+        <time dateTime={note.occurredAt}>{formatDateTime(note.occurredAt)}</time>
+        {isEdited(note) && (
+          <span className="muted" title={`Edited ${formatDateTime(note.updatedAt)}`}>
+            Edited {formatDate(note.updatedAt)}
+          </span>
+        )}
+      </p>
+      <p className="timeline-body">{note.body}</p>
+      {onEdit && (
+        <button
+          type="button"
+          className="button button-small button-ghost"
+          aria-label={`Edit ${kindLabels[note.kind].toLowerCase()} from ${formatDateTime(note.occurredAt)}`}
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+      )}
+    </>
+  )
+}
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    const text = body.trim()
-    if (text === '') return setError('Write something before adding it.')
-    if (text.length > NOTE_MAX) return setError(`Keep entries under ${NOTE_MAX.toLocaleString()} characters.`)
-    addNote(clientId, {
-      kind,
-      occurredAt: new Date().toISOString(),
-      channel: kind === 'contact' ? channel : null,
-      direction: kind === 'contact' ? direction : null,
-      body: text
-    })
-    setBody('')
-    setError(null)
+interface NoteEditorProps {
+  /** The entry being edited; omitted when adding. */
+  note?: ClientNote
+  onSave(input: NoteInput): Promise<NoteSaveResult>
+  onCancel?(): void
+}
+
+/** Add or edit a note or logged contact. Typed text is kept whenever a save fails. */
+function NoteEditor({ note, onSave, onCancel }: NoteEditorProps) {
+  const id = useId()
+  const isEdit = note !== undefined
+  const [kind, setKind] = useState<NoteInput['kind']>(note?.kind === 'contact' ? 'contact' : 'note')
+  const [channel, setChannel] = useState<NoteChannel>(note?.channel ?? 'fiverr')
+  const [direction, setDirection] = useState<NoteDirection>(note?.direction ?? 'outbound')
+  const [body, setBody] = useState(note?.body ?? '')
+  const initialWhen = toLocalInput(note?.occurredAt ?? new Date().toISOString())
+  const [when, setWhen] = useState(initialWhen)
+  const [errors, setErrors] = useState<Partial<Record<NoteIssue['field'], string>>>({})
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  const input: NoteInput = {
+    kind,
+    occurredAt: fromLocalInput(when),
+    channel: kind === 'contact' ? channel : null,
+    direction: kind === 'contact' ? direction : null,
+    body
+  }
+  const dirty =
+    isEdit &&
+    (body !== note.body || when !== initialWhen || input.channel !== note.channel || input.direction !== note.direction)
+
+  function showIssues(issues: NoteIssue[]) {
+    setErrors(Object.fromEntries(issues.map((issue) => [issue.field, noteIssueMessages[issue.code]])))
   }
 
-  return (
-    <form className="add-note" onSubmit={onSubmit} noValidate>
-      <fieldset className="segmented segmented-small">
-        <legend>Add</legend>
-        <label className={kind === 'note' ? 'selected' : undefined}>
-          <input type="radio" name="note-kind" checked={kind === 'note'} onChange={() => setKind('note')} />
-          Note
-        </label>
-        <label className={kind === 'contact' ? 'selected' : undefined}>
-          <input type="radio" name="note-kind" checked={kind === 'contact'} onChange={() => setKind('contact')} />
-          Logged contact
-        </label>
-      </fieldset>
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (saving) return
+    setSaveError(null)
+    const { issues } = checkNote(input)
+    if (issues.length > 0) return showIssues(issues)
 
-      {kind === 'contact' && (
-        <div className="field-grid">
-          <div className="field">
-            <label htmlFor="note-direction">Message</label>
-            <select
-              id="note-direction"
-              value={direction}
-              onChange={(e) => setDirection(e.target.value as NoteDirection)}
-            >
-              <option value="outbound">I sent</option>
-              <option value="inbound">I received</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="note-channel">Via</label>
-            <select id="note-channel" value={channel} onChange={(e) => setChannel(e.target.value as NoteChannel)}>
-              {(Object.keys(noteChannelLabels) as NoteChannel[]).map((c) => (
-                <option key={c} value={c}>
-                  {noteChannelLabels[c]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+    setSaving(true)
+    const result = await onSave(input)
+    setSaving(false)
+    if (result.ok) {
+      setErrors({})
+      if (!isEdit) {
+        setBody('')
+        setWhen(toLocalInput(new Date().toISOString()))
+      }
+    } else if (result.reason === 'invalid') {
+      showIssues(result.issues)
+    } else {
+      setSaveError(noteSaveMessages[result.reason])
+    }
+  }
+
+  function cancel() {
+    if (dirty) setConfirmDiscard(true)
+    else onCancel?.()
+  }
+
+  const noun = kind === 'note' ? 'note' : 'contact entry'
+  // The form itself is named "Edit note" when editing, so the text box keeps a plain label.
+  const bodyLabel = kind === 'note' ? (isEdit ? 'Note' : 'Your note') : 'What was said'
+
+  return (
+    <form className="add-note" onSubmit={onSubmit} noValidate aria-label={isEdit ? `Edit ${noun}` : `Add a ${noun}`}>
+      {!isEdit && (
+        <fieldset className="segmented segmented-small">
+          <legend>Add</legend>
+          <label className={kind === 'note' ? 'selected' : undefined}>
+            <input type="radio" name={`${id}-kind`} checked={kind === 'note'} onChange={() => setKind('note')} />
+            Note
+          </label>
+          <label className={kind === 'contact' ? 'selected' : undefined}>
+            <input
+              type="radio"
+              name={`${id}-kind`}
+              checked={kind === 'contact'}
+              onChange={() => setKind('contact')}
+            />
+            Logged contact
+          </label>
+        </fieldset>
       )}
 
-      <div className={`field${error ? ' field-invalid' : ''}`}>
-        <label htmlFor="note-body">{kind === 'note' ? 'Your note' : 'What was said'}</label>
+      <div className="field-grid">
+        {kind === 'contact' && (
+          <>
+            <div className="field">
+              <label htmlFor={`${id}-direction`}>Message</label>
+              <select
+                id={`${id}-direction`}
+                value={direction}
+                onChange={(e) => setDirection(e.target.value as NoteDirection)}
+              >
+                <option value="outbound">I sent</option>
+                <option value="inbound">I received</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor={`${id}-channel`}>Via</label>
+              <select
+                id={`${id}-channel`}
+                value={channel}
+                onChange={(e) => setChannel(e.target.value as NoteChannel)}
+              >
+                {(Object.keys(noteChannelLabels) as NoteChannel[]).map((c) => (
+                  <option key={c} value={c}>
+                    {noteChannelLabels[c]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+        <div className={`field${errors.occurredAt ? ' field-invalid' : ''}`}>
+          <label htmlFor={`${id}-when`}>When</label>
+          <input
+            id={`${id}-when`}
+            type="datetime-local"
+            value={when}
+            aria-invalid={errors.occurredAt !== undefined}
+            aria-describedby={errors.occurredAt ? `${id}-when-error` : undefined}
+            onChange={(e) => {
+              setWhen(e.target.value)
+              setErrors((current) => ({ ...current, occurredAt: undefined }))
+            }}
+          />
+          {errors.occurredAt && (
+            <p id={`${id}-when-error`} className="field-issues issue-error" role="alert">
+              {errors.occurredAt}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className={`field${errors.body ? ' field-invalid' : ''}`}>
+        <label htmlFor={`${id}-body`}>{bodyLabel}</label>
         <textarea
-          id="note-body"
+          id={`${id}-body`}
           rows={3}
           value={body}
-          aria-invalid={error !== null}
-          aria-describedby={error ? 'note-error' : 'note-hint'}
+          aria-invalid={errors.body !== undefined}
+          aria-describedby={errors.body ? `${id}-body-error` : `${id}-body-hint`}
           onChange={(e) => {
             setBody(e.target.value)
-            setError(null)
+            setErrors((current) => ({ ...current, body: undefined }))
           }}
         />
-        {error ? (
-          <p id="note-error" className="field-issues issue-error" role="alert">
-            {error}
+        {errors.body ? (
+          <p id={`${id}-body-error`} className="field-issues issue-error" role="alert">
+            {errors.body}
           </p>
         ) : (
-          <p id="note-hint" className="hint">
+          <p id={`${id}-body-hint`} className="hint">
             Private to you. Contact entries are a record only; nothing is sent.
           </p>
         )}
       </div>
-      <button type="submit" className="button button-secondary">
-        Add {kind === 'note' ? 'note' : 'contact entry'}
-      </button>
+
+      {saveError && (
+        <Alert tone="error" title="Not saved">
+          {saveError}
+        </Alert>
+      )}
+
+      <div className="button-row">
+        <button type="submit" className="button button-secondary" disabled={saving} aria-busy={saving}>
+          {saving ? 'Saving…' : isEdit ? 'Save changes' : `Add ${noun}`}
+        </button>
+        {isEdit && (
+          <button type="button" className="button button-ghost" onClick={cancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard your changes?"
+          confirmLabel="Discard changes"
+          tone="caution"
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={() => onCancel?.()}
+        >
+          <p>Your edits to this entry haven’t been saved.</p>
+        </ConfirmDialog>
+      )}
     </form>
   )
 }
