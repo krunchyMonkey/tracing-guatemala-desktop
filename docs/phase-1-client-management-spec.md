@@ -1,7 +1,7 @@
 # Phase 1 — Client Management: build-first MVP specification
 
 **Status:** Project-owner-authorized **implementation baseline**. Researcher feedback and actual approval are deferred to the integrated MVP pilot (#12), not gates for #5–#11.  
-**Source of truth:** [Completed workflow review](./researcher-workflow-review-2026-10-28.md) and GitHub issues #1–#12 plus [#100 — local LAN browser demo](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100).  
+**Source of truth:** [Completed workflow review](./researcher-workflow-review-2026-10-28.md) and GitHub issues #1–#12, [#100 — local LAN browser demo](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100), and [#102 — Driver.js guided tour](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102).  
 **Goal:** Ship a secure, local-first, single-user client directory useful on its own, without requiring genealogy AI, document syncing, or Fiverr APIs.
 
 ## Verified facts vs. decisions
@@ -86,6 +86,7 @@ The project owner authorizes the working v1 data model and merged UI prototype f
 | SQLite storage and migrations | #5 | #2 working model; #4 shell | **Ready now** |
 | Client create/edit/archive/restore | #6 | #5 | Start after persistence |
 | Optional browser-only HTTP LAN demo | [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) (P01-13) | #6/PR #99 client-store changes merged | **Small, parallel enablement task**; browser-only fictional store; not a blocker for #7–#12 |
+| Optional provider-neutral guided tour (Driver.js) | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) (P01-14) | **#100 merged AND local HTTP demo tested from another LAN device** | **Start afterward**, on the real browser preview; reusable guidance-service abstraction for later Pendo adapter, not a blocker for desktop MVP |
 | Search/filter directory | #7 | #5 | Start after persistence |
 | Client profile | #8 | #5 | Start after persistence |
 | Notes and contact activity | #9 | #5, #8 | Start after profile |
@@ -100,6 +101,8 @@ Work in small reviewable PRs; do not invent real user acceptance. External APIs,
 [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) creates a **separate browser-preview build**, reusing the existing React UI but **not** the Electron preload/IPC or SQLite database. The preview serves a fictional in-memory data adapter over plain HTTP on a trusted home LAN, with an obvious demo banner. It exists to gather *informal early feedback* without installing a desktop build. The browser site must never contain live records, credentials, genealogy documents, cloud APIs or externally accessible routes. LAN HTTP is not a production/data-sharing transport.
 
 **Fit in roadmap:** PR #98 (SQLite) and stacked PR #99 (persistent client CRUD) are currently in progress. Prefer starting #100 after #99 merges, because #99 replaces the mock client store. The regular implementation sequence (#7–#11) can continue in parallel without waiting for #100. Use separate issue branches/worktrees.
+
+**Follow-on tour is NOT part of #100:** After the HTTP demo is implemented, merged, and successfully hosted/accessed from a second home-LAN device, [#102 — Driver.js guided walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) may build a 4–6 step tour using stable DOM anchors, provider-neutral guide definitions and a `GuidanceService` interface. Driver.js is the sole local/no-telemetry provider for now. Keep all vendor-specific imports inside its adapter. Any future Pendo option would need its own cloud-data and CSP/security review, and Pendo-authored tours may require re-authoring or mapping—do not promise drop-in content compatibility. The walkthrough is optional and should not hold up main MVP tickets.
 
 **Validation remains #12:** researcher testing of the **integrated packaged desktop MVP**, with durable data and verified backup/privacy controls, is still the formal Phase 1 completion point. Browser demo feedback can inform UI changes ahead of that review but does not substitute for it.
 
