@@ -13,7 +13,10 @@ export function AppLayout() {
         Skip to content
       </a>
       <aside className="sidebar">
-        <p className="brand">Tracing Guatemala</p>
+        <p className="brand">
+          Tracing Guatemala
+          <span className="brand-tagline">Research workspace</span>
+        </p>
         <nav aria-label="Main">
           <ul>
             {navItems.map((item) => (
