@@ -1,56 +1,57 @@
-# Claude handoff — Phase 1: build-first MVP (updated 2026-10-29)
+# Claude handoff — Phase 1 completed core; LAN demo and guided-tour queue (2026-10-29)
 
-**Repository:** `krunchyMonkey/tracing-guatemala-desktop` — https://github.com/krunchyMonkey/tracing-guatemala-desktop  
-**Delivery direction:** The project owner has authorized the draft client model and prototype as **working implementation defaults**. Do not claim the researcher (his wife) reviewed or approved them. Capture her actual feedback and approval when she can use the integrated MVP at the Phase 1 pilot (#12). Researcher interviews/sign-off are **not implementation blockers** for #5–#11.
+**Repository:** `krunchyMonkey/tracing-guatemala-desktop`  
+**URL:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
+**Default branch:** `main`
 
-Read:
-- [Client data model](./docs/client-data-model.md) — working `client-model/v1` defaults
-- [Phase 1 client-management specification](./docs/phase-1-client-management-spec.md)
-- [Prototype and walkthrough](./docs/prototypes/client-directory.md)
-- [Storage architecture readiness](./docs/architecture/client-storage-readiness.md)
-- [Electron foundation](./docs/architecture/electron-foundation.md)
+## Current status (verified from GitHub)
+- **Core Phase 1 engineering (#1–#11):** complete; PRs #95–#106 have merged.
+- **#12 pilot preparation:** PR #107 merged, including `docs/pilot/phase-1-pilot-guide.md`, screenshots and Windows installer validation. **The researcher pilot itself is open**; do not claim researcher approval.
+- **Next:** [#100 — Local HTTP browser demo](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100), **ready for immediate implementation** on the merged `main` state.
+- **After #100 merges and LAN preview works:** [#102 — Provider-neutral Driver.js walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102). Separate PR and worktree, not part of #100.
+- Both #100 and #102 are **optional developer/researcher-preview enhancements** and **do not block** the installed desktop MVP pilot (#12).
 
-## Current project status
+Read [Phase 1 plan](./docs/phase-1-client-management-spec.md), [Electron foundation](./docs/architecture/electron-foundation.md), [client storage](./docs/architecture/client-storage.md), [pilot guide](./docs/pilot/phase-1-pilot-guide.md), and the applicable GitHub issue before modifying code.
 
-- #4: complete, PR #95 merged — secure Electron foundation.
-- #2: working data model documented, PR #96 merged. Authorized **for implementation**, not researcher-validated.
-- #3: clickable UI prototype merged, PR #97. Authorized **as the UI baseline**, not researcher-validated.
-- #5: SQLite persistence, migrations, typed `clients:*` IPC implemented on `feat/5-sqlite-client-storage` (driver `node:sqlite`; see [Client storage](./docs/architecture/client-storage.md)). The renderer still uses the in-memory prototype store until #6.
-- #6: Clients screens save create/edit/archive/restore through IPC (`feat/6-persistent-client-crud`, stacked on #5). Notes stay session-only until #9.
-- #7: directory queries run in the main process via `clients:list`; filters survive profile round trips (`feat/7-persistent-directory`, stacked on #6).
-- #8: profile re-reads the saved client via `clients:get`, focus management after archive/restore, full/sparse/archived tests (`feat/8-persistent-client-profile`, stacked on #7).
-- #9: notes and contact log persisted via `notes:*`, editable with an Edited marker, client-scoped (`feat/9-persistent-notes`, stacked on #8).
-- #10: duplicate advisory via `clients:find-duplicates` in the main process, punctuation-insensitive name key (`feat/10-duplicate-advisory`, stacked on #9).
-- #11: backup/restore with validation, safety copy and rollback; privacy doc `docs/privacy-and-backup.md` (`feat/11-backup-restore`, stacked on #10).
-- #12 prep: pilot guide `docs/pilot/phase-1-pilot-guide.md`, MVP screenshots, Windows installer verified (`feat/12-pilot-kit`, stacked on #11). **Pilot not yet run; no researcher feedback or approval recorded.** Existing prototype may be adapted rather than rebuilt.
-- Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
-- **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.
+## Next coding task: #100 — browser LAN HTTP demo
 
-## Worktree and repository rules
+**Goal:** re-use the existing React UI as a demo site on a trusted home LAN, with **fictional, temporary data only**. No Electron process, SQLite connection, backend, native IPC, credentials or cloud services. Separate browser Vite entry, browser demo data adapter, truthful demo-specific Settings state and `Demo Mode — Fictional Data Only` banner.
 
-1. Verify the repository URL and inspect local checkouts and `git worktree list --porcelain` before doing anything.
-2. If an issue-specific worktree exists, reuse it. If only a checkout exists, create an issue worktree from its up-to-date `origin/main`.
-3. Clone only when no usable local checkout/worktree exists.
-4. Protect existing branches and uncommitted changes: never reset, clean, force-update or delete worktrees without explicit instruction.
-5. One issue per branch and PR by default; inspect current repository state and existing code first.
+**Required commands to add:**
+- `npm run demo:build` — build browser-only static preview.
+- `npm run demo:lan` — serve built assets over HTTP on a configurable trusted LAN interface, port 4173 by default.
+- Optional `npm run demo:dev` — browser-only HMR.
 
-## Engineering approach
+**Important existing code boundaries:** `ClientStore.tsx`, `useClientNotes.ts` and `SettingsScreen.tsx` directly use `window.tracingGuatemala`; browser mode needs a clean typed runtime adapter/provider. Reuse `src/shared/client-model.ts` where possible. Do **not** weaken Electron's security/CSP or make backup/restore controls pretend to operate in the demo. Handle secure-context limitations on HTTP LAN origins, including UUIDs.
 
-- Treat proposed requirements as **revisable MVP defaults**. Make ordinary product choices and document them; do not stop implementation for missing researcher confirmation.
-- Keep changes scoped and testable. Reference existing issues; no need to create new approval tickets or questionnaires for Phase 1.
-- On #5, perform a short SQLite compatibility spike in the **packaged Electron app** (native module/fuses/asar concerns); decide the driver based on evidence. SQLite belongs in the main process, in the app's OS user-data directory, with migrations, secure validated IPC, and restart-persistence tests.
-- On #6–#8, replace the in-memory store with persisted operations while preserving existing approved-for-implementation UX interactions. No separate researcher signoff gate.
-- Add tests, report validation outcomes, and follow normal PR review. Merge criteria are engineering correctness and ticket acceptance, **not pre-implementation external user review**.
+**Evidence:** browser build and HTTP launch; navigation, edits, notes, filters, duplicate advisory, archive/restore, reset-on-refresh; phone/tablet widths; existing `npm run check` and packaged security smoke. Supply instructions and manual second-device check if physical LAN access isn't available to the coding agent. Do **not** claim second-device testing unless done.
 
-## Non-negotiable protections
+**PR:** one focused PR referencing `Closes #100`, with tests, screenshots, limits, `docs/demo/lan-preview.md` and README updates. Do not add Driver.js here.
 
-- Repository is public: only fictional people/data in issues, source, screenshots, and tests.
-- No cloud sync, external AI, Fiverr/FamilySearch/OneNote integration, or automated client-facing messages in Phase 1.
-- Keep Electron renderer sandbox and CSP; validate at IPC/main boundaries; never echo personal input in errors/logs.
-- Require confirmation for destructive local actions; do not silently delete/merge data.
-- Ship safe backup/restore before pilot with real client information.
-- Make no claim of actual researcher approval until the researcher has reviewed the working MVP.
+## Follow-on coding task: #102 — Driver.js guided walkthrough
 
-## PR handoff
+**Start only after #100 is merged and the LAN demo is working.** Use the actual demo routes/controls, not duplicate placeholder screens.
 
-Each PR references its issue and includes scope, manual checks, automated tests, security/privacy impact and decisions made. Reuse the existing code rather than rebuilding prototype components. Continue through unblocked tickets without waiting for new researcher approval. Stop only for genuinely blocking technical/security decisions or actions needing explicit owner authorization (e.g., real external data transmission or destructive data loss).
+- Implement an application-owned guide catalog (`guideId`, `stepId`, route, stable anchor, plain text) and `GuidanceService` interface.
+- Feature UI uses stable `data-guide-id` attributes and calls `GuidanceService`; only the `DriverJsGuidanceProvider` adapter imports Driver.js.
+- Bundle Driver.js CSS/JS locally through npm, no external calls. Provide fake/no-op provider for unit tests.
+- A concise 4–6 step `Take a Tour` walkthrough; skip, back, next, restart, route transitions and missing-anchor recovery; keyboard/mobile-friendly.
+- Document future Pendo adapter boundary realistically. **Do not install Pendo** or imply guide content will transfer unchanged. Later Pendo adoption requires privacy/analytics/consent/CSP/network review.
+- One focused PR referencing `Closes #102`. Tests, screenshots and manual LAN walkthrough evidence required.
+
+## Worktree safety rules (both issues)
+
+1. Verify `origin` points to **`krunchyMonkey/tracing-guatemala-desktop`**; inspect all existing checkouts and `git worktree list --porcelain`.
+2. **Reuse an issue-specific worktree** when present. If no such worktree exists but the repository is locally available, create one from the existing repo and current `origin/main`.
+3. **Only clone if there is no usable existing checkout/worktree.**
+4. Keep each issue in its own branch/worktree (suggested `feat/100-lan-demo`, `feat/102-guided-tour`). Never reset, clean, delete or overwrite uncommitted files or other worktrees.
+5. Before starting #102, update its worktree's base from the merged `main` **without destroying local edits**. Do not stack the #102 PR on an unmerged #100 branch.
+
+## Quality, privacy, and delivery
+
+- Repository is public. Only fictional people, contacts and research content in source, screenshots, logs and tests.
+- No real client data over HTTP, no cloud sync, analytics, internet exposure, router forwarding, SaaS integrations or automatic messages.
+- Development demo can use plain HTTP on a **trusted home LAN only**; restrict binding/firewall exposure and do not disable Vite host checks. It is not a production deployment or client-data portal.
+- Keep existing desktop SQLite, hardened Electron, privacy/backup behavior and tests intact.
+- Product owner authorized working defaults; **researcher approval is still pending**, recorded only during the real #12 pilot.
+- Follow one ticket per PR. Include summary, build/test commands and outcomes, browser screenshots, manual steps, security impact, limitations. **Never automatically merge PRs.**
