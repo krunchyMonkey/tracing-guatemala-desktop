@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    // page.evaluate() callbacks run in the renderer, so these tests need DOM types.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "outDir": "./node_modules/.tsbuild/e2e"
+  },
+  "include": ["tests/e2e/**/*.ts"]
+}
