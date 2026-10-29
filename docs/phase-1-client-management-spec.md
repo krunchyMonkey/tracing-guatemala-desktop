@@ -83,16 +83,16 @@ The project owner authorizes the working v1 data model and merged UI prototype f
 | Client model defaults (PR #96) | #2 | Survey documented | **Complete for implementation**; actual feedback at #12 |
 | Prototype (PR #97) | #3 | Working #2 model | **Complete as UI baseline**; actual feedback at #12 |
 | Secure Electron shell (PR #95) | #4 | None | **Complete** |
-| SQLite storage and migrations | #5 | #2 working model; #4 shell | **Ready now** |
-| Client create/edit/archive/restore | #6 | #5 | Start after persistence |
-| Optional browser-only HTTP LAN demo | [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) (P01-13) | #6/PR #99 client-store changes merged | **Small, parallel enablement task**; browser-only fictional store; not a blocker for #7–#12 |
-| Optional provider-neutral guided tour (Driver.js) | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) (P01-14) | **#100 merged AND local HTTP demo tested from another LAN device** | **Start afterward**, on the real browser preview; reusable guidance-service abstraction for later Pendo adapter, not a blocker for desktop MVP |
-| Search/filter directory | #7 | #5 | Start after persistence |
-| Client profile | #8 | #5 | Start after persistence |
-| Notes and contact activity | #9 | #5, #8 | Start after profile |
-| Validation and duplicate advisory | #10 | #5, #6 | Start after lifecycle |
-| Backup/restore/privacy | #11 | #5 | Start after persistence; required before real-data pilot |
-| Packaged integrated pilot | #12 | #4–#11 | Collect real researcher feedback and signoff; iterate |
+| SQLite storage and migrations | #5 | #2 working model; #4 shell | **Complete** (PR #98) |
+| Client create/edit/archive/restore | #6 | #5 | **Complete** (PR #99) |
+| Optional browser-only HTTP LAN demo | [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) (P01-13) | PRs #98/#99 merged | **Ready for Claude now**; browser-only fictional store; no real data |
+| Optional provider-neutral guided tour (Driver.js) | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) (P01-14) | #100 merged and LAN HTTP demo usable | **After #100**; guidance-service interface isolates Driver.js and leaves future Pendo optional |
+| Search/filter directory | #7 | #5 | **Complete** (PR #101) |
+| Client profile | #8 | #5 | **Complete** (PR #103) |
+| Notes and contact activity | #9 | #5, #8 | **Complete** (PR #104) |
+| Validation and duplicate advisory | #10 | #5, #6 | **Complete** (PR #105) |
+| Backup/restore/privacy | #11 | #5 | **Complete** (PR #106); protect unencrypted local backups |
+| Packaged integrated pilot | #12 | #4–#11 | **Preparation merged** (PR #107); actual end-user walkthrough and approval pending |
 
 Work in small reviewable PRs; do not invent real user acceptance. External APIs, cloud AI and automatic sends remain out of Phase 1.
 
@@ -100,7 +100,7 @@ Work in small reviewable PRs; do not invent real user acceptance. External APIs,
 
 [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) creates a **separate browser-preview build**, reusing the existing React UI but **not** the Electron preload/IPC or SQLite database. The preview serves a fictional in-memory data adapter over plain HTTP on a trusted home LAN, with an obvious demo banner. It exists to gather *informal early feedback* without installing a desktop build. The browser site must never contain live records, credentials, genealogy documents, cloud APIs or externally accessible routes. LAN HTTP is not a production/data-sharing transport.
 
-**Fit in roadmap:** PR #98 (SQLite) and stacked PR #99 (persistent client CRUD) are currently in progress. Prefer starting #100 after #99 merges, because #99 replaces the mock client store. The regular implementation sequence (#7–#11) can continue in parallel without waiting for #100. Use separate issue branches/worktrees.
+**Fit in roadmap (2026-10-29):** PRs #98–#107 are merged and core Phase 1 issues #1–#11 are closed. **#100 is ready now** on current `main` and must use a browser-only fictional data adapter because #99 replaced the original in-memory store. Start #102 after #100 is merged and the LAN demo is usable. Neither enhancement blocks the #12 installed desktop pilot. Use separate issue branches/worktrees.
 
 **Follow-on tour is NOT part of #100:** After the HTTP demo is implemented, merged, and successfully hosted/accessed from a second home-LAN device, [#102 — Driver.js guided walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) may build a 4–6 step tour using stable DOM anchors, provider-neutral guide definitions and a `GuidanceService` interface. Driver.js is the sole local/no-telemetry provider for now. Keep all vendor-specific imports inside its adapter. Any future Pendo option would need its own cloud-data and CSP/security review, and Pendo-authored tours may require re-authoring or mapping—do not promise drop-in content compatibility. The walkthrough is optional and should not hold up main MVP tickets.
 
@@ -126,4 +126,4 @@ Work in small reviewable PRs; do not invent real user acceptance. External APIs,
 - [ ] Which actions require confirmation? (Survey answer: *not sure*; default to conservative)
 - [ ] Which OS will she use for the first installed pilot?
 
-These questions **do not block implementation**. Record her actual answers and usability feedback during #12, then refine the model/UI in follow-up tickets. Until then, retain the working defaults and avoid claims of researcher signoff.
+These questions **do not block implementation**. Record her actual answers and usability feedback during #12, then refine the model/UI in follow-up tickets. The build-first desktop MVP is implemented; end-user validation remains open. Browser demo and Driver.js tickets (#100, #102) are independent, fictional-data preview enhancements.
