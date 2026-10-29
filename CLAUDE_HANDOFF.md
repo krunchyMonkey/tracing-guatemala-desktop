@@ -1,12 +1,20 @@
-# Claude handoff — Phase 1 starter queue (2026-10-29)
+# Claude handoff — Phase 1 starter queue (updated 2026-10-29)
 
 Read [Phase 1 specification](./docs/phase-1-client-management-spec.md) and [researcher survey findings](./docs/researcher-workflow-review-2026-10-28.md) before working tickets.
 
-## Start here, in this order
+## Status
 
-1. **#2 — Client data model and lifecycle:** Write a proposed, versioned field/schema decision document, distinguish confirmed survey facts from proposed defaults. Produce a checklist for the researcher's approval. **Do not treat the draft as signed off.**
-2. **#4 — Secure Electron foundation:** Implement the independent starter shell, test/build scripts, typed and validated preload IPC, security posture, placeholder navigation, and document OS packaging assumptions. Do not create speculative client tables or integrations. Can run parallel with #2 on a separate branch.
-3. **#3 — Prototype directory and profile:** Use #2's provisional model; create reviewable wireframes or clickable prototype with fictitious client scenarios. Do not implement persisted CRUD until researcher signs off.
+| Ticket | State |
+| --- | --- |
+| **#4 — Secure Electron foundation** | **Done.** Merged in PR #95. See [electron-foundation.md](./docs/architecture/electron-foundation.md). Preserve its security controls, IPC conventions and tests. |
+| **#2 — Client data model and lifecycle** | **Active.** Proposal in [client-data-model.md](./docs/client-data-model.md). Awaiting researcher answers to its approval checklist. |
+| **#3 — Directory and profile prototype** | **Active.** Clickable prototype on in-memory fictional data, built on the provisional #2 model. Awaiting researcher review. |
+| #5 onward | **Blocked.** See [client-storage-readiness.md](./docs/architecture/client-storage-readiness.md) for the remaining decisions and order. |
+
+## Active workstream
+
+1. **#2:** Collect the researcher's answers on the issue. Update the model document to `v1` only when she explicitly approves it. **Do not treat the draft as signed off.**
+2. **#3:** Iterate on the prototype from her feedback. Do not add persistence, SQLite, or IPC for client data until #2 is approved and #5 lands.
 
 ## Dependency flow after researcher signoff
 
@@ -25,9 +33,3 @@ Read [Phase 1 specification](./docs/phase-1-client-management-spec.md) and [rese
 - Add realistic but **fictional** data to screenshots and tests. Never publish client details in GitHub. The repository is public.
 - No unapproved transmission of client records, external AI calls, or provider automation.
 - For each PR provide: summary, tests performed/results, manual validation, security/privacy implications, any decisions requiring approval, and screenshots for UI changes.
-
-## Immediate output expected
-
-First PR: #4 secure application skeleton (independent from requirements).  
-Second deliverable: #2 proposed field/lifecycle decisions for researcher approval.  
-Next: #3 design prototype based on provisional #2, then gated implementation.
