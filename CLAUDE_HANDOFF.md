@@ -21,7 +21,8 @@ Read:
 - #8: profile re-reads the saved client via `clients:get`, focus management after archive/restore, full/sparse/archived tests (`feat/8-persistent-client-profile`, stacked on #7).
 - #9: notes and contact log persisted via `notes:*`, editable with an Edited marker, client-scoped (`feat/9-persistent-notes`, stacked on #8).
 - #10: duplicate advisory via `clients:find-duplicates` in the main process, punctuation-insensitive name key (`feat/10-duplicate-advisory`, stacked on #9).
-- #11: backup/restore with validation, safety copy and rollback; privacy doc `docs/privacy-and-backup.md` (`feat/11-backup-restore`, stacked on #10). Existing prototype may be adapted rather than rebuilt.
+- #11: backup/restore with validation, safety copy and rollback; privacy doc `docs/privacy-and-backup.md` (`feat/11-backup-restore`, stacked on #10).
+- #12 prep: pilot guide `docs/pilot/phase-1-pilot-guide.md`, MVP screenshots, Windows installer verified (`feat/12-pilot-kit`, stacked on #11). **Pilot not yet run; no researcher feedback or approval recorded.** Existing prototype may be adapted rather than rebuilt.
 - Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
 - **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.
 
