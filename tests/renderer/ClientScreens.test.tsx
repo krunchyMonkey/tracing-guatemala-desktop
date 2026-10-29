@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/renderer/src/App'
 import { createFakeApi } from './fakeApi'
+import { ARCHIVED_COUNT, MANY_CLIENTS, manyClients } from './fixtures/manyClients'
 
 // Client screens against an in-memory stand-in for the main process. Fictional data only.
 
@@ -50,7 +51,7 @@ describe('client directory', () => {
   it('searches, filters by status, and explains when nothing matches', async () => {
     render(<App />)
     fireEvent.change(await screen.findByLabelText('Search clients'), { target: { value: 'tomas' } })
-    expect(screen.getByRole('heading', { name: 'No matching clients' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'No matching clients' })).toBeTruthy()
 
     fireEvent.click(screen.getByLabelText('All'))
     expect(await rowNames()).toEqual(['Tomás Herrera'])
@@ -254,5 +255,55 @@ describe('client profile', () => {
     const history = screen.getByRole('region', { name: 'Notes & contact history' })
     expect(within(history).getByText('Sent a status update.')).toBeTruthy()
     expect(within(history).queryByText('Asked about the 1890s census.')).toBeNull()
+  })
+})
+
+describe('directory with many clients', () => {
+  beforeEach(() => {
+    fake = createFakeApi(manyClients())
+    vi.stubGlobal('tracingGuatemala', fake.api)
+  })
+
+  it('runs searches in the main process and shows the count', async () => {
+    render(<App />)
+    expect(await screen.findByText(`${MANY_CLIENTS - ARCHIVED_COUNT} clients`)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'maria lopez' } })
+    expect(await screen.findByText(/^3 clients/)).toBeTruthy()
+    expect(fake.api.listClients).toHaveBeenLastCalledWith({
+      text: 'maria lopez',
+      status: 'active',
+      sources: [],
+      sort: 'name'
+    })
+  })
+
+  it('keeps search and filters when going to a profile and back', async () => {
+    render(<App />)
+    fireEvent.change(await screen.findByLabelText('Search clients'), { target: { value: 'perez' } })
+    fireEvent.click(screen.getByLabelText('Referral'))
+    fireEvent.click(screen.getByLabelText('All'))
+    await waitFor(async () => expect((await rowNames()).length).toBeLessThan(MANY_CLIENTS))
+    const first = (await rowNames())[0]!
+    fireEvent.click(screen.getByRole('link', { name: first }))
+    await screen.findByRole('heading', { level: 1, name: first })
+
+    fireEvent.click(screen.getByRole('link', { name: '← Clients' }))
+    expect(((await screen.findByLabelText('Search clients')) as HTMLInputElement).value).toBe('perez')
+    expect((screen.getByLabelText('Referral') as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('All') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('shows an error with retry when a search fails, keeping the last results', async () => {
+    render(<App />)
+    await screen.findByText(`${MANY_CLIENTS - ARCHIVED_COUNT} clients`)
+    fake.state.failing = true
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'ana' } })
+    expect(await screen.findByText('Search isn’t working right now')).toBeTruthy()
+    expect(screen.getByRole('table')).toBeTruthy()
+
+    fake.state.failing = false
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(screen.queryByText('Search isn’t working right now')).toBeNull())
+    expect((await rowNames()).every((name) => name?.startsWith('Ana'))).toBe(true)
   })
 })

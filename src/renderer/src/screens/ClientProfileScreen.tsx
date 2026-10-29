@@ -40,7 +40,7 @@ export function ClientProfileScreen() {
       <section aria-labelledby="profile-heading">
         <h1 id="profile-heading">Client not found</h1>
         <p>This link doesn’t match any saved client.</p>
-        <Link to="/clients">Back to clients</Link>
+        <Link to={store.directoryHref}>Back to clients</Link>
       </section>
     )
   }
@@ -65,7 +65,7 @@ export function ClientProfileScreen() {
   return (
     <section aria-labelledby="profile-heading" className="profile">
       <p className="breadcrumb">
-        <Link to="/clients">← Clients</Link>
+        <Link to={store.directoryHref}>← Clients</Link>
       </p>
 
       <div role="status" className="flash-region">

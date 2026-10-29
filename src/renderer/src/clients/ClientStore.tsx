@@ -25,6 +25,11 @@ export interface ClientStore {
   notes: ClientNote[]
   loadState: LoadState
   reload(): void
+  /** Runs a directory query in the main process. */
+  searchClients(query: DirectoryQuery): Promise<Client[]>
+  /** The directory URL with the last-used search and filters, for "back to clients" links. */
+  directoryHref: string
+  rememberDirectorySearch(search: string): void
   createClient(input: ClientInput): Promise<SaveResult>
   updateClient(id: string, input: ClientInput): Promise<SaveResult>
   archiveClient(id: string): Promise<SaveResult>
@@ -49,6 +54,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<ClientNote[]>([])
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [directorySearch, setDirectorySearch] = useState('')
 
   useEffect(() => {
     let current = true
@@ -107,6 +113,9 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       notes,
       loadState,
       reload,
+      searchClients: (query) => api().listClients(query),
+      directoryHref: `/clients${directorySearch}`,
+      rememberDirectorySearch: setDirectorySearch,
       createClient: (input) => mutate(() => api().createClient(input)),
       updateClient: (id, input) => mutate(() => api().updateClient(id, input)),
       archiveClient: (id) => setStatus(id, true),
@@ -115,7 +124,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         setNotes((list) => [...list, { ...note, id: crypto.randomUUID(), clientId }])
       }
     }),
-    [clients, notes, loadState, reload, mutate, setStatus]
+    [clients, notes, loadState, directorySearch, reload, mutate, setStatus]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>

@@ -17,7 +17,8 @@ Read:
 - #3: clickable UI prototype merged, PR #97. Authorized **as the UI baseline**, not researcher-validated.
 - #5: SQLite persistence, migrations, typed `clients:*` IPC implemented on `feat/5-sqlite-client-storage` (driver `node:sqlite`; see [Client storage](./docs/architecture/client-storage.md)). The renderer still uses the in-memory prototype store until #6.
 - #6: Clients screens save create/edit/archive/restore through IPC (`feat/6-persistent-client-crud`, stacked on #5). Notes stay session-only until #9.
-- Then #7 searchable directory, #8 profile. Existing prototype may be adapted rather than rebuilt.
+- #7: directory queries run in the main process via `clients:list`; filters survive profile round trips (`feat/7-persistent-directory`, stacked on #6).
+- Then #8 profile. Existing prototype may be adapted rather than rebuilt.
 - Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
 - **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.
 
