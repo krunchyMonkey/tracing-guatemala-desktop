@@ -27,6 +27,8 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | `src/main/database/migrations.ts` | Forward-only numbered migrations and the runner. |
 | `src/main/database/connection.ts` | Opens the database file, sets pragmas, runs migrations, takes the pre-migration copy. The only place the driver is configured. |
 | `src/main/database/client-repository.ts` | Client reads and writes. Re-runs `checkClient` on every write; renderer checks are never trusted. |
+| `src/main/database/app-data.ts` | Owns the live connection and repositories; backup, backup inspection and restore with rollback (#11). |
+| `src/main/backup.ts` | Backup service behind native dialogs; paths stay in main, the renderer gets a one-time token. |
 | `src/main/database/note-repository.ts` | Notes and contact log (#9). Every query is scoped by client id. Re-runs `checkNote`. |
 | `src/main/ipc.ts` | zod contracts for the `clients:*` channels. |
 | `scripts/packaged-smoke.mjs` | Packaged-app database smoke test. |
@@ -58,6 +60,9 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | `clients:create` | `ClientInput` | `ClientMutationResult` |
 | `clients:update` | UUID, `ClientInput` | `ClientMutationResult` |
 | `clients:archive` / `clients:restore` | UUID | `ClientMutationResult` |
+| `backup:create` | none (the main process shows the save dialog) | `{ ok, fileName, clients, notes }` or `cancelled`/`failed` |
+| `backup:choose-restore` | none (open dialog) | `{ ok, token, fileName, savedAt, clients, notes }` or `cancelled`/`not-a-backup`/`damaged`/`too-new`/`failed` |
+| `backup:restore` | token (UUID, single use) | `{ ok, clients, notes }` or `expired`/`failed`/backup problem |
 | `clients:find-duplicates` | `ClientInput`, UUID or `null` (the client being edited) | `DuplicateCandidate[]` (client and matching signals), archived included |
 | `notes:list` | client UUID | `ClientNote[]`, newest first |
 | `notes:create` | client UUID, `NoteInput` | `NoteMutationResult` |
@@ -66,6 +71,28 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 - `ClientInput` is a strict object: an `id`, `status`, timestamp or any other extra key rejects the whole call (`invalid-arguments`) before it reaches storage. Raw strings are capped at 1,000 characters to stop oversized payloads. The real field limits are rule checks.
 - `ClientMutationResult` is `{ ok: true, client }` or `{ ok: false, reason }` with `reason` one of `invalid` (plus `issues: { field, severity, code }[]`), `not-found`, `wrong-status`. Expected failures are results, not exceptions, and never contain submitted values.
 - Unexpected failures (database errors, a result that breaks its contract) reach the renderer only as `IPC request rejected: internal-error`.
+
+## Backup and restore (#11)
+
+User-facing description: [Local data, privacy and backups](../privacy-and-backup.md).
+
+- The database carries SQLite `application_id` `0x54474431` ("TGD1"), set on every open, so a backup can be recognized.
+- **Backup:** `VACUUM INTO` a hidden partial file next to the target, switch it to `journal_mode=DELETE` so it is one self-contained file, inspect it, then rename it over the target.
+- **Inspect:**
+  1. SQLite header and a size between 512 bytes and 2 GB.
+  2. Opened read-only, `integrity_check = ok`.
+  3. The application id matches.
+  4. `user_version` is between 1 and the latest migration; newer is refused.
+  5. A `clients` table exists.
+  6. Count clients and notes.
+- **Restore:**
+  1. Inspect the backup.
+  2. Copy it to a staging file, migrate it, set the application id, and run `foreign_key_check`.
+  3. `VACUUM INTO data/pre-restore/…` as a safety copy.
+  4. Close the live connection, rename the live file aside, and move the staging file in.
+  5. Reopen and verify the client count.
+  6. On any failure, put the original back and reopen it (`RestoreFailedError`). On success, delete the set-aside file.
+- IPC services delegate to `AppData` on every call, so they follow the connection when a restore replaces it.
 
 ## Decisions and assumptions to revisit
 
@@ -78,5 +105,6 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | System entries (archive/restore) cannot be edited. Archived clients' entries are read-only. | Model §5.2/§5.4. | #12 feedback (checklist Q5). |
 | Duplicate advisory (#10) runs in the main process over every client, archived included. Only exact matches of folded name, email or handle count; no fuzzy matching. If the check fails, nothing is saved. | Predictable, few false positives; a failed check must not silently skip the warning. | #12 feedback (fuzzy names if real duplicates slip through). |
 | Control characters are also rejected in `sourceDetail` and `otherContact`. | The model calls them single-line fields (§4.1). Previously only `displayName` was checked. | Pilot feedback. |
+| Backups and safety copies are unencrypted SQLite files; safety copies are never pruned. | Simple, inspectable, recoverable. Documented for the researcher. | #12 (encryption, retention). |
 | `synchronous=FULL` | Safety over write speed. Writes are rare and small. | Never, unless profiling says otherwise. |
 | Archived clients cannot be edited (`wrong-status`). | Model §5.2 default (checklist Q5). | #12 feedback. |

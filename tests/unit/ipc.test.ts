@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   contracts,
+  type BackupService,
   createValidatedHandler,
   IpcRejectedError,
   registerIpcHandlers,
@@ -52,7 +53,7 @@ describe('createValidatedHandler', () => {
 describe('registerIpcHandlers', () => {
   it('registers exactly the channels in the shared contract', () => {
     const handle = vi.fn()
-    registerIpcHandlers({ handle }, { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes: fakeNotes() })
+    registerIpcHandlers({ handle }, { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes: fakeNotes(), backup: fakeBackup() })
     expect(handle.mock.calls.map(([channel]) => channel)).toEqual(Object.values(IpcChannel))
   })
 
@@ -61,7 +62,7 @@ describe('registerIpcHandlers', () => {
     const clients = fakeClients()
     registerIpcHandlers(
       { handle: (channel, listener) => void handlers.set(channel, listener as never) },
-      { isTrustedSender, getAppInfo: () => appInfo, clients, notes: fakeNotes() }
+      { isTrustedSender, getAppInfo: () => appInfo, clients, notes: fakeNotes(), backup: fakeBackup() }
     )
 
     await expect(handlers.get(IpcChannel.createClient)!(trustedEvent, input)).resolves.toEqual({ ok: true, client })
@@ -242,12 +243,57 @@ describe('note contracts', () => {
     const notes = fakeNotes()
     registerIpcHandlers(
       { handle: (channel, listener) => void handlers.set(channel, listener as never) },
-      { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes }
+      { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes, backup: fakeBackup() }
     )
     await expect(handlers.get(IpcChannel.listNotes)!(trustedEvent, client.id)).resolves.toEqual([note])
     await handlers.get(IpcChannel.createNote)!(trustedEvent, client.id, noteInput)
     expect(notes.create).toHaveBeenCalledWith(client.id, noteInput)
     await handlers.get(IpcChannel.updateNote)!(trustedEvent, client.id, note.id, noteInput)
     expect(notes.update).toHaveBeenCalledWith(client.id, note.id, noteInput)
+  })
+})
+
+// ---------- backup contracts ----------
+
+function fakeBackup() {
+  return {
+    create: vi.fn(async () => ({ ok: true as const, fileName: 'Tracing Guatemala backup 2026-10-29.tgbackup', clients: 2, notes: 3 })),
+    chooseRestore: vi.fn(async () => ({ ok: false as const, reason: 'cancelled' as const })),
+    restore: vi.fn(async () => ({ ok: false as const, reason: 'expired' as const }))
+  } satisfies BackupService
+}
+
+describe('backup contracts', () => {
+  it('takes no arguments for create and choose, so the renderer cannot pass a path', async () => {
+    const create = vi.fn()
+    await rejection(createValidatedHandler(contracts.createBackup, isTrustedSender, create)(trustedEvent, 'C:/anywhere.tgbackup'))
+    const choose = vi.fn()
+    await rejection(
+      createValidatedHandler(contracts.chooseBackupToRestore, isTrustedSender, choose)(trustedEvent, 'C:/anywhere')
+    )
+    expect(create).not.toHaveBeenCalled()
+    expect(choose).not.toHaveBeenCalled()
+  })
+
+  it('restores only by token, never by path', async () => {
+    const restore = vi.fn()
+    const handler = createValidatedHandler(contracts.restoreBackup, isTrustedSender, restore)
+    await rejection(handler(trustedEvent, 'C:/Users/someone/backup.tgbackup'))
+    expect(restore).not.toHaveBeenCalled()
+  })
+
+  it('never returns a full path in a choice', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const handler = createValidatedHandler(contracts.chooseBackupToRestore, isTrustedSender, async () => ({
+      ok: true as const,
+      token: client.id,
+      fileName: 'backup.tgbackup',
+      savedAt: client.createdAt,
+      clients: 1,
+      notes: 0,
+      path: 'C:/Users/someone/backup.tgbackup'
+    }))
+    await rejection(handler(trustedEvent))
+    vi.restoreAllMocks()
   })
 })

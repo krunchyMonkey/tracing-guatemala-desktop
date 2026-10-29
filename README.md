@@ -21,4 +21,6 @@ npm run package:dir  # unpacked app for the current OS, in release/
 npm run smoke:packaged  # after package:dir: packaged app creates and reopens its database
 ```
 
+See [docs/privacy-and-backup.md](docs/privacy-and-backup.md) for where data is stored and how backups work.
+
 See [docs/architecture/electron-foundation.md](docs/architecture/electron-foundation.md) for all scripts, the security model, IPC conventions and packaging decisions.

@@ -21,6 +21,9 @@ import {
 import {
   IpcChannel,
   type AppInfo,
+  type BackupChoice,
+  type BackupCreateResult,
+  type BackupRestoreResult,
   type ClientMutationResult,
   type IpcChannelName,
   type NoteMutationResult
@@ -146,6 +149,9 @@ const noteResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<NoteMutationResult>
 
+const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
+const count = z.number().int().nonnegative()
+
 export const contracts = {
   getAppInfo: {
     channel: IpcChannel.getAppInfo,
@@ -195,6 +201,37 @@ export const contracts = {
         signals: z.array(z.enum(['email', 'fiverrUsername', 'displayName'])).min(1)
       })
     ) satisfies z.ZodType<DuplicateCandidate[]>
+  },
+  createBackup: {
+    channel: IpcChannel.createBackup,
+    args: z.tuple([]),
+    result: z.union([
+      z.strictObject({ ok: z.literal(true), fileName: z.string().min(1), clients: count, notes: count }),
+      z.strictObject({ ok: z.literal(false), reason: z.enum(['cancelled', 'failed']) })
+    ]) satisfies z.ZodType<BackupCreateResult>
+  },
+  chooseBackupToRestore: {
+    channel: IpcChannel.chooseBackupToRestore,
+    args: z.tuple([]),
+    result: z.union([
+      z.strictObject({
+        ok: z.literal(true),
+        token: idSchema,
+        fileName: z.string().min(1),
+        savedAt: timestamp,
+        clients: count,
+        notes: count
+      }),
+      z.strictObject({ ok: z.literal(false), reason: z.union([z.enum(['cancelled', 'failed']), backupProblem]) })
+    ]) satisfies z.ZodType<BackupChoice>
+  },
+  restoreBackup: {
+    channel: IpcChannel.restoreBackup,
+    args: z.tuple([idSchema]),
+    result: z.union([
+      z.strictObject({ ok: z.literal(true), clients: count, notes: count }),
+      z.strictObject({ ok: z.literal(false), reason: z.union([z.enum(['expired', 'failed']), backupProblem]) })
+    ]) satisfies z.ZodType<BackupRestoreResult>
   },
   listNotes: {
     channel: IpcChannel.listNotes,
@@ -258,19 +295,27 @@ export interface NoteService {
   update(clientId: string, noteId: string, input: NoteInput): NoteMutationResult
 }
 
+/** Backup operations backing the backup:* channels (createBackupService in production). */
+export interface BackupService {
+  create(): Promise<BackupCreateResult>
+  chooseRestore(): Promise<BackupChoice>
+  restore(token: string): Promise<BackupRestoreResult>
+}
+
 export interface IpcDependencies {
   isTrustedSender: (url: string) => boolean
   getAppInfo: () => AppInfo
   clients: ClientService
   notes: NoteService
+  backup: BackupService
 }
 
 export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcDependencies): void {
   const c = contracts
-  const { isTrustedSender, clients, notes } = deps
+  const { isTrustedSender, clients, notes, backup } = deps
   const register = <Args extends z.ZodTuple, Result extends z.ZodType>(
     contract: ChannelContract<Args, Result>,
-    impl: (args: z.output<Args>) => z.input<Result>
+    impl: (args: z.output<Args>) => z.input<Result> | Promise<z.input<Result>>
   ) => ipcMain.handle(contract.channel, createValidatedHandler(contract, isTrustedSender, impl))
 
   register(c.getAppInfo, () => deps.getAppInfo())
@@ -281,6 +326,9 @@ export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcD
   register(c.archiveClient, ([id]) => clients.archive(id))
   register(c.restoreClient, ([id]) => clients.restore(id))
   register(c.findDuplicateClients, ([input, excludeId]) => clients.findDuplicates(input, excludeId))
+  register(c.createBackup, () => backup.create())
+  register(c.chooseBackupToRestore, () => backup.chooseRestore())
+  register(c.restoreBackup, ([token]) => backup.restore(token))
   register(c.listNotes, ([clientId]) => notes.list(clientId))
   register(c.createNote, ([clientId, input]) => notes.create(clientId, input))
   register(c.updateNote, ([clientId, noteId, input]) => notes.update(clientId, noteId, input))

@@ -55,7 +55,10 @@ async function runApp(label, check) {
 }
 
 try {
-  await runApp('first launch creates and migrates the database', () => undefined)
+  await runApp('first launch creates and migrates the database', () => {
+    const appId = readDb((db) => db.prepare('PRAGMA application_id').get().application_id)
+    if (appId !== 0x54474431) throw new Error('database is missing the Tracing Guatemala application id')
+  })
   readDb((db) =>
     db
       .prepare(

@@ -101,6 +101,11 @@ export function createFakeApi(initial: Client[] = sampleClients, initialNotes: C
         return input ? findDuplicates(input, clients, excludeId ?? undefined) : []
       })
     ),
+    createBackup: vi.fn(() =>
+      guard(() => ({ ok: true as const, fileName: 'Tracing Guatemala backup 2026-10-29.tgbackup', clients: clients.length, notes: notes.length }))
+    ),
+    chooseBackupToRestore: vi.fn(() => guard(() => ({ ok: false as const, reason: 'cancelled' as const }))),
+    restoreBackup: vi.fn(() => guard(() => ({ ok: false as const, reason: 'expired' as const }))),
     listNotes: vi.fn((clientId) => guard(() => notes.filter((n) => n.clientId === clientId).sort(compareNotes))),
     createNote: vi.fn((clientId, input) => guard(() => saveNote(clientId, null, input))),
     updateNote: vi.fn((clientId, noteId, input) => guard(() => saveNote(clientId, noteId, input)))

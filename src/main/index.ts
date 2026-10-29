@@ -1,11 +1,10 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session } from 'electron'
 import { registerAppProtocol } from './app-protocol'
-import { ClientRepository } from './database/client-repository'
-import { openAppDatabase, type OpenedDatabase } from './database/connection'
-import { NoteRepository } from './database/note-repository'
+import { BACKUP_EXTENSION, createBackupService, type BackupDialogs } from './backup'
+import { AppData } from './database/app-data'
 import { DatabaseTooNewError } from './database/migrations'
-import { registerIpcHandlers } from './ipc'
+import { registerIpcHandlers, type ClientService, type NoteService } from './ipc'
 import { buildApplicationMenu } from './menu'
 import { APP_SCHEME, resolveRendererTarget } from './renderer-target'
 import { hardenSession, hardenWebContents, secureWebPreferences } from './security'
@@ -21,7 +20,7 @@ const target = resolveRendererTarget(app.isPackaged ? undefined : process.env['E
 const testUserData = process.env['TRACING_GUATEMALA_TEST_USER_DATA']
 if (!app.isPackaged && testUserData) app.setPath('userData', testUserData)
 
-let database: OpenedDatabase | null = null
+let data: AppData | null = null
 
 app.on('web-contents-created', (_event, contents) => hardenWebContents(contents, target))
 
@@ -39,9 +38,9 @@ function createMainWindow(): void {
   void window.loadURL(target.entryUrl)
 }
 
-function openDatabaseOrQuit(): OpenedDatabase | null {
+function openDataOrQuit(): AppData | null {
   try {
-    return openAppDatabase(app.getPath('userData'))
+    return new AppData(app.getPath('userData'))
   } catch (error) {
     // Only the error name is logged: SQLite messages can quote stored values.
     console.error(`Database open failed: ${error instanceof Error ? error.name : 'unknown error'}`)
@@ -55,11 +54,49 @@ function openDatabaseOrQuit(): OpenedDatabase | null {
   }
 }
 
+const backupFilters = [{ name: 'Tracing Guatemala backup', extensions: [BACKUP_EXTENSION] }]
+
+const backupDialogs: BackupDialogs = {
+  async chooseSaveTarget(defaultName) {
+    const options = { title: 'Save a backup', defaultPath: join(app.getPath('documents'), defaultName), filters: backupFilters }
+    const window = BrowserWindow.getFocusedWindow()
+    const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+    return result.canceled || !result.filePath ? null : result.filePath
+  },
+  async chooseBackupFile() {
+    const options = {
+      title: 'Choose a backup to restore',
+      properties: ['openFile' as const],
+      filters: [...backupFilters, { name: 'All files', extensions: ['*'] }]
+    }
+    const window = BrowserWindow.getFocusedWindow()
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  }
+}
+
 void app.whenReady().then(() => {
-  database = openDatabaseOrQuit()
-  if (!database) return
-  const clients = new ClientRepository(database.db)
-  const notes = new NoteRepository(database.db)
+  data = openDataOrQuit()
+  if (!data) return
+  const current = (): AppData => {
+    if (!data) throw new Error('Data is closed')
+    return data
+  }
+  // Delegate on every call: a restore replaces the connection and repositories.
+  const clients: ClientService = {
+    list: (query) => current().clients.list(query),
+    get: (id) => current().clients.get(id),
+    create: (input) => current().clients.create(input),
+    update: (id, input) => current().clients.update(id, input),
+    archive: (id) => current().clients.archive(id),
+    restore: (id) => current().clients.restore(id),
+    findDuplicates: (input, excludeId) => current().clients.findDuplicates(input, excludeId)
+  }
+  const notes: NoteService = {
+    list: (clientId) => current().notes.list(clientId),
+    create: (clientId, input) => current().notes.create(clientId, input),
+    update: (clientId, noteId, input) => current().notes.update(clientId, noteId, input)
+  }
 
   hardenSession(session.defaultSession, target)
   if (target.mode === 'production') {
@@ -69,7 +106,8 @@ void app.whenReady().then(() => {
     isTrustedSender: (url) => isSameOrigin(url, target.origin),
     getAppInfo: () => ({ name: app.getName(), version: app.getVersion(), platform: process.platform }),
     clients,
-    notes
+    notes,
+    backup: createBackupService(current, backupDialogs)
   })
   Menu.setApplicationMenu(buildApplicationMenu(target.mode === 'development'))
 
@@ -84,6 +122,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
-  database?.db.close()
-  database = null
+  data?.close()
+  data = null
 })
