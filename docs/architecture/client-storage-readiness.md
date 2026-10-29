@@ -1,6 +1,6 @@
 # Client storage readiness (#5) — preparation notes
 
-**Status:** **#5 ready to implement.** The project owner authorized the v1 client model as working defaults; researcher feedback will be collected at the integrated Phase 1 pilot (#12). This note captures schema assumptions, existing Electron constraints, and implementation order. Do not claim researcher signoff.
+**Status:** **Implemented in #5. See [Client storage](./client-storage.md) for the result, driver spike and decisions.** Kept as the pre-implementation record. The project owner authorized the v1 client model as working defaults; researcher feedback will be collected at the integrated Phase 1 pilot (#12). This note captures schema assumptions, existing Electron constraints, and implementation order. Do not claim researcher signoff.
 
 ## 1. Schema defaults and later-feedback risks (not blockers)
 

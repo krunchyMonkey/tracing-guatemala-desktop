@@ -47,6 +47,7 @@ tests/
 | `npm run check` | All of the above, in order. |
 | `npm run package:dir` | Build an unpacked app for the current OS in `release/` (no installer). |
 | `npm run package` | Build the installer for the current OS (see open choices below). |
+| `npm run smoke:packaged` | After `package:dir`: launch the packaged app twice against a temporary profile and check its database. |
 
 > If you run Electron from a VS Code terminal and the app exits immediately, check for `ELECTRON_RUN_AS_NODE=1` in the environment and unset it. The e2e test strips it automatically.
 
@@ -89,7 +90,7 @@ The renderer is treated as untrusted web content. It reaches the main process on
 
 **Adding a channel:** add the name and types in `src/shared/ipc.ts`, a contract in `contracts` and a registration in `registerIpcHandlers` (`src/main/ipc.ts`), and a function in the preload. Then extend `tests/unit/ipc.test.ts` and the API-surface assertion in the e2e test.
 
-The only channel today is `app:get-info` (name, version, platform), used by the Settings screen.
+Channels: `app:get-info` (name, version, platform), used by the Settings screen, and the `clients:*` channels added in #5 (see [Client storage](./client-storage.md#ipc)). Unexpected handler failures reach the renderer only as a generic `internal-error` rejection.
 
 ## Security smoke test
 
@@ -110,8 +111,8 @@ The packaged-build checks (fuses, launch) are manual for now; see below.
 
 - `electron-builder.yml` packages `out/` into an asar archive and flips these Electron fuses: `RunAsNode` off, `EnableNodeOptionsEnvironmentVariable` off, `EnableNodeCliInspectArguments` off, `EnableEmbeddedAsarIntegrityValidation` on, `OnlyLoadAppFromAsar` on, `GrantFileProtocolExtraPrivileges` off, `EnableCookieEncryption` on.
 - No auto-updates and no release publishing (`publish: null`).
-- `npmRebuild: false` because there are no native modules yet. SQLite (#5) will need this revisited.
-- Manual check after `npm run package:dir`: `npx @electron/fuses read --app "release/win-unpacked/Tracing Guatemala.exe"` lists the fuses above, and the packaged app launches showing the Home screen.
+- `npmRebuild: false` because there are no native modules. SQLite uses Node's built-in `node:sqlite` (#5), so nothing is unpacked from the asar.
+- Manual check after `npm run package:dir`: `npx @electron/fuses read --app "release/win-unpacked/Tracing Guatemala.exe"` lists the fuses above, and the packaged app launches showing the Home screen. `npm run smoke:packaged` then checks that the packaged app creates, migrates and reopens its database.
 
 ### Open choices (not decided by #4)
 
@@ -120,7 +121,7 @@ These must be settled before claiming installation acceptance in #12:
 - **Target OS for the first installed pilot.** The researcher has not yet said (spec approval checklist). Placeholder targets are configured for all three: Windows `nsis` (per-user, not one-click), macOS `dmg`, Linux `AppImage`. Only Windows unpacked builds have been exercised.
 - **Code signing and notarization.** Not configured; unsigned installers will trigger OS warnings.
 - **App identity.** `appId` is the placeholder `com.tracingguatemala.desktop`; no icon is set yet.
-- **Installer behavior:** per-user vs per-machine install, and where the SQLite data directory lives (#5).
+- **Installer behavior:** per-user vs per-machine install. The database lives in the per-user data directory (#5).
 
 ## Out of scope here
 

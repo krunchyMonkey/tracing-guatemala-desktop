@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
-import { _electron as electron, expect, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { launchBuiltApp } from './launch'
 
 // Captures the #3 prototype screenshots in docs/screenshots/issue-3/ from the
 // built app, using only the fictional sample data. Opt-in:
@@ -10,13 +11,7 @@ const outDir = resolve(__dirname, '../../docs/screenshots/issue-3')
 test.skip(!process.env['CAPTURE_SCREENSHOTS'], 'Set CAPTURE_SCREENSHOTS=1 to refresh the prototype screenshots.')
 
 test('capture client prototype screenshots', async () => {
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE' && entry[0] !== 'ELECTRON_RENDERER_URL'
-    )
-  )
-  const app = await electron.launch({ args: ['.'], cwd: resolve(__dirname, '../..'), env })
+  const app = await launchBuiltApp()
   const page = await app.firstWindow()
   await page.setViewportSize({ width: 1280, height: 1000 })
   const shot = (name: string, fullPage = true) => page.screenshot({ path: `${outDir}/${name}.png`, fullPage })

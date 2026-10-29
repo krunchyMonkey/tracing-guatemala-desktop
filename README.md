@@ -18,6 +18,7 @@ npm run dev
 ```sh
 npm run check        # lint, typecheck, unit tests, then build + security smoke test
 npm run package:dir  # unpacked app for the current OS, in release/
+npm run smoke:packaged  # after package:dir: packaged app creates and reopens its database
 ```
 
 See [docs/architecture/electron-foundation.md](docs/architecture/electron-foundation.md) for all scripts, the security model, IPC conventions and packaging decisions.
