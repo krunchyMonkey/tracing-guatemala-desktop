@@ -1,17 +1,17 @@
-# Client data model and lifecycle — v1 proposal (#2)
+# Client data model and lifecycle — implementation baseline (#2)
 
-**Status:** **Proposed — awaiting researcher approval.** Nothing in this document is signed off. Defaults below are engineering proposals chosen to be safe and easy to change; the [approval checklist](#researcher-approval-checklist) lists every choice the researcher still needs to make.
-**Contract version:** `client-model/v1-draft` (bump on any change after review).
+**Status:** **Owner-authorized implementation baseline for Phase 1.** The defaults below are accepted for engineering execution without a separate researcher gate. They have **not** been reviewed or approved by the researcher; collect her feedback at the integrated MVP pilot (#12) and revise through follow-up issues.
+**Contract version:** `client-model/v1` (working MVP baseline; evolve with migrations if pilot feedback changes fields).
 **Inputs:** [Researcher workflow review](./researcher-workflow-review-2026-10-28.md) (confirmed facts), [Phase 1 specification](./phase-1-client-management-spec.md) (baseline proposal).
-**Consumers once approved:** #5 storage and migrations, #6 create/edit/archive, #7 directory, #8 profile, #9 notes, #10 validation and duplicates. #3 builds a clickable prototype on this draft.
+**Implementation consumers:** #5 storage and migrations, #6 create/edit/archive, #7 directory, #8 profile, #9 notes, #10 validation and duplicates. #3 builds a clickable prototype on this draft.
 
 All examples are fictional.
 
 ## 1. Confirmed facts vs. proposed design
 
-The researcher confirmed the **current workflow**. She did not confirm any field list or lifecycle rule. This table keeps the two apart.
+The researcher confirmed the **current workflow**, not the proposed data fields. By project-owner direction, the proposed defaults now serve as the **implementation baseline** pending actual end-user feedback during the MVP pilot. This table distinguishes evidence from implementation assumptions.
 
-| Topic | Confirmed (survey, 2026-10-28) | Proposed here (needs approval) |
+| Topic | Confirmed (survey, 2026-10-28) | Working MVP default (feedback at pilot) |
 | --- | --- | --- |
 | Where clients come from | Work starts with a Fiverr order. | A `source` field with `fiverr`, `referral`, `direct`, `other`. Whether non-Fiverr clients exist at all is unconfirmed. |
 | Repeat clients | Repeat clients receive personalized Fiverr offers with an adjusted package or price. | One client record per person, reused across engagements. Offers and orders are **not** client fields (see §6). |
@@ -218,9 +218,9 @@ Client 1 ───< ClientNote (Phase 1, #9)
 - Every child table references `Client.id` with `ON DELETE RESTRICT`. Archiving a client never archives or deletes its engagements automatically; the Phase 2 archive rules for open cases are still to be decided.
 - Whether one client can have several open orders, and one order several cases, is unresolved (survey question 3). The one-to-many shapes above allow both.
 
-## Researcher approval checklist
+## Researcher approval checklist (deferred to integrated MVP review; non-blocking)
 
-Please answer each question, or say "use the proposed default". Answers go on issue #2. Until then, everything above stays a draft.
+Use these questions to guide the **integrated MVP demo (#12)**. The defaults below are authorized for implementation now; no answers are required before #5–#11. Record actual feedback in #12 and follow-up issues; do not portray the defaults as end-user approval.
 
 | # | Question | Proposed default |
 | --- | --- | --- |
@@ -233,10 +233,11 @@ Please answer each question, or say "use the proposed default". Answers go on is
 | Q7 | When a new client looks like an existing one (same email, Fiverr username or name), should the app **warn** you or **block** you? | Warn, and let you open the existing client or save anyway. |
 | Q8 | Until orders are built, is it fine to note **orders and custom offers** as dated notes on the client? | Yes. |
 | Q9 | Should a client ever be **permanently deleted** (for example if they ask you to remove their data)? | Not in Phase 1. Revisit before the pilot. |
-| Q10 | Is anything missing that you look up about a client every week? | (Open.) |
+| Q10 | Is anything missing that you look up about a client every week? | Open for MVP feedback; not a build blocker. |
 
 ## Change log
 
 | Version | Date | Change |
 | --- | --- | --- |
-| v1-draft | 2026-10-29 | First proposal for researcher review. |
+| v1-draft | 2026-10-29 | First proposal documented in PR #96. |
+| v1 | 2026-10-29 | Project owner authorized v1 defaults as implementation baseline; researcher feedback deferred to the #12 MVP pilot. |
