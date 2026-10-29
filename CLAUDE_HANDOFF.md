@@ -1,61 +1,42 @@
-# Claude handoff — Phase 1 completed core; LAN demo and guided-tour queue (2026-10-29)
+# Claude handoff — Phase 1 final feature / Phase 2 transition (2026-10-29)
 
 **Repository:** `krunchyMonkey/tracing-guatemala-desktop`  
-**URL:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
-**Default branch:** `main`
+**Origin:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
+**Base branch:** `main`
 
-## Current status (verified from GitHub)
-- **Core Phase 1 engineering (#1–#11):** complete; PRs #95–#106 have merged.
-- **#12 pilot preparation:** PR #107 merged, including `docs/pilot/phase-1-pilot-guide.md`, screenshots and Windows installer validation. **The researcher pilot itself is open**; do not claim researcher approval.
-- **#100 — Local HTTP browser demo:** implemented on branch `feat/100-lan-demo` (PR open, **not merged**). `npm run demo:build` / `demo:lan` / `demo:dev` exist; see [LAN preview](./docs/demo/lan-preview.md). Automated tests run the demo at the dev machine's own LAN address; the **second-device check is a manual owner step** and has not been done.
-- **After #100 merges and LAN preview works:** [#102 — Provider-neutral Driver.js walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102). Separate PR and worktree, not part of #100.
-- Both #100 and #102 are **optional developer/researcher-preview enhancements** and **do not block** the installed desktop MVP pilot (#12).
+## Verified project status
+- **Core Phase 1 engineering:** #1–#11 done; PRs #95–#107 merged. Real desktop client management, SQLite, case-ready client identity, contacts/notes, duplicates and backup/restore are implemented.
+- **LAN HTTP preview:** #100 done, [PR #108](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/108) merged (commit `b17881c`). Browser scripts: `npm run demo:build`, `npm run demo:lan` and `npm run demo:dev`. Browser-only fictional data, no persistence/cloud/backend. Read [LAN preview guide](./docs/demo/lan-preview.md).
+- **NEXT / LAST PLANNED PHASE 1 FEATURE:** [#102 — Driver.js guided tour with provider-neutral guidance adapter](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) is **ready for implementation**. No PR for #102 exists yet. **One scoped PR**; do not auto-merge.
+- **Formal Phase 1 pilot:** [#12](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/12) remains OPEN. The pilot kit and unsigned Windows installer were prepared in #107, but there is no recorded researcher walkthrough or signoff. **Engineering complete is not researcher approved.**
+- **Next workstream:** Phase 2 — Research Case Management, existing issues [#13–#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues?q=is%3Aissue+label%3Aphase%3AP02). Groom #13/#14 with revisable MVP defaults, then build and pilot case management. Do not introduce new researcher approval gates before the integrated Phase 2 review.
 
-Read [Phase 1 plan](./docs/phase-1-client-management-spec.md), [Electron foundation](./docs/architecture/electron-foundation.md), [client storage](./docs/architecture/client-storage.md), [pilot guide](./docs/pilot/phase-1-pilot-guide.md), and the applicable GitHub issue before modifying code.
+## Current assignment — implement #102
 
-## #100 — browser LAN HTTP demo (implemented, in review)
+**Read first:** GitHub issue #102 (canonical acceptance criteria), `docs/demo/lan-preview.md`, `src/renderer/src/App.tsx`, `src/renderer/src/components/AppLayout.tsx`, `src/renderer/src/runtime/AppRuntime.tsx`, `src/renderer/src/demo/main.tsx`, `src/renderer/src/screens/ClientsScreen.tsx`, `src/renderer/src/screens/ClientProfileScreen.tsx` and `src/shared/csp.ts`.
 
-**As built:** the shared UI reads data through `useAppRuntime()` (`src/renderer/src/runtime/AppRuntime.tsx`); desktop forwards to the preload bridge, the demo (`src/renderer/src/demo/`, `vite.demo.config.ts`, `scripts/demo-lan.mjs`) uses an in-memory fictional API and has no backup API. Electron main/preload/CSP/SQLite are unchanged. Original brief below.
+Build a **replayable 5–6 step tour** over the actual browser demo: welcome/navigation; directory search/filter; Add Client; existing fictional client profile; notes/contact history; archive/restore explanation. Use real routes and stable app-owned `data-guide-id` anchors. The tour **explains** actions but never silently mutates data, and stays restricted to fictional client information.
 
-### Original brief
+Keep the integration deliberately small and swappable:
+- App-owned `GuideDefinition`, `GuideStep`, `GuidanceService`/React context and stable anchor IDs.
+- One `DriverJsGuidanceProvider` adapter owns all Driver.js imports and locally bundled CSS. A no-op/fake provider supports unit tests. No Driver.js in feature components.
+- Demo-mode-only provider by default; do not bundle the tour into desktop releases or change the Electron security model.
+- A future Pendo adapter can reuse guide triggers and anchors, but the Pendo guide content may require migration/re-authoring. **No Pendo SDK, analytics, credentials or external requests now.**
+- The production demo's CSP stays restrictive (`script-src 'self'; style-src 'self'; connect-src 'none'`); verify the tour works under that CSP with no violations. Never quietly relax security directives.
+- Support hash-route transitions, loading/missing targets, Skip/Close, Next/Back, restart, teardown, focus, keyboard and phone/tablet views.
 
-**Goal:** re-use the existing React UI as a demo site on a trusted home LAN, with **fictional, temporary data only**. No Electron process, SQLite connection, backend, native IPC, credentials or cloud services. Separate browser Vite entry, browser demo data adapter, truthful demo-specific Settings state and `Demo Mode — Fictional Data Only` banner.
+Tests: `npm run check`, built `npm run demo:build`, browser-demo Playwright walkthrough cases and packaged Electron smoke verification. Capture screenshots, document keyboard/a11y and any testing limitations. The browser has been tested on the development machine's LAN-origin URL; **physical second-device access is a documented manual owner check, not a coding blocker**. Don't claim it passed unless tested.
 
-**Required commands to add:**
-- `npm run demo:build` — build browser-only static preview.
-- `npm run demo:lan` — serve built assets over HTTP on a configurable trusted LAN interface, port 4173 by default.
-- Optional `npm run demo:dev` — browser-only HMR.
+Deliver one PR referencing **`Closes #102`**, with tests, screenshots, updated preview docs, an architecture note for provider swap, and manual tour steps. **Do not merge without owner action.**
 
-**Important existing code boundaries:** `ClientStore.tsx`, `useClientNotes.ts` and `SettingsScreen.tsx` directly use `window.tracingGuatemala`; browser mode needs a clean typed runtime adapter/provider. Reuse `src/shared/client-model.ts` where possible. Do **not** weaken Electron's security/CSP or make backup/restore controls pretend to operate in the demo. Handle secure-context limitations on HTTP LAN origins, including UUIDs.
+## Local checkout / worktree rules
+1. Inspect existing local repos and verify `origin` matches this repo. Run `git worktree list --porcelain`.
+2. Reuse a `#102` worktree if present; otherwise create `feat/102-guided-tour` from up-to-date `origin/main` in the existing checkout.
+3. Clone only if no usable checkout/worktree exists. Never overwrite/delete/reset/clean other worktrees or uncommitted files.
+4. Keep the guide in its own branch/PR. Avoid unnecessary edits to other issues.
 
-**Evidence:** browser build and HTTP launch; navigation, edits, notes, filters, duplicate advisory, archive/restore, reset-on-refresh; phone/tablet widths; existing `npm run check` and packaged security smoke. Supply instructions and manual second-device check if physical LAN access isn't available to the coding agent. Do **not** claim second-device testing unless done.
-
-**PR:** one focused PR referencing `Closes #100`, with tests, screenshots, limits, `docs/demo/lan-preview.md` and README updates. Do not add Driver.js here.
-
-## Follow-on coding task: #102 — Driver.js guided walkthrough
-
-**Start only after #100 is merged and the LAN demo is working.** Use the actual demo routes/controls, not duplicate placeholder screens.
-
-- Implement an application-owned guide catalog (`guideId`, `stepId`, route, stable anchor, plain text) and `GuidanceService` interface.
-- Feature UI uses stable `data-guide-id` attributes and calls `GuidanceService`; only the `DriverJsGuidanceProvider` adapter imports Driver.js.
-- Bundle Driver.js CSS/JS locally through npm, no external calls. Provide fake/no-op provider for unit tests.
-- A concise 4–6 step `Take a Tour` walkthrough; skip, back, next, restart, route transitions and missing-anchor recovery; keyboard/mobile-friendly.
-- Document future Pendo adapter boundary realistically. **Do not install Pendo** or imply guide content will transfer unchanged. Later Pendo adoption requires privacy/analytics/consent/CSP/network review.
-- One focused PR referencing `Closes #102`. Tests, screenshots and manual LAN walkthrough evidence required.
-
-## Worktree safety rules (both issues)
-
-1. Verify `origin` points to **`krunchyMonkey/tracing-guatemala-desktop`**; inspect all existing checkouts and `git worktree list --porcelain`.
-2. **Reuse an issue-specific worktree** when present. If no such worktree exists but the repository is locally available, create one from the existing repo and current `origin/main`.
-3. **Only clone if there is no usable existing checkout/worktree.**
-4. Keep each issue in its own branch/worktree (suggested `feat/100-lan-demo`, `feat/102-guided-tour`). Never reset, clean, delete or overwrite uncommitted files or other worktrees.
-5. Before starting #102, update its worktree's base from the merged `main` **without destroying local edits**. Do not stack the #102 PR on an unmerged #100 branch.
-
-## Quality, privacy, and delivery
-
-- Repository is public. Only fictional people, contacts and research content in source, screenshots, logs and tests.
-- No real client data over HTTP, no cloud sync, analytics, internet exposure, router forwarding, SaaS integrations or automatic messages.
-- Development demo can use plain HTTP on a **trusted home LAN only**; restrict binding/firewall exposure and do not disable Vite host checks. It is not a production deployment or client-data portal.
-- Keep existing desktop SQLite, hardened Electron, privacy/backup behavior and tests intact.
-- Product owner authorized working defaults; **researcher approval is still pending**, recorded only during the real #12 pilot.
-- Follow one ticket per PR. Include summary, build/test commands and outcomes, browser screenshots, manual steps, security impact, limitations. **Never automatically merge PRs.**
+## Closeout and next phase
+- **After #102 merges:** confirm its checks on `main`, record the guide/preview commands, and mark Phase 1 **feature engineering complete**.
+- **Issue #12:** complete a short actual desktop pilot on the researcher's selected OS, review unencrypted local DB/backups and the realistic client workflow using fictional data, capture her feedback and actual decision. Do not claim or record signoff on her behalf; #12 stays open until that happens.
+- Phase 2 preparation and design may start **in parallel with #12** so end-user feedback does not become an unnecessary build gate. Address any must-fix Phase 1 issues before declaring the full Phase 1 milestone accepted.
+- Keep real genealogy data off GitHub, browser HTTP preview, screenshots, external analytics or SaaS. Desktop privacy rules, offline/no-telemetry policy and Electron CSP remain mandatory.
