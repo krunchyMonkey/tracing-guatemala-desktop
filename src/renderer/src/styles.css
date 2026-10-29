@@ -322,6 +322,7 @@ legend {
 input[type='text'],
 input[type='email'],
 input[type='search'],
+input[type='datetime-local'],
 select,
 textarea {
   width: 100%;
