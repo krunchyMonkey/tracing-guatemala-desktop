@@ -1,12 +1,12 @@
 # Client storage readiness (#5) — preparation notes
 
-**Status:** Planning only. **#5 must not start** until the researcher explicitly approves the [client data model](../client-data-model.md) (#2). This note records what is still blocking, how the model fits the existing architecture, and the proposed order of work.
+**Status:** **#5 ready to implement.** The project owner authorized the v1 client model as working defaults; researcher feedback will be collected at the integrated Phase 1 pilot (#12). This note captures schema assumptions, existing Electron constraints, and implementation order. Do not claim researcher signoff.
 
-## 1. Remaining decisions that block the schema
+## 1. Schema defaults and later-feedback risks (not blockers)
 
-From the [#2 approval checklist](../client-data-model.md#researcher-approval-checklist), these answers change tables or columns. The others only change UI and can be settled during #6–#8.
+Use the current [v1 model defaults](../client-data-model.md#researcher-approval-checklist) for the first migration. The questions below might lead to later schema migrations after researcher feedback, but they **do not block #5**.
 
-| Checklist item | Why it affects the schema |
+| Pilot feedback question | Potential schema change if the researcher requests it |
 | --- | --- |
 | Q1 required fields | `NOT NULL` constraints on `display_name` and `source`. |
 | Q3 contact details | Which contact columns exist (for example a `phone` column vs. the free-text `other_contact`). |
@@ -53,11 +53,12 @@ Points to settle when implementing:
 | Alternative | Node's built-in `node:sqlite` would avoid a native addon. Whether Electron 45 exposes it, and how stable it is, must be verified in a spike before choosing. |
 | Test runner | Vitest runs under plain Node, not Electron. Integration tests either use a Node-ABI build of the driver or run through Playwright `_electron`. Pick one in the spike. |
 
-## 4. Recommended sequence
+## 4. Recommended implementation sequence
 
-1. **Researcher answers the #2 checklist** on issue #2. Update `client-data-model.md` from `v1-draft` to `v1`, and record her approval in the issue.
-2. **Researcher reviews the #3 prototype** and approves or requests changes. This gates #6–#8, not #5.
-3. **Driver spike (part of #5):** add the driver and package it with `npm run package:dir`. Confirm that the packaged app opens a database with all fuses still flipped. Choose the test strategy.
-4. **#5 storage:** migration `001_clients` (plus `client_notes` if #9 is next), repository layer in the main process, IPC channels above, integration tests for CRUD, invalid input, migration and restart.
-5. **#6 / #7 / #8:** replace the prototype's in-memory store with the IPC calls, keeping the approved screens.
-6. **#9 notes, #10 duplicate advisory, #11 backup/restore,** then **#12** packaged pilot.
+1. **#5 is unblocked:** use `client-model/v1` and the existing React prototype. Do a short driver/packaging spike first; preserve strict Electron sandbox and fuses.
+2. Implement `001_clients` and a versioned migration strategy, a main-process repository with validated IPC, UUIDs, and tests for migration, error recovery and persistence. Keep the model evolvable rather than hardcoding speculative future fields.
+3. **#6 / #7 / #8:** replace the in-memory prototype store with IPC operations while keeping existing user flows; refine obvious UX issues under engineering review.
+4. **#9 / #10 / #11:** persistent notes, duplicate advisory and safe backup/restore. Test before any pilot with real client data.
+5. **#12 integrated MVP review:** let the researcher use the app, gather her answers to the data-model questions and UI review guide, file actionable follow-ups, and obtain her actual approval before closing the phase.
+
+No separate researcher signoff is needed between implementation tickets. Keep privacy/security review and technical PR checks intact.
