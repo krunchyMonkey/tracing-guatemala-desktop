@@ -86,7 +86,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
   const errors = submitted ? [...issues.filter((i) => i.severity === 'error'), ...serverIssues] : []
   const issuesFor = (field: FieldName) =>
     issues.filter((i) => i.field === field && (i.severity !== 'error' || submitted))
-  const exitTo = isEdit ? `/clients/${clientId}` : '/clients'
+  const exitTo = isEdit ? `/clients/${clientId}` : store.directoryHref
 
   const set = <K extends FieldName>(field: K, value: ClientFormValues[K]) => {
     setValues((v) => ({ ...v, [field]: value }))

@@ -1,17 +1,19 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
-import { SourceTag, StatusBadge, formatDate } from '../clients/components'
+import { Alert, SourceTag, StatusBadge, formatDate } from '../clients/components'
 import {
   defaultQuery,
-  queryClients,
   sourceLabels,
+  type Client,
   type ClientSource,
   type DirectoryQuery,
   type SortOrder,
   type StatusFilter
 } from '../clients/model'
 
-// Client directory (#3 baseline) over the saved clients loaded by ClientStore.
+// Client directory (#3 baseline). Search, filters and sort run in the main
+// process (clients:list, #7); the filters live in the URL.
 
 const statusOptions: { value: StatusFilter; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -27,12 +29,15 @@ const sortOptions: { value: SortOrder; label: string }[] = [
 
 const allSources = Object.keys(sourceLabels) as ClientSource[]
 
+/** Matches the clients:list contract limit. */
+const SEARCH_MAX = 200
+
 // Filters live in the URL so they survive opening a profile and coming back.
 function readQuery(params: URLSearchParams): DirectoryQuery {
   const status = params.get('status')
   const sort = params.get('sort')
   return {
-    text: params.get('q') ?? '',
+    text: (params.get('q') ?? '').slice(0, SEARCH_MAX),
     status: statusOptions.some((o) => o.value === status) ? (status as StatusFilter) : defaultQuery.status,
     sort: sortOptions.some((o) => o.value === sort) ? (sort as SortOrder) : defaultQuery.sort,
     sources: params.getAll('source').filter((s): s is ClientSource => allSources.includes(s as ClientSource))
@@ -48,19 +53,64 @@ function writeQuery(query: DirectoryQuery): URLSearchParams {
   return params
 }
 
+type DirectoryResults = { state: 'loading' | 'ready' | 'error'; clients: Client[] }
+
+/**
+ * Query results for the directory. Previous results stay visible while a new
+ * query runs, and a slower, older response never replaces a newer one.
+ */
+function useDirectoryResults(query: DirectoryQuery): DirectoryResults & { retry(): void } {
+  const { clients, searchClients } = useClientStore()
+  const [results, setResults] = useState<DirectoryResults>({ state: 'loading', clients: [] })
+  const [attempt, setAttempt] = useState(0)
+  const key = JSON.stringify(query)
+
+  useEffect(() => {
+    let current = true
+    const parsed = JSON.parse(key) as DirectoryQuery
+    searchClients(parsed).then(
+      (list) => {
+        if (current) setResults({ state: 'ready', clients: list })
+      },
+      () => {
+        if (current) setResults((r) => ({ state: 'error', clients: r.clients }))
+      }
+    )
+    return () => {
+      current = false
+    }
+    // `clients` changes after every save, so the results refresh with it.
+  }, [key, clients, searchClients, attempt])
+
+  return { ...results, retry: () => setAttempt((n) => n + 1) }
+}
+
 export function ClientsScreen() {
-  const { clients } = useClientStore()
+  const { clients, rememberDirectorySearch } = useClientStore()
   const [params, setParams] = useSearchParams()
   const query = readQuery(params)
-  const results = queryClients(clients, query)
+  const directory = useDirectoryResults(query)
+  const search = params.toString()
+  // URL updates commit asynchronously, so quick successive changes (a filter
+  // click, then typing) build on the last query written, not the last rendered.
+  const pending = useRef(query)
+
+  useEffect(() => {
+    pending.current = readQuery(new URLSearchParams(search))
+    rememberDirectorySearch(search ? `?${search}` : '')
+  }, [search, rememberDirectorySearch])
+  const results = directory.clients
   const isFiltered = query.text !== '' || query.sources.length > 0 || query.status !== defaultQuery.status
   const activeCount = clients.filter((c) => c.status === 'active').length
 
-  const update = (patch: Partial<DirectoryQuery>) => setParams(writeQuery({ ...query, ...patch }), { replace: true })
-  const toggleSource = (source: ClientSource) =>
-    update({
-      sources: query.sources.includes(source) ? query.sources.filter((s) => s !== source) : [...query.sources, source]
-    })
+  const update = (patch: Partial<DirectoryQuery>) => {
+    pending.current = { ...pending.current, ...patch }
+    setParams(writeQuery(pending.current), { replace: true })
+  }
+  const toggleSource = (source: ClientSource) => {
+    const { sources } = pending.current
+    update({ sources: sources.includes(source) ? sources.filter((s) => s !== source) : [...sources, source] })
+  }
 
   return (
     <section aria-labelledby="clients-heading" className="clients">
@@ -100,6 +150,7 @@ export function ClientsScreen() {
                 id="client-search"
                 type="search"
                 placeholder="Name, Fiverr username, or email"
+                maxLength={SEARCH_MAX}
                 value={query.text}
                 onChange={(event) => update({ text: event.target.value })}
               />
@@ -151,19 +202,32 @@ export function ClientsScreen() {
             </fieldset>
           </div>
 
+          {directory.state === 'error' && (
+            <Alert tone="error" title="Search isn’t working right now">
+              <p>Your clients are safe. Try again, or restart the app if this keeps happening.</p>
+              <button type="button" className="button button-secondary" onClick={directory.retry}>
+                Try again
+              </button>
+            </Alert>
+          )}
+
           <p className="result-count" role="status">
-            {results.length === 1 ? '1 client' : `${results.length} clients`}
+            {directory.state === 'loading' && results.length === 0
+              ? 'Searching…'
+              : results.length === 1
+                ? '1 client'
+                : `${results.length} clients`}
             {isFiltered && (
               <>
                 {' · '}
-                <button type="button" className="link-button" onClick={() => setParams(new URLSearchParams())}>
+                <button type="button" className="link-button" onClick={() => update(defaultQuery)}>
                   Clear search and filters
                 </button>
               </>
             )}
           </p>
 
-          {results.length === 0 ? (
+          {directory.state !== 'ready' && results.length === 0 ? null : results.length === 0 ? (
             <div className="empty-state empty-state-compact">
               <h2>No matching clients</h2>
               <p>
