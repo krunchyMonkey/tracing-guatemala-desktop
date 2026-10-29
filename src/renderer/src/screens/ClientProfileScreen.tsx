@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import {
@@ -18,8 +18,8 @@ import {
   type NoteDirection
 } from '../clients/model'
 
-// Client profile (#3 baseline). Client details and archive/restore are saved
-// (#6); notes are session-only until #9. Orders and research cases are a
+// Client profile (#3 baseline). Reads the saved client from the main process
+// when opened (#8); archive/restore are saved (#6); notes are session-only until #9. Orders and research cases are a
 // labeled placeholder for later phases.
 
 type HistoryFilter = 'all' | 'note' | 'contact'
@@ -33,6 +33,12 @@ export function ClientProfileScreen() {
   const [actionFailed, setActionFailed] = useState(false)
   const [working, setWorking] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const { refreshClient } = store
+
+  useEffect(() => {
+    if (id !== undefined) void refreshClient(id)
+  }, [id, refreshClient])
 
   const client = store.clients.find((c) => c.id === id)
   if (!client) {
@@ -60,6 +66,8 @@ export function ClientProfileScreen() {
     setWorking(false)
     setActionFailed(!result.ok)
     if (result.ok) setStatusMessage(action === 'archive' ? 'Client archived.' : 'Client restored.')
+    // The button that opened the dialog is replaced, so move focus somewhere stable.
+    requestAnimationFrame(() => headingRef.current?.focus())
   }
 
   return (
@@ -91,7 +99,9 @@ export function ClientProfileScreen() {
           {initials(client.displayName)}
         </div>
         <div className="profile-title">
-          <h1 id="profile-heading">{client.displayName}</h1>
+          <h1 id="profile-heading" ref={headingRef} tabIndex={-1}>
+            {client.displayName}
+          </h1>
           <p className="profile-meta">
             <StatusBadge status={client.status} /> <SourceTag source={client.source} />
             <span className="muted">Client since {formatDate(client.createdAt)}</span>

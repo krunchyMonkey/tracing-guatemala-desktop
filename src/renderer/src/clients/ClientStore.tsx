@@ -25,6 +25,8 @@ export interface ClientStore {
   notes: ClientNote[]
   loadState: LoadState
   reload(): void
+  /** Re-reads one client from the main process into the cache (or drops it if it no longer exists). */
+  refreshClient(id: string): Promise<void>
   /** Runs a directory query in the main process. */
   searchClients(query: DirectoryQuery): Promise<Client[]>
   /** The directory URL with the last-used search and filters, for "back to clients" links. */
@@ -96,6 +98,19 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     return result
   }, [])
 
+  const refreshClient = useCallback(async (id: string) => {
+    let fresh: Client | null
+    try {
+      fresh = await api().getClient(id)
+    } catch {
+      return // Keep showing the cached copy; the next save reports any real problem.
+    }
+    setClients((list) => {
+      const others = list.filter((c) => c.id !== id)
+      return fresh ? [...others, fresh] : others
+    })
+  }, [])
+
   const setStatus = useCallback(
     async (id: string, archive: boolean): Promise<SaveResult> => {
       const result = await mutate(() => (archive ? api().archiveClient(id) : api().restoreClient(id)))
@@ -113,6 +128,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       notes,
       loadState,
       reload,
+      refreshClient,
       searchClients: (query) => api().listClients(query),
       directoryHref: `/clients${directorySearch}`,
       rememberDirectorySearch: setDirectorySearch,
@@ -124,7 +140,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
         setNotes((list) => [...list, { ...note, id: crypto.randomUUID(), clientId }])
       }
     }),
-    [clients, notes, loadState, directorySearch, reload, mutate, setStatus]
+    [clients, notes, loadState, directorySearch, reload, refreshClient, mutate, setStatus]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>
