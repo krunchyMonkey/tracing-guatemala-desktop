@@ -85,8 +85,8 @@ The project owner authorizes the working v1 data model and merged UI prototype f
 | Secure Electron shell (PR #95) | #4 | None | **Complete** |
 | SQLite storage and migrations | #5 | #2 working model; #4 shell | **Complete** (PR #98) |
 | Client create/edit/archive/restore | #6 | #5 | **Complete** (PR #99) |
-| Optional browser-only HTTP LAN demo | [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) (P01-13) | PRs #98/#99 merged | **Ready for Claude now**; browser-only fictional store; no real data |
-| Optional provider-neutral guided tour (Driver.js) | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) (P01-14) | #100 merged and LAN HTTP demo usable | **After #100**; guidance-service interface isolates Driver.js and leaves future Pendo optional |
+| Optional browser-only HTTP LAN demo | [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) (P01-13) | PRs #98/#99 merged | **Complete** (PR #108); fictional browser-only HTTP preview |
+| Optional provider-neutral guided tour (Driver.js) | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) (P01-14) | #100 complete (PR #108); actual LAN-origin automated test passes | **Ready now; final planned Phase 1 feature PR.** Keep Driver.js isolated behind guidance service |
 | Search/filter directory | #7 | #5 | **Complete** (PR #101) |
 | Client profile | #8 | #5 | **Complete** (PR #103) |
 | Notes and contact activity | #9 | #5, #8 | **Complete** (PR #104) |
@@ -100,11 +100,20 @@ Work in small reviewable PRs; do not invent real user acceptance. External APIs,
 
 [#100](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100) creates a **separate browser-preview build**, reusing the existing React UI but **not** the Electron preload/IPC or SQLite database. The preview serves a fictional in-memory data adapter over plain HTTP on a trusted home LAN, with an obvious demo banner. It exists to gather *informal early feedback* without installing a desktop build. The browser site must never contain live records, credentials, genealogy documents, cloud APIs or externally accessible routes. LAN HTTP is not a production/data-sharing transport.
 
-**Fit in roadmap (2026-10-29):** PRs #98–#107 are merged and core Phase 1 issues #1–#11 are closed. **#100 is ready now** on current `main` and must use a browser-only fictional data adapter because #99 replaced the original in-memory store. Start #102 after #100 is merged and the LAN demo is usable. Neither enhancement blocks the #12 installed desktop pilot. Use separate issue branches/worktrees.
+**Status (2026-10-29):** Core PRs #95–#107 and LAN preview PR #108 have merged into `main`. The preview already uses a browser-only fictional data runtime and includes LAN HTTP origin browser tests. **#102 is ready for Claude now** on current `main` as the final planned Phase 1 feature. A real second-device smoke check remains the owner's manual validation item and is **not a development blocker**. The #12 desktop pilot is still open. Use a dedicated #102 worktree and PR.
 
-**Follow-on tour is NOT part of #100:** After the HTTP demo is implemented, merged, and successfully hosted/accessed from a second home-LAN device, [#102 — Driver.js guided walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) may build a 4–6 step tour using stable DOM anchors, provider-neutral guide definitions and a `GuidanceService` interface. Driver.js is the sole local/no-telemetry provider for now. Keep all vendor-specific imports inside its adapter. Any future Pendo option would need its own cloud-data and CSP/security review, and Pendo-authored tours may require re-authoring or mapping—do not promise drop-in content compatibility. The walkthrough is optional and should not hold up main MVP tickets.
+**Final feature — #102:** Now that PR #108 is merged, [#102 — Driver.js guided walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) may build the replayable 5–6 step tour on the **real LAN demo** using stable DOM anchors, provider-neutral guide definitions and a `GuidanceService` interface. Only its Driver.js adapter may import the vendor package. No Pendo/cloud/telemetry now; a future Pendo option requires separate privacy/CSP/network review and likely guide-content mapping. Keep production CSP strict and avoid changing desktop packaging. The guided tour is the last planned Phase 1 feature PR, **not** proof of researcher signoff.
 
 **Validation remains #12:** researcher testing of the **integrated packaged desktop MVP**, with durable data and verified backup/privacy controls, is still the formal Phase 1 completion point. Browser demo feedback can inform UI changes ahead of that review but does not substitute for it.
+
+### Phase 1 closeout → Phase 2 kickoff
+
+1. **Last feature PR:** implement and merge #102 after testing the actual demo under its production HTTP CSP, with test results, a11y notes, phone/tablet layout screenshots and a clear Driver.js/Pendo adapter boundary.
+2. **Engineering closeout:** once #102 is merged and verified on `main`, record Phase 1 feature engineering as complete. Verify `npm run check`, demo HTTP smoke and the packaged Electron smoke as applicable.
+3. **Pilot remains #12:** run the installed desktop client-management walkthrough with the researcher on her actual OS, review unencrypted data/backup handling, capture feedback and address must-fix problems. **Do not close #12 or claim researcher approval before the session.**
+4. **Next phase may start in parallel:** groom Phase 2 [#13–#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues?q=is%3Aissue+label%3Aphase%3AP02), beginning with #13 research case lifecycle and #14 client-to-case model. Continue the **build-first, validate-on-working-MVP** approach; don't make individual researcher decisions a gate to implement safe, reversible defaults. Phase 2's integrated researcher review stays #21.
+
+LAN HTTP preview remains fictional-data only, while real client/case data must stay local in the secured desktop app.
 
 ## Shared definition of done for implementation tickets
 
