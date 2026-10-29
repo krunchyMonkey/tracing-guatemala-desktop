@@ -1,6 +1,6 @@
 # Client directory and profile — clickable prototype (#3)
 
-**Status:** **Provisional, for researcher review.** Nothing here is an approved design. Screens use the draft client model proposed for #2 (`docs/client-data-model.md`, PR #96), which is also unapproved.
+**Status:** **Owner-authorized working UI baseline.** This clickable prototype and the v1 client model are approved for engineering implementation; they have **not** received researcher feedback. Present the integrated persisted MVP to her at #12 for actual feedback/approval. This guide remains useful for that walkthrough.
 
 **What it is:** The real app's Clients section, running on **fictional, in-memory sample data**. Nothing is saved: closing or reloading the app resets everything. There is no database, no IPC for client data, and no network access. The Electron security model from #4 is unchanged.
 
@@ -66,11 +66,11 @@ To refresh them after a design change: `npm run build`, then `CAPTURE_SCREENSHOT
 | Optional-field handling | "(optional)" labels; blank values shown as *Not added*. |
 | Accessible focus, readable type | 16px base text, 3px focus ring, labeled controls, error summary focus, dialog focus trap, skip link. |
 | Gentle modern/feminine styling, fictional data | Rose and plum palette with teal and marigold accents, serif headings, soft cards, and a woven-band accent inspired by Guatemalan textiles. All sample people are invented. |
-| **Researcher feedback and approved design** | **Pending.** Record it on issue #3. |
+| **Researcher feedback and approved design** | **Deferred to the integrated MVP pilot (#12).** Not a blocker for #5–#11. |
 
-## Provisional design choices to confirm
+## Working design defaults — collect feedback at the integrated MVP pilot
 
-These follow the #2 draft defaults. Each is easy to change.
+These are project-owner-authorized implementation assumptions, not the researcher's recorded preferences. Continue building with them and revisit during #12.
 
 1. **Directory as a table** (name, contact, source, last updated), not cards. Is this what you scan for every day?
 2. **Default view is Active clients**, sorted by name. Would *Recently updated* be a better default?
