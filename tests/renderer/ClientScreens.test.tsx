@@ -30,7 +30,8 @@ async function rowNames() {
 async function openProfile(name: string) {
   render(<App />)
   fireEvent.click(await screen.findByLabelText('All'))
-  fireEvent.click(screen.getByRole('link', { name }))
+  // Directory results arrive asynchronously from the main process.
+  fireEvent.click(await screen.findByRole('link', { name }))
   await screen.findByRole('heading', { level: 1, name })
 }
 
