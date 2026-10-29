@@ -1,5 +1,5 @@
-import { resolve } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { launchBuiltApp } from './launch'
 
 // Launches the built app (out/) exactly as production would load it: from
 // app://renderer with no dev server, then probes the security boundary.
@@ -8,15 +8,7 @@ let app: ElectronApplication
 let page: Page
 
 test.beforeAll(async () => {
-  // Shells launched from VS Code can set ELECTRON_RUN_AS_NODE, which makes Electron run as plain Node.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE' && entry[0] !== 'ELECTRON_RENDERER_URL'
-    )
-  )
-
-  app = await electron.launch({ args: ['.'], cwd: resolve(__dirname, '../..'), env })
+  app = await launchBuiltApp()
   page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
 })
@@ -111,7 +103,15 @@ test('renderer has no Node.js or Electron access and only the typed API', async 
     Buffer: 'undefined',
     ipcRenderer: 'undefined',
     electron: 'undefined',
-    apiKeys: ['getAppInfo']
+    apiKeys: [
+      'getAppInfo',
+      'listClients',
+      'getClient',
+      'createClient',
+      'updateClient',
+      'archiveClient',
+      'restoreClient'
+    ]
   })
 })
 

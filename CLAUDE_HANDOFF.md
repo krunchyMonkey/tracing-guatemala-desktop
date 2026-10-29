@@ -15,7 +15,7 @@ Read:
 - #4: complete, PR #95 merged — secure Electron foundation.
 - #2: working data model documented, PR #96 merged. Authorized **for implementation**, not researcher-validated.
 - #3: clickable UI prototype merged, PR #97. Authorized **as the UI baseline**, not researcher-validated.
-- **Next #5:** SQLite persistence, migrations, typed IPC; proceed now using the working model.
+- #5: SQLite persistence, migrations, typed `clients:*` IPC implemented on `feat/5-sqlite-client-storage` (driver `node:sqlite`; see [Client storage](./docs/architecture/client-storage.md)). The renderer still uses the in-memory prototype store until #6.
 - Then #6 client CRUD/archive, #7 searchable directory, #8 profile. Existing prototype may be adapted rather than rebuilt.
 - Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
 - **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.

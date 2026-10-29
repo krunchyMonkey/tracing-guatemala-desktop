@@ -20,7 +20,8 @@
     "test:e2e": "npm run build && playwright test",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:e2e",
     "package:dir": "npm run build && electron-builder --dir",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder",
+    "smoke:packaged": "node --no-warnings scripts/packaged-smoke.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",
