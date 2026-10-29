@@ -236,27 +236,6 @@ describe('client profile', () => {
     expect(screen.getByRole('link', { name: 'Edit details' })).toBeTruthy()
     expect(clientNamed('Daniel Ochoa').status).toBe('active')
   })
-
-  it('adds a note and a logged contact entry for this session', async () => {
-    await openProfile('Grace Whitfield')
-    expect(screen.getByText(/Notes aren’t saved yet/)).toBeTruthy()
-    expect(screen.getByText('No notes or contact history yet.')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
-    expect(screen.getByText('Write something before adding it.')).toBeTruthy()
-
-    fireEvent.change(screen.getByLabelText('Your note'), { target: { value: 'Asked about the 1890s census.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
-    expect(screen.getByText('Asked about the 1890s census.')).toBeTruthy()
-
-    fireEvent.click(screen.getByLabelText('Logged contact'))
-    fireEvent.change(screen.getByLabelText('What was said'), { target: { value: 'Sent a status update.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add contact entry' }))
-    fireEvent.click(screen.getByLabelText('Contact log'))
-    const history = screen.getByRole('region', { name: 'Notes & contact history' })
-    expect(within(history).getByText('Sent a status update.')).toBeTruthy()
-    expect(within(history).queryByText('Asked about the 1890s census.')).toBeNull()
-  })
 })
 
 describe('directory with many clients', () => {

@@ -125,3 +125,47 @@ test('a client created, edited and archived in the UI is unchanged after a resta
   expect(page.url()).toBe(profileUrl)
   await app.close()
 })
+
+test('notes and contact entries persist across restarts and stay with their client', async () => {
+  const userData = createTestUserData()
+  let app = await launchBuiltApp(userData)
+  let page = await app.firstWindow()
+  const bridge = api(page)
+
+  const a = ((await bridge.call('createClient', input)).value as { client: Client }).client
+  const b = ((await bridge.call('createClient', { ...input, displayName: 'Bea Muestra', email: null, preferredContactChannel: 'unspecified' })).value as { client: Client }).client
+
+  await page.evaluate((h) => (window.location.hash = h), `#/clients/${a.id}`)
+  const history = page.getByRole('region', { name: 'Notes & contact history' })
+  await history.getByLabel('Your note').fill('Custom offer sent: Basic package.')
+  await history.getByRole('button', { name: 'Add note' }).click()
+  await expect(history.getByText('Custom offer sent: Basic package.')).toBeVisible()
+  await history.getByRole('button', { name: /^Edit note from/ }).click()
+  const editor = history.getByRole('form', { name: 'Edit note' })
+  await editor.getByLabel('Note', { exact: true }).fill('Custom offer sent: Standard package.')
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(history.getByText(/^Edited /)).toBeVisible()
+
+  const [saved] = (await bridge.call('listNotes', a.id)).value as { id: string }[]
+  const crossEdit = await bridge.call('updateNote', b.id, saved!.id, {
+    kind: 'note',
+    occurredAt: new Date().toISOString(),
+    channel: null,
+    direction: null,
+    body: 'Edited through the wrong client'
+  })
+  expect(crossEdit.value).toEqual({ ok: false, reason: 'not-found' })
+  expect((await bridge.call('listNotes', b.id)).value).toEqual([])
+  await app.close()
+
+  app = await launchBuiltApp(userData)
+  page = await app.firstWindow()
+  await page.evaluate((h) => (window.location.hash = h), `#/clients/${a.id}`)
+  const reopened = page.getByRole('region', { name: 'Notes & contact history' })
+  await expect(reopened.getByText('Custom offer sent: Standard package.')).toBeVisible()
+  await expect(reopened.getByText(/^Edited /)).toBeVisible()
+  await page.evaluate((h) => (window.location.hash = h), `#/clients/${b.id}`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Bea Muestra' })).toBeVisible()
+  await expect(page.getByText('No notes or contact history yet.')).toBeVisible()
+  await app.close()
+})

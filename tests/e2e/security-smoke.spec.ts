@@ -113,7 +113,10 @@ test('renderer has no Node.js or Electron access and only the typed API', async 
       'createClient',
       'updateClient',
       'archiveClient',
-      'restoreClient'
+      'restoreClient',
+      'listNotes',
+      'createNote',
+      'updateNote'
     ]
   })
 })

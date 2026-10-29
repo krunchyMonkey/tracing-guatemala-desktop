@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { contracts, createValidatedHandler, IpcRejectedError, registerIpcHandlers, type ClientService } from '../../src/main/ipc'
-import { defaultQuery, type Client, type ClientInput } from '../../src/shared/client-model'
+import {
+  contracts,
+  createValidatedHandler,
+  IpcRejectedError,
+  registerIpcHandlers,
+  type ClientService,
+  type NoteService
+} from '../../src/main/ipc'
+import { defaultQuery, type Client, type ClientInput, type ClientNote, type NoteInput } from '../../src/shared/client-model'
 import { IpcChannel } from '../../src/shared/ipc'
 
 const trustedOrigin = 'app://renderer'
@@ -45,7 +52,7 @@ describe('createValidatedHandler', () => {
 describe('registerIpcHandlers', () => {
   it('registers exactly the channels in the shared contract', () => {
     const handle = vi.fn()
-    registerIpcHandlers({ handle }, { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients() })
+    registerIpcHandlers({ handle }, { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes: fakeNotes() })
     expect(handle.mock.calls.map(([channel]) => channel)).toEqual(Object.values(IpcChannel))
   })
 
@@ -54,7 +61,7 @@ describe('registerIpcHandlers', () => {
     const clients = fakeClients()
     registerIpcHandlers(
       { handle: (channel, listener) => void handlers.set(channel, listener as never) },
-      { isTrustedSender, getAppInfo: () => appInfo, clients }
+      { isTrustedSender, getAppInfo: () => appInfo, clients, notes: fakeNotes() }
     )
 
     await expect(handlers.get(IpcChannel.createClient)!(trustedEvent, input)).resolves.toEqual({ ok: true, client })
@@ -170,5 +177,76 @@ describe('client contracts', () => {
     const handler = createValidatedHandler(contracts.getClient, isTrustedSender, () => ({ ...client, notes: [] }))
     await rejection(handler(trustedEvent, client.id))
     vi.restoreAllMocks()
+  })
+})
+
+// ---------- note contracts (fictional data) ----------
+
+const note: ClientNote = {
+  id: '5a6b7c8d-1e2f-4a3b-8c4d-5e6f7a8b9c0d',
+  clientId: client.id,
+  kind: 'contact',
+  occurredAt: '2026-10-29T12:00:00.000Z',
+  channel: 'fiverr',
+  direction: 'outbound',
+  body: 'Sent a fictional status update.',
+  createdAt: '2026-10-29T12:00:00.000Z',
+  updatedAt: '2026-10-29T12:00:00.000Z'
+}
+
+const noteInput: NoteInput = {
+  kind: 'contact',
+  occurredAt: note.occurredAt,
+  channel: 'fiverr',
+  direction: 'outbound',
+  body: note.body
+}
+
+function fakeNotes() {
+  return {
+    list: vi.fn(() => [note]),
+    create: vi.fn(() => ({ ok: true as const, note })),
+    update: vi.fn(() => ({ ok: true as const, note }))
+  } satisfies NoteService
+}
+
+describe('note contracts', () => {
+  it.each([
+    ['a system entry', { ...noteInput, kind: 'system' }],
+    ['an id', { ...noteInput, id: note.id }],
+    ['a client id', { ...noteInput, clientId: client.id }],
+    ['timestamps', { ...noteInput, createdAt: note.createdAt }],
+    ['an unknown channel', { ...noteInput, channel: 'phone' }],
+    ['an oversized body', { ...noteInput, body: 'x'.repeat(20_001) }]
+  ])('rejects note input with %s before reaching storage', async (_label, payload) => {
+    const create = vi.fn()
+    const handler = createValidatedHandler(contracts.createNote, isTrustedSender, create)
+    const error = await rejection(handler(trustedEvent, client.id, payload))
+    expect(error.message).toBe('IPC request rejected: invalid-arguments')
+    expect(error.message).not.toContain(note.body)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('requires UUIDs for the client and the note on update', async () => {
+    const update = vi.fn()
+    const handler = createValidatedHandler(contracts.updateNote, isTrustedSender, update)
+    await rejection(handler(trustedEvent, client.id, 'not-a-uuid', noteInput))
+    await rejection(handler(trustedEvent, 'not-a-uuid', note.id, noteInput))
+    await rejection(handler(trustedEvent, client.id, noteInput))
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('routes note calls with the client id', async () => {
+    const handlers = new Map<string, (event: never, ...args: unknown[]) => Promise<unknown>>()
+    const notes = fakeNotes()
+    registerIpcHandlers(
+      { handle: (channel, listener) => void handlers.set(channel, listener as never) },
+      { isTrustedSender, getAppInfo: () => appInfo, clients: fakeClients(), notes }
+    )
+    await expect(handlers.get(IpcChannel.listNotes)!(trustedEvent, client.id)).resolves.toEqual([note])
+    await handlers.get(IpcChannel.createNote)!(trustedEvent, client.id, noteInput)
+    expect(notes.create).toHaveBeenCalledWith(client.id, noteInput)
+    await handlers.get(IpcChannel.updateNote)!(trustedEvent, client.id, note.id, noteInput)
+    expect(notes.update).toHaveBeenCalledWith(client.id, note.id, noteInput)
   })
 })
