@@ -1,7 +1,16 @@
 // Contract shared by main, preload, and renderer. Keep this file free of runtime
 // dependencies: the sandboxed preload bundles everything it imports.
 
-import type { Client, ClientInput, ClientIssue, ClientNote, DirectoryQuery, NoteInput, NoteIssue } from './client-model'
+import type {
+  Client,
+  ClientInput,
+  ClientIssue,
+  ClientNote,
+  DirectoryQuery,
+  DuplicateCandidate,
+  NoteInput,
+  NoteIssue
+} from './client-model'
 
 export const IpcChannel = {
   getAppInfo: 'app:get-info',
@@ -11,6 +20,7 @@ export const IpcChannel = {
   updateClient: 'clients:update',
   archiveClient: 'clients:archive',
   restoreClient: 'clients:restore',
+  findDuplicateClients: 'clients:find-duplicates',
   listNotes: 'notes:list',
   createNote: 'notes:create',
   updateNote: 'notes:update'
@@ -52,6 +62,8 @@ export interface TracingGuatemalaApi {
   updateClient(id: string, input: ClientInput): Promise<ClientMutationResult>
   archiveClient(id: string): Promise<ClientMutationResult>
   restoreClient(id: string): Promise<ClientMutationResult>
+  /** Possible duplicates of `input` (archived included), ignoring the client being edited. */
+  findDuplicateClients(input: ClientInput, excludeId: string | null): Promise<DuplicateCandidate[]>
   listNotes(clientId: string): Promise<ClientNote[]>
   createNote(clientId: string, input: NoteInput): Promise<NoteMutationResult>
   updateNote(clientId: string, noteId: string, input: NoteInput): Promise<NoteMutationResult>

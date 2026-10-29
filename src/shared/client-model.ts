@@ -149,6 +149,15 @@ export function foldText(value: string): string {
     .trim()
 }
 
+/**
+ * Name comparison key for the duplicate advisory: foldText, and punctuation
+ * ignored too, so "Rosa M." matches "Rosa M" and "María-José" matches "Maria Jose".
+ * Search keeps punctuation so that typing an email address still works.
+ */
+export function duplicateNameKey(value: string): string {
+  return foldText(value.replace(/[\p{P}\p{S}]+/gu, ' '))
+}
+
 export type DuplicateSignal = 'email' | 'fiverrUsername' | 'displayName'
 
 export interface DuplicateCandidate {
@@ -156,8 +165,9 @@ export interface DuplicateCandidate {
   signals: DuplicateSignal[]
 }
 
+/** §4.3: every client is compared, archived ones included. Advisory only: nothing is merged or blocked. */
 export function findDuplicates(input: ClientInput, clients: Client[], excludeId?: string): DuplicateCandidate[] {
-  const name = foldText(input.displayName)
+  const name = duplicateNameKey(input.displayName)
   const email = input.email?.toLowerCase()
   const handle = input.fiverrUsername?.toLowerCase()
 
@@ -166,7 +176,7 @@ export function findDuplicates(input: ClientInput, clients: Client[], excludeId?
     const signals: DuplicateSignal[] = []
     if (email && client.email?.toLowerCase() === email) signals.push('email')
     if (handle && client.fiverrUsername?.toLowerCase() === handle) signals.push('fiverrUsername')
-    if (foldText(client.displayName) === name) signals.push('displayName')
+    if (name !== '' && duplicateNameKey(client.displayName) === name) signals.push('displayName')
     return signals.length > 0 ? [{ client, signals }] : []
   })
 }

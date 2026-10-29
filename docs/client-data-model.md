@@ -147,7 +147,7 @@ Run on create and on edit, against **all** clients, archived ones included.
 | --- | --- | --- |
 | Same email | lower-cased | Strong |
 | Same Fiverr username | lower-cased, `@` stripped | Strong |
-| Same display name | Unicode NFD, accents removed, lower-cased, whitespace collapsed | Possible |
+| Same display name | Unicode NFD, accents removed, lower-cased, punctuation ignored, whitespace collapsed (punctuation added in #10, so "Rosa M." matches "Rosa M") | Possible |
 
 When there is a match, the save is **paused, not blocked**. The researcher sees each match (name, status, matching signal) with three choices: **Open existing** (or **Restore existing** if archived), **Save as new client anyway**, or **Go back**. This handles a returning client who was archived without creating a second identity.
 

@@ -58,6 +58,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | `clients:create` | `ClientInput` | `ClientMutationResult` |
 | `clients:update` | UUID, `ClientInput` | `ClientMutationResult` |
 | `clients:archive` / `clients:restore` | UUID | `ClientMutationResult` |
+| `clients:find-duplicates` | `ClientInput`, UUID or `null` (the client being edited) | `DuplicateCandidate[]` (client and matching signals), archived included |
 | `notes:list` | client UUID | `ClientNote[]`, newest first |
 | `notes:create` | client UUID, `NoteInput` | `NoteMutationResult` |
 | `notes:update` | client UUID, note UUID, `NoteInput` | `NoteMutationResult` |
@@ -75,7 +76,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | Notes and contact entries can be edited, never deleted. Only the latest text is kept; the entry shows "Edited <date>". | Matches "no hard delete" and keeps Phase 1 simple. | #12 feedback (full revision history if wanted). |
 | Entries can be back-dated; dates more than a day ahead are rejected. | Logging a message after the fact is common; a day of tolerance covers time zones. | #12 feedback. |
 | System entries (archive/restore) cannot be edited. Archived clients' entries are read-only. | Model §5.2/§5.4. | #12 feedback (checklist Q5). |
-| Duplicate advisory is not on the IPC surface yet. `findDuplicates` is shared and ready. | Belongs to #10. | #10. |
+| Duplicate advisory (#10) runs in the main process over every client, archived included. Only exact matches of folded name, email or handle count; no fuzzy matching. If the check fails, nothing is saved. | Predictable, few false positives; a failed check must not silently skip the warning. | #12 feedback (fuzzy names if real duplicates slip through). |
 | Control characters are also rejected in `sourceDetail` and `otherContact`. | The model calls them single-line fields (§4.1). Previously only `displayName` was checked. | Pilot feedback. |
 | `synchronous=FULL` | Safety over write speed. Writes are rare and small. | Never, unless profiling says otherwise. |
 | Archived clients cannot be edited (`wrong-status`). | Model §5.2 default (checklist Q5). | #12 feedback. |

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ClientMutationResult, TracingGuatemalaApi } from '../../../shared/ipc'
-import type { Client, ClientInput, DirectoryQuery } from './model'
+import type { Client, ClientInput, DirectoryQuery, DuplicateCandidate } from './model'
 
 // Client state for the renderer. Clients are persisted by the main process
 // (#5/#6): this store caches every client, archived included (the duplicate
@@ -18,6 +18,8 @@ export interface ClientStore {
   reload(): void
   /** Re-reads one client from the main process into the cache (or drops it if it no longer exists). */
   refreshClient(id: string): Promise<void>
+  /** Possible duplicates among all saved clients, archived included (advisory only). */
+  findDuplicates(input: ClientInput, excludeId: string | null): Promise<DuplicateCandidate[]>
   /** Runs a directory query in the main process. */
   searchClients(query: DirectoryQuery): Promise<Client[]>
   /** The directory URL with the last-used search and filters, for "back to clients" links. */
@@ -103,6 +105,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       reload,
       refreshClient,
       searchClients: (query) => api().listClients(query),
+      findDuplicates: (input, excludeId) => api().findDuplicateClients(input, excludeId),
       directoryHref: `/clients${directorySearch}`,
       rememberDirectorySearch: setDirectorySearch,
       createClient: (input) => mutate(() => api().createClient(input)),

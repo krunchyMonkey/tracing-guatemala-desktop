@@ -11,6 +11,7 @@ const api: TracingGuatemalaApi = {
   updateClient: (id, input) => ipcRenderer.invoke(IpcChannel.updateClient, id, input),
   archiveClient: (id) => ipcRenderer.invoke(IpcChannel.archiveClient, id),
   restoreClient: (id) => ipcRenderer.invoke(IpcChannel.restoreClient, id),
+  findDuplicateClients: (input, excludeId) => ipcRenderer.invoke(IpcChannel.findDuplicateClients, input, excludeId),
   listNotes: (clientId) => ipcRenderer.invoke(IpcChannel.listNotes, clientId),
   createNote: (clientId, input) => ipcRenderer.invoke(IpcChannel.createNote, clientId, input),
   updateNote: (clientId, noteId, input) => ipcRenderer.invoke(IpcChannel.updateNote, clientId, noteId, input)

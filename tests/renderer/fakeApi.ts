@@ -3,6 +3,7 @@ import {
   checkClient,
   checkNote,
   compareNotes,
+  findDuplicates,
   queryClients,
   type Client,
   type ClientInput,
@@ -94,6 +95,12 @@ export function createFakeApi(initial: Client[] = sampleClients, initialNotes: C
     updateClient: vi.fn((id, input) => guard(() => save(id, input))),
     archiveClient: vi.fn((id) => guard(() => setStatus(id, true))),
     restoreClient: vi.fn((id) => guard(() => setStatus(id, false))),
+    findDuplicateClients: vi.fn((raw, excludeId) =>
+      guard(() => {
+        const { input } = checkClient(raw)
+        return input ? findDuplicates(input, clients, excludeId ?? undefined) : []
+      })
+    ),
     listNotes: vi.fn((clientId) => guard(() => notes.filter((n) => n.clientId === clientId).sort(compareNotes))),
     createNote: vi.fn((clientId, input) => guard(() => saveNote(clientId, null, input))),
     updateNote: vi.fn((clientId, noteId, input) => guard(() => saveNote(clientId, noteId, input)))

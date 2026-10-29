@@ -6,7 +6,6 @@ import {
   NAME_MAX,
   channelLabels,
   emptyFormValues,
-  findDuplicates,
   sourceLabels,
   toFormValues,
   toValidationIssues,
@@ -23,12 +22,14 @@ import {
 // Add/edit form (#3 baseline, saved through the main process since #6). Fields and
 // rules follow client-model/v1; the main process re-checks every save.
 
-type SaveError = 'failed' | 'not-found' | 'wrong-status'
+type SaveError = 'failed' | 'not-found' | 'wrong-status' | 'duplicate-check-failed'
 
 const saveErrorMessages: Record<SaveError, string> = {
   failed: 'Something went wrong while saving. Your changes are still here, so you can try again.',
   'not-found': 'This client couldn’t be found any more. Your changes are still here; copy anything you need.',
-  'wrong-status': 'This client was archived, so it can’t be edited. Restore it from the profile first.'
+  'wrong-status': 'This client was archived, so it can’t be edited. Restore it from the profile first.',
+  'duplicate-check-failed':
+    'Couldn’t check whether this client already exists, so nothing was saved. Your changes are still here; please try again.'
 }
 
 const signalLabels = { email: 'same email', fiverrUsername: 'same Fiverr username', displayName: 'same name' }
@@ -118,7 +119,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
     }
   }
 
-  function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent) {
     event.preventDefault()
     if (saving) return
     setSubmitted(true)
@@ -128,7 +129,17 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
       requestAnimationFrame(() => summaryRef.current?.focus())
       return
     }
-    const matches = findDuplicates(input, store.clients, clientId)
+    // The main process compares against every saved client, archived ones included.
+    setSaving(true)
+    let matches: DuplicateCandidate[]
+    try {
+      matches = await store.findDuplicates(input, clientId ?? null)
+    } catch {
+      setSaving(false)
+      setSaveError('duplicate-check-failed')
+      return
+    }
+    setSaving(false)
     if (matches.length > 0) {
       setDuplicates(matches)
       requestAnimationFrame(() => duplicatesRef.current?.focus())
@@ -201,7 +212,7 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
         </div>
       )}
 
-      <form noValidate onSubmit={onSubmit} className="client-form">
+      <form noValidate onSubmit={(event) => void onSubmit(event)} className="client-form">
         <fieldset className="form-section">
           <legend>About this client</legend>
 
