@@ -1,48 +1,47 @@
-# Claude handoff — Phase 1 final feature / Phase 2 transition (2026-10-29)
+# Claude handoff — Web-first pivot / nightly execution queue (2026-10-29)
 
-**Repository:** `krunchyMonkey/tracing-guatemala-desktop`  
-**Origin:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
-**Base branch:** `main`
+**Repository:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
+**Base:** `main` · **Current owner direction: WEB CLIENT FIRST** · **No autonomous merge**
 
-## Verified project status
-- **Core Phase 1 engineering:** #1–#11 done; PRs #95–#107 merged. Real desktop client management, SQLite, case-ready client identity, contacts/notes, duplicates and backup/restore are implemented.
-- **LAN HTTP preview:** #100 done, [PR #108](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/108) merged (commit `b17881c`). Browser scripts: `npm run demo:build`, `npm run demo:lan` and `npm run demo:dev`. Browser-only fictional data, no persistence/cloud/backend. Read [LAN preview guide](./docs/demo/lan-preview.md).
-- **NEXT / LAST PLANNED PHASE 1 FEATURE:** [#102 — Driver.js tour + private Project feedback](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) is **ready for implementation**. One PR with separately testable tour and feedback features; no PR exists yet. Do not auto-merge.
-- **Formal Phase 1 pilot:** [#12](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/12) remains OPEN. The pilot kit and unsigned Windows installer were prepared in #107, but there is no recorded researcher walkthrough or signoff. **Engineering complete is not researcher approved.**
-- **Next workstream:** Phase 2 — Research Case Management, existing issues [#13–#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues?q=is%3Aissue+label%3Aphase%3AP02). Groom #13/#14 with revisable MVP defaults, then build and pilot case management. Do not introduce new researcher approval gates before the integrated Phase 2 review.
+## Latest direction (supersedes desktop-first ticket language)
+The project's **React/Vite WEB application is now the primary feature client**, chosen to accelerate iterative development. Continue using the existing shared React UI. **Preserve but PAUSE** Electron-specific feature development, installer polish, and desktop packaging as a merge gate. When the WEB client is feature-complete, the owner will reassess whether to maintain/ship a desktop client. Do not delete desktop files or data and do not falsely close #12 (its installed desktop researcher pilot has not occurred).
 
-## Current assignment — implement #102 (tour + private feedback)
+Read [Phase 2 web-first roadmap](./docs/phase-2-case-management-spec.md) and [#110 web-first runtime foundation](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) before implementing new Phase 2 features. Tickets #13–#21 and #109 have been groomed to target web-first development. All user-specific changes must be consistent with these newer directions; ticket references to “main process”, “IPC”, “desktop restart”, or “native export” should be interpreted as web host/API, browser refresh+host restart, and browser download for the web-first target.
 
-**Read first:** GitHub issue #102 (canonical acceptance criteria), `docs/demo/lan-preview.md`, `src/renderer/src/App.tsx`, `src/renderer/src/components/AppLayout.tsx`, `src/renderer/src/runtime/AppRuntime.tsx`, `src/renderer/src/demo/main.tsx`, `src/renderer/src/screens/ClientsScreen.tsx`, `src/renderer/src/screens/ClientProfileScreen.tsx` and `src/shared/csp.ts`.
+### Two *separate* web modes — security boundary
+1. **`demo:build` / `demo:lan` / `demo:dev`**: existing trusted-LAN **plain HTTP, fictional, in-memory demo**, resets on refresh. **NEVER** accepts or displays real clients/research records or accesses SQLite. #102 adds Driver.js and an *opt-in* server-side private GitHub Project draft feedback bridge; no GitHub tokens in browser, no fallback to PUBLIC repo issues.
+2. **Persistent local web app, added by #110**: use a compact Node host plus typed same-origin HTTP API, shared validation and SQLite. Start **loopback-only** (127.0.0.1) on the same computer, with Host/Origin/CSRF/session safeguards and transactional backups. No remote-LAN real data or unencrypted access to sensitive records. New feature pages and tests use **this** app as the primary working product.
 
-Build a **replayable 5–6 step tour** over the actual browser demo: welcome/navigation; directory search/filter; Add Client; existing fictional client profile; notes/contact history; archive/restore explanation. Use real routes and stable app-owned `data-guide-id` anchors. The tour **explains** actions but never silently mutates data, and stays restricted to fictional client information.
+Electron and its DB remain preserved, but no automatic migration from the researcher's existing `userData` database. Do not make actual client records public, upload data to GitHub, or bundle secrets in `dist-demo/`.
 
-Keep the integration deliberately small and swappable:
-- App-owned `GuideDefinition`, `GuideStep`, `GuidanceService`/React context and stable anchor IDs.
-- One `DriverJsGuidanceProvider` adapter owns all Driver.js imports and locally bundled CSS. A no-op/fake provider supports unit tests. No Driver.js in feature components.
-- Demo-mode-only provider by default; do not bundle the tour into desktop releases or change the Electron security model.
-- A future Pendo adapter can reuse guide triggers and anchors, but the Pendo guide content may require migration/re-authoring. **No Pendo SDK, tour analytics, remote tour scripts or data collection.**
-- **Additional feature: “Send Feedback.”** The demo should offer a small, mobile-friendly feedback form with a clear privacy notice. On intentional submission, the opt-in **local host process** creates a **DRAFT ISSUE in a verified PRIVATE GitHub Project** via GitHub GraphQL `addProjectV2DraftIssue`. It is not a numbered repository issue, and no public issue is ever created from feedback.
-- **Critical privacy boundary:** Our `krunchyMonkey/tracing-guatemala-desktop` source repo is **public**. Private GitHub Project visibility does not make that repository's issues private. Prefer the existing private Project's draft issues, which live only in that Project. A future normal numbered-issue workflow would require a **separate private repository** connected to the same Project. Do not automatically create the repository.
-- Use server-side, owner-supplied Project credentials only; **no token or Project auth in browser assets**. Confirm `ProjectV2.public === false` before publishing. Fail closed if Project ID/token/verification is unavailable. Offline `demo:lan` should continue to work with a Copy Feedback fallback.
-- **CSP:** Default static demo remains `connect-src 'none'`; only a separately enabled feedback mode may allow a **same-origin** POST to the LAN host. Align build meta CSP and server header. Do not weaken Electron CSP, enable wildcard CORS, expose WAN addresses, or create an unauthenticated GitHub issue proxy. The host connects to GitHub with HTTPS.
-- Feedback form must **never automatically capture names, client identities, notes, emails, full routes, search queries, screenshots or IP addresses**. Explicit warning against entering sensitive client/genealogy details. Remember the user's LAN HTTP is plaintext; a private GitHub destination does not encrypt the local hop. Restrict/rate-limit the endpoint and use a host-provided access code.
-- If a real private Project URL/ID/token isn't available during implementation, ship the server+UI disabled by default with mocks, instructions, and copy fallback. Never claim a live issue was created unless the private project actually returned success.
-- The production demo's CSP stays restrictive (`script-src 'self'; style-src 'self'; connect-src 'none'`); verify the tour works under that CSP with no violations. Never quietly relax security directives.
-- Support hash-route transitions, loading/missing targets, Skip/Close, Next/Back, restart, teardown, focus, keyboard and phone/tablet views.
+## Current reality
+- Core Phase 1 #1–#11 and LAN preview #100 merged (PR #108, commit `b17881c`).
+- **#102** (Driver.js guided walkthrough + private Project draft feedback) remains OPEN and is the last planned Phase 1 web-demo feature. Implement/test with fictional data. If private Project ID/credential unavailable, ship opt-in feedback disabled with mock tests and explicit owner setup. Do not invent a private Project or post user feedback to the public repo.
+- **#12** remains OPEN/**deferred** because desktop acceptance hasn't happened. This is not an engineering blocker for web-first Phase 2.
+- **#110** is the new Phase 2 P0 **web-first persistent local runtime foundation**.
+- Phase 2 groomed: **#13–#21 plus #109**. Each issue defines tests, scope and dependencies. All substantive design defaults are provisional, with actual researcher review in the **WEB-first pilot #21**.
 
-Tests: `npm run check`, built `npm run demo:build`, browser-demo Playwright walkthrough cases and packaged Electron smoke verification. Capture screenshots, document keyboard/a11y and any testing limitations. The browser has been tested on the development machine's LAN-origin URL; **physical second-device access is a documented manual owner check, not a coding blocker**. Don't claim it passed unless tested.
+## Suggested coding sequence for tonight
 
-Deliver one PR referencing **`Closes #102`**, with separately tested guide and feedback paths, screenshots, updated preview docs, an architecture note for provider swap, **private GitHub Project draft issue setup/limitations** and manual tour and private feedback test steps. **Do not merge without owner action.**
+1. **#102** — final Phase 1 web-demo tour + optional private Project feedback. One focused PR with browser E2E/CSP/security checks. No public feedback issues, no default external connections.
+2. **#110** — web-first persistent *localhost* runtime (P0). One PR with `web:dev`, `web:build`, `web:local` or documented equivalents, typed React adapters, Phase 1 persisted client/note parity, local SQLite/backup safety and browser API security tests.
+3. **#13** — short owner-authorized *provisional* research case lifecycle/intake design; **#14** — one-to-many case schema/data/typed API design. These two may be drafted separately while #110 is in flight; do not fabricate researcher approval.
+4. **#15** — case storage, migration and web API; **#16** — browser case directory/detail/forms and fictional-demo parity.
+5. **#17**, **#18**, **#19** — case research brief, journal, tasks/optional deadlines; can run as independent PRs only when #15/#16's case contract is stable.
+6. **#109** — actual research hours per case (timer + manual sessions) after case overview; prefer after journal.
+7. **#20** — web-browser user-triggered Markdown/text summary download plus strict client/case isolation.
+8. **#21** — integrated WEB researcher pilot kit and test evidence. **Do not close** until the actual researcher completes her review and gives a decision.
 
-## Local checkout / worktree rules
-1. Inspect existing local repos and verify `origin` matches this repo. Run `git worktree list --porcelain`.
-2. Reuse a `#102` worktree if present; otherwise create `feat/102-guided-tour` from up-to-date `origin/main` in the existing checkout.
-3. Clone only if no usable checkout/worktree exists. Never overwrite/delete/reset/clean other worktrees or uncommitted files.
-4. Keep the guide in its own branch/PR. Avoid unnecessary edits to other issues.
+**Priority if the night is short:** make #102 and #110 solid and open a first complete #13/#14/#15 vertical slice rather than dozens of incomplete PRs. No developer may assert PRs are merged or tests passed without verifying it.
 
-## Closeout and next phase
-- **After #102 merges:** confirm its checks on `main`, record the guide/preview commands, and mark Phase 1 **feature engineering complete**.
-- **Issue #12:** complete a short actual desktop pilot on the researcher's selected OS, review unencrypted local DB/backups and the realistic client workflow using fictional data, capture her feedback and actual decision. Do not claim or record signoff on her behalf; #12 stays open until that happens.
-- Phase 2 preparation and design may start **in parallel with #12** so end-user feedback does not become an unnecessary build gate. Address any must-fix Phase 1 issues before declaring the full Phase 1 milestone accepted.
-- Keep real genealogy data off GitHub, browser HTTP preview, screenshots, external analytics or SaaS. Desktop privacy rules, offline/no-telemetry policy and Electron CSP remain mandatory.
+## Git/worktree and PR workflow
+
+- Find existing local checkout and inspect `git worktree list --porcelain`; **reuse** issue-specific worktrees. Only clone if none usable. Never reset/clean/delete/overwrite existing changes.
+- Pull latest `origin/main`; make one focused PR per issue with `Closes #N` only if the work is complete. #21 must remain open until real end-user approval; #12 stays open/deferred.
+- **Do not auto-merge.** If the upstream PRs aren't merged, use an **explicit stacked PR chain** (state `base: feat/... ` and dependencies in title/body). Don't make independent-looking PRs off `main` that lack schema prerequisites. Rebase/retarget safely after merges; no destructive Git operations.
+- Default tasks do not require repeatedly interrupting the owner for individual model-field choices. Use bounded, reversible defaults documented as unconfirmed. Stop for sensitive security decisions involving external access, secrets, real client data or deployment exposure.
+- Build/test web-first paths: lint/TS/unit, API validation/CSRF/Host, SQLite migration/backup, browser Playwright at mobile/tablet/desktop, fictional demo reset and CSP. Keep prior Electron tests when practical and report regressions; don't block web progress on standalone desktop packaging.
+- Every PR: summary, issue/dependencies, scope, screenshots for UI, exact test results/unrun checks, security/privacy impact, manual steps and known limitations. No real names, research records, credentials or screenshots in PUBLIC GitHub.
+
+## Definition of complete
+The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
