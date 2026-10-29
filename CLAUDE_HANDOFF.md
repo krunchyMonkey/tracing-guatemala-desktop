@@ -1,35 +1,50 @@
-# Claude handoff — Phase 1 starter queue (updated 2026-10-29)
+# Claude handoff — Phase 1: build-first MVP (updated 2026-10-29)
 
-Read [Phase 1 specification](./docs/phase-1-client-management-spec.md) and [researcher survey findings](./docs/researcher-workflow-review-2026-10-28.md) before working tickets.
+**Repository:** `krunchyMonkey/tracing-guatemala-desktop` — https://github.com/krunchyMonkey/tracing-guatemala-desktop  
+**Delivery direction:** The project owner has authorized the draft client model and prototype as **working implementation defaults**. Do not claim the researcher (his wife) reviewed or approved them. Capture her actual feedback and approval when she can use the integrated MVP at the Phase 1 pilot (#12). Researcher interviews/sign-off are **not implementation blockers** for #5–#11.
 
-## Status
+Read:
+- [Client data model](./docs/client-data-model.md) — working `client-model/v1` defaults
+- [Phase 1 client-management specification](./docs/phase-1-client-management-spec.md)
+- [Prototype and walkthrough](./docs/prototypes/client-directory.md)
+- [Storage architecture readiness](./docs/architecture/client-storage-readiness.md)
+- [Electron foundation](./docs/architecture/electron-foundation.md)
 
-| Ticket | State |
-| --- | --- |
-| **#4 — Secure Electron foundation** | **Done.** Merged in PR #95. See [electron-foundation.md](./docs/architecture/electron-foundation.md). Preserve its security controls, IPC conventions and tests. |
-| **#2 — Client data model and lifecycle** | **Active.** Proposal in [client-data-model.md](./docs/client-data-model.md). Awaiting researcher answers to its approval checklist. |
-| **#3 — Directory and profile prototype** | **Active.** Clickable prototype on in-memory fictional data, built on the provisional #2 model. Awaiting researcher review. |
-| #5 onward | **Blocked.** See [client-storage-readiness.md](./docs/architecture/client-storage-readiness.md) for the remaining decisions and order. |
+## Current project status
 
-## Active workstream
+- #4: complete, PR #95 merged — secure Electron foundation.
+- #2: working data model documented, PR #96 merged. Authorized **for implementation**, not researcher-validated.
+- #3: clickable UI prototype merged, PR #97. Authorized **as the UI baseline**, not researcher-validated.
+- **Next #5:** SQLite persistence, migrations, typed IPC; proceed now using the working model.
+- Then #6 client CRUD/archive, #7 searchable directory, #8 profile. Existing prototype may be adapted rather than rebuilt.
+- Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
+- **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.
 
-1. **#2:** Collect the researcher's answers on the issue. Update the model document to `v1` only when she explicitly approves it. **Do not treat the draft as signed off.**
-2. **#3:** Iterate on the prototype from her feedback. Do not add persistence, SQLite, or IPC for client data until #2 is approved and #5 lands.
+## Worktree and repository rules
 
-## Dependency flow after researcher signoff
+1. Verify the repository URL and inspect local checkouts and `git worktree list --porcelain` before doing anything.
+2. If an issue-specific worktree exists, reuse it. If only a checkout exists, create an issue worktree from its up-to-date `origin/main`.
+3. Clone only when no usable local checkout/worktree exists.
+4. Protect existing branches and uncommitted changes: never reset, clean, force-update or delete worktrees without explicit instruction.
+5. One issue per branch and PR by default; inspect current repository state and existing code first.
 
-- #2 approved and #4 complete → #5 storage/migrations.
-- #3 approved and #5 complete → #6 lifecycle, #7 directory, #8 profile.
-- #8 + #5 → #9 notes; #6 + #2 → #10 validation and duplicates.
-- #5 → #11 backup/restore.
-- #4–#11, plus approval evidence → #12 packaged researcher pilot.
+## Engineering approach
 
-## Working rules
+- Treat proposed requirements as **revisable MVP defaults**. Make ordinary product choices and document them; do not stop implementation for missing researcher confirmation.
+- Keep changes scoped and testable. Reference existing issues; no need to create new approval tickets or questionnaires for Phase 1.
+- On #5, perform a short SQLite compatibility spike in the **packaged Electron app** (native module/fuses/asar concerns); decide the driver based on evidence. SQLite belongs in the main process, in the app's OS user-data directory, with migrations, secure validated IPC, and restart-persistence tests.
+- On #6–#8, replace the in-memory store with persisted operations while preserving existing approved-for-implementation UX interactions. No separate researcher signoff gate.
+- Add tests, report validation outcomes, and follow normal PR review. Merge criteria are engineering correctness and ticket acceptance, **not pre-implementation external user review**.
 
-- Treat the existing GitHub ticket as the source for acceptance criteria. Commit only the ticket scope. Do not infer approval from a survey about a different subject.
-- Reference `Closes #N` only when *all* acceptance criteria are verifiably met. Otherwise reference `Refs #N` and document blockers.
-- One issue per pull request by default; no merge/close just because a draft is ready.
-- Before writing code, inspect existing repo/files and do not overwrite concurrent changes.
-- Add realistic but **fictional** data to screenshots and tests. Never publish client details in GitHub. The repository is public.
-- No unapproved transmission of client records, external AI calls, or provider automation.
-- For each PR provide: summary, tests performed/results, manual validation, security/privacy implications, any decisions requiring approval, and screenshots for UI changes.
+## Non-negotiable protections
+
+- Repository is public: only fictional people/data in issues, source, screenshots, and tests.
+- No cloud sync, external AI, Fiverr/FamilySearch/OneNote integration, or automated client-facing messages in Phase 1.
+- Keep Electron renderer sandbox and CSP; validate at IPC/main boundaries; never echo personal input in errors/logs.
+- Require confirmation for destructive local actions; do not silently delete/merge data.
+- Ship safe backup/restore before pilot with real client information.
+- Make no claim of actual researcher approval until the researcher has reviewed the working MVP.
+
+## PR handoff
+
+Each PR references its issue and includes scope, manual checks, automated tests, security/privacy impact and decisions made. Reuse the existing code rather than rebuilding prototype components. Continue through unblocked tickets without waiting for new researcher approval. Stop only for genuinely blocking technical/security decisions or actions needing explicit owner authorization (e.g., real external data transmission or destructive data loss).
