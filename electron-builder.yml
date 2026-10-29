@@ -1,0 +1,39 @@
+# Packaging approach for #4. The researcher's target OS and installer are still an
+# open choice (see docs/architecture/electron-foundation.md); the targets below are
+# conventional defaults to be confirmed in #12, not an installation commitment.
+appId: com.tracingguatemala.desktop
+productName: Tracing Guatemala
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+asar: true
+# No native modules yet; revisit when SQLite lands in #5.
+npmRebuild: false
+# No auto-update or release publishing in Phase 1.
+publish: null
+
+# Flip Electron fuses so a packaged app cannot be repurposed as a Node runtime or
+# have its code swapped outside the integrity-checked asar.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  perMachine: false
+mac:
+  target: dmg
+  category: public.app-category.productivity
+linux:
+  target: AppImage
+  category: Office
