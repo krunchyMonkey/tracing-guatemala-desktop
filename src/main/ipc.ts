@@ -10,12 +10,13 @@ import {
   type Client,
   type ClientInput,
   type ClientNote,
-  type NoteChannel,
-  type NoteDirection,
-  type NoteInput,
   type ClientSource,
   type ContactChannel,
-  type DirectoryQuery
+  type DirectoryQuery,
+  type DuplicateCandidate,
+  type NoteChannel,
+  type NoteDirection,
+  type NoteInput
 } from '../shared/client-model'
 import {
   IpcChannel,
@@ -185,6 +186,16 @@ export const contracts = {
     args: z.tuple([idSchema]),
     result: mutationResultSchema
   },
+  findDuplicateClients: {
+    channel: IpcChannel.findDuplicateClients,
+    args: z.tuple([clientInputSchema, idSchema.nullable()]),
+    result: z.array(
+      z.strictObject({
+        client: clientSchema,
+        signals: z.array(z.enum(['email', 'fiverrUsername', 'displayName'])).min(1)
+      })
+    ) satisfies z.ZodType<DuplicateCandidate[]>
+  },
   listNotes: {
     channel: IpcChannel.listNotes,
     args: z.tuple([idSchema]),
@@ -237,6 +248,7 @@ export interface ClientService {
   update(id: string, input: ClientInput): ClientMutationResult
   archive(id: string): ClientMutationResult
   restore(id: string): ClientMutationResult
+  findDuplicates(input: ClientInput, excludeId: string | null): DuplicateCandidate[]
 }
 
 /** Note operations backing the notes:* channels (NoteRepository in production). */
@@ -268,6 +280,7 @@ export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcD
   register(c.updateClient, ([id, input]) => clients.update(id, input))
   register(c.archiveClient, ([id]) => clients.archive(id))
   register(c.restoreClient, ([id]) => clients.restore(id))
+  register(c.findDuplicateClients, ([input, excludeId]) => clients.findDuplicates(input, excludeId))
   register(c.listNotes, ([clientId]) => notes.list(clientId))
   register(c.createNote, ([clientId, input]) => notes.create(clientId, input))
   register(c.updateNote, ([clientId, noteId, input]) => notes.update(clientId, noteId, input))

@@ -116,7 +116,7 @@ describe('add and edit client', () => {
     fireEvent.click(screen.getByLabelText('Referral'))
     fireEvent.click(screen.getByRole('button', { name: 'Save client' }))
 
-    expect(screen.getByText('This might be someone you already have')).toBeTruthy()
+    expect(await screen.findByText('This might be someone you already have')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open to restore' })).toBeTruthy()
     expect(fake.api.createClient).not.toHaveBeenCalled()
 
@@ -285,5 +285,86 @@ describe('directory with many clients', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(screen.queryByText('Search isn’t working right now')).toBeNull())
     expect((await rowNames()).every((name) => name?.startsWith('Ana'))).toBe(true)
+  })
+})
+
+describe('duplicate advisory', () => {
+  async function fillNew(values: { name: string; source?: string; handle?: string; email?: string }) {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('link', { name: /Add client/ }))
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: values.name } })
+    fireEvent.click(screen.getByLabelText(values.source ?? 'Fiverr'))
+    if (values.handle) fireEvent.change(screen.getByLabelText(/^Fiverr username/), { target: { value: values.handle } })
+    if (values.email) fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: values.email } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save client' }))
+  }
+
+  const panel = () => screen.findByText('This might be someone you already have').then((el) => el.closest('[role="alert"]') as HTMLElement)
+
+  it('asks the main process, and pauses on the same Fiverr username', async () => {
+    await fillNew({ name: 'Somebody New', handle: '@LUCIA_ROOTS_DEMO' })
+    const warning = await panel()
+    expect(within(warning).getByText(/same Fiverr username/)).toBeTruthy()
+    expect(within(warning).getByRole('link', { name: 'Open existing client' })).toBeTruthy()
+    expect(fake.api.findDuplicateClients).toHaveBeenCalledWith(
+      expect.objectContaining({ fiverrUsername: 'LUCIA_ROOTS_DEMO' }),
+      null
+    )
+    expect(fake.api.createClient).not.toHaveBeenCalled()
+  })
+
+  it('pauses on a near-identical name with different accents and punctuation', async () => {
+    await fillNew({ name: 'lucia fernandez quetzaltenango line' })
+    const warning = await panel()
+    expect(within(warning).getByText(/same name/)).toBeTruthy()
+  })
+
+  it('saves without pausing when the name is only similar (no false positive)', async () => {
+    await fillNew({ name: 'Lucía Fernández' })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Lucía Fernández' })).toBeTruthy()
+    expect(screen.queryByText('This might be someone you already have')).toBeNull()
+  })
+
+  it('lets you go back and edit, keeping what you typed', async () => {
+    await fillNew({ name: 'Daniel Ochoa' })
+    const warning = await panel()
+    fireEvent.click(within(warning).getByRole('button', { name: 'Go back and edit' }))
+    expect(screen.queryByText('This might be someone you already have')).toBeNull()
+    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Daniel Ochoa')
+    expect(fake.api.createClient).not.toHaveBeenCalled()
+  })
+
+  it('keeps both records when you save anyway, without merging', async () => {
+    const before = fake.clients().length
+    await fillNew({ name: 'Daniel Ochoa' })
+    fireEvent.click(within(await panel()).getByRole('button', { name: 'Save as a new client anyway' }))
+    await screen.findByText('Client added.')
+    expect(fake.clients()).toHaveLength(before + 1)
+    expect(fake.clients().filter((c) => c.displayName === 'Daniel Ochoa')).toHaveLength(2)
+  })
+
+  it('does not flag the client being edited', async () => {
+    await openProfile('Daniel Ochoa')
+    const { id } = clientNamed('Daniel Ochoa')
+    fireEvent.click(screen.getByRole('link', { name: 'Edit details' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('Changes saved.')).toBeTruthy()
+    expect(fake.api.findDuplicateClients).toHaveBeenCalledWith(expect.anything(), id)
+  })
+
+  it('does not save when the duplicate check fails, and keeps the form', async () => {
+    vi.mocked(fake.api.findDuplicateClients).mockRejectedValueOnce(new Error('IPC request rejected: internal-error'))
+    await fillNew({ name: 'Nueva Clienta' })
+    expect(await screen.findByText(/Couldn’t check whether this client already exists/)).toBeTruthy()
+    expect(fake.api.createClient).not.toHaveBeenCalled()
+    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Nueva Clienta')
+  })
+
+  it('explains required and format problems before checking for duplicates', async () => {
+    await fillNew({ name: '   ', email: 'ana@example' })
+    const summary = (await screen.findByText(/things need fixing/)).closest('[role="alert"]') as HTMLElement
+    expect(within(summary).getByText('Add a name so you can find this client later.')).toBeTruthy()
+    expect(within(summary).getByText("This email address doesn't look complete.")).toBeTruthy()
+    expect(fake.api.findDuplicateClients).not.toHaveBeenCalled()
   })
 })

@@ -114,6 +114,7 @@ test('renderer has no Node.js or Electron access and only the typed API', async 
       'updateClient',
       'archiveClient',
       'restoreClient',
+      'findDuplicateClients',
       'listNotes',
       'createNote',
       'updateNote'

@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { checkClient, queryClients, type Client, type ClientInput, type DirectoryQuery } from '../../shared/client-model'
+import {
+  checkClient,
+  findDuplicates,
+  queryClients,
+  type Client,
+  type ClientInput,
+  type DirectoryQuery,
+  type DuplicateCandidate
+} from '../../shared/client-model'
 import type { ClientMutationResult } from '../../shared/ipc'
 
 // Client persistence (client-model/v1). Every write re-runs the shared rules, so
@@ -58,6 +66,17 @@ export class ClientRepository {
   list(query: DirectoryQuery): Client[] {
     const rows = this.db.prepare('SELECT * FROM clients').all() as unknown as ClientRow[]
     return queryClients(rows.map(toClient), query)
+  }
+
+  /**
+   * Possible duplicates of the normalized input among all clients, archived
+   * included (client-model/v1 §4.3). Advisory only; invalid input has none.
+   */
+  findDuplicates(raw: ClientInput, excludeId: string | null): DuplicateCandidate[] {
+    const { input } = checkClient(raw)
+    if (!input) return []
+    const rows = this.db.prepare('SELECT * FROM clients').all() as unknown as ClientRow[]
+    return findDuplicates(input, rows.map(toClient), excludeId ?? undefined)
   }
 
   get(id: string): Client | null {

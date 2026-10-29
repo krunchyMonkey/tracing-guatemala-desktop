@@ -107,7 +107,8 @@ function fakeClients() {
     create: vi.fn(() => ({ ok: true as const, client })),
     update: vi.fn(() => ({ ok: true as const, client })),
     archive: vi.fn(() => ({ ok: true as const, client })),
-    restore: vi.fn(() => ({ ok: true as const, client }))
+    restore: vi.fn(() => ({ ok: true as const, client })),
+    findDuplicates: vi.fn(() => [{ client, signals: ['displayName' as const] }])
   } satisfies ClientService
 }
 

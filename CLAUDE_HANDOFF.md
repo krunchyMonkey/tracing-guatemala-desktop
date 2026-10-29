@@ -19,7 +19,8 @@ Read:
 - #6: Clients screens save create/edit/archive/restore through IPC (`feat/6-persistent-client-crud`, stacked on #5). Notes stay session-only until #9.
 - #7: directory queries run in the main process via `clients:list`; filters survive profile round trips (`feat/7-persistent-directory`, stacked on #6).
 - #8: profile re-reads the saved client via `clients:get`, focus management after archive/restore, full/sparse/archived tests (`feat/8-persistent-client-profile`, stacked on #7).
-- #9: notes and contact log persisted via `notes:*`, editable with an Edited marker, client-scoped (`feat/9-persistent-notes`, stacked on #8). Existing prototype may be adapted rather than rebuilt.
+- #9: notes and contact log persisted via `notes:*`, editable with an Edited marker, client-scoped (`feat/9-persistent-notes`, stacked on #8).
+- #10: duplicate advisory via `clients:find-duplicates` in the main process, punctuation-insensitive name key (`feat/10-duplicate-advisory`, stacked on #9). Existing prototype may be adapted rather than rebuilt.
 - Then #9 notes, #10 validation/duplicate advisory, #11 safe backup/restore.
 - **#12 integrated MVP pilot:** present the actual app to the researcher, collect usability/field/flow feedback, implement required changes, and obtain actual signoff before declaring Phase 1 complete.
 
