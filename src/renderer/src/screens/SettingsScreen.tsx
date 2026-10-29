@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import type { AppInfo, BackupChoice, BackupProblem } from '../../../shared/ipc'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDateTime } from '../clients/components'
+import { useAppRuntime, type BackupApi } from '../runtime/AppRuntime'
 
 // Settings & Backup (#11). Backups are made and restored by the main process
-// through native file dialogs; this screen never sees file paths.
+// through native file dialogs; this screen never sees file paths. The browser
+// demo (#100) has no backups and says so instead of offering the controls.
 
 type Ready = Extract<BackupChoice, { ok: true }>
 
@@ -18,16 +20,13 @@ const problemMessages: Record<BackupProblem | 'failed', string> = {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 export function SettingsScreen() {
-  const { reload } = useClientStore()
+  const runtime = useAppRuntime()
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [busy, setBusy] = useState<'backup' | 'choose' | 'restore' | null>(null)
-  const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
-  const [pendingRestore, setPendingRestore] = useState<Ready | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    window.tracingGuatemala
+    runtime.data
       .getAppInfo()
       .then((info) => {
         if (!cancelled) setAppInfo(info)
@@ -38,7 +37,62 @@ export function SettingsScreen() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [runtime])
+
+  return (
+    <section aria-labelledby="settings-heading" className="settings">
+      <h1 id="settings-heading">Settings &amp; Backup</h1>
+
+      {runtime.backup ? (
+        <>
+          <section aria-labelledby="data-heading">
+            <h2 id="data-heading">Your data</h2>
+            <p>
+              Your clients, notes and contact history are stored only on this computer, in your user account’s app
+              data folder. Nothing is sent over the internet, and nothing is uploaded to the cloud.
+            </p>
+          </section>
+          <BackupSection backup={runtime.backup} />
+        </>
+      ) : (
+        <>
+          <section aria-labelledby="data-heading">
+            <h2 id="data-heading">Demo data</h2>
+            <p>
+              This is a browser demo with <strong>fictional data only</strong>. Your changes are kept in this browser
+              tab’s memory and are never saved to this device or sent anywhere. Refreshing the page or opening it again
+              goes back to the sample clients.
+            </p>
+          </section>
+          <section aria-labelledby="backup-heading" className="card">
+            <h2 id="backup-heading">Backup</h2>
+            <p>
+              Backup and restore are only available in the desktop app, where your real data is stored. The demo has
+              nothing to back up.
+            </p>
+          </section>
+        </>
+      )}
+
+      <section aria-labelledby="about-heading">
+        <h2 id="about-heading">About</h2>
+        {appInfo ? (
+          <p data-testid="app-version">
+            {appInfo.name} version {appInfo.version}
+          </p>
+        ) : (
+          <p>{loadFailed ? 'Version information is unavailable.' : 'Loading version…'}</p>
+        )}
+      </section>
+    </section>
+  )
+}
+
+function BackupSection({ backup }: { backup: BackupApi }) {
+  const { reload } = useClientStore()
+  const [busy, setBusy] = useState<'backup' | 'choose' | 'restore' | null>(null)
+  const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const [pendingRestore, setPendingRestore] = useState<Ready | null>(null)
 
   async function run<T>(kind: NonNullable<typeof busy>, call: () => Promise<T>): Promise<T | null> {
     setBusy(kind)
@@ -54,7 +108,7 @@ export function SettingsScreen() {
   }
 
   async function createBackup() {
-    const result = await run('backup', () => window.tracingGuatemala.createBackup())
+    const result = await run('backup', () => backup.createBackup())
     if (!result || (!result.ok && result.reason === 'cancelled')) return
     setMessage(
       result.ok
@@ -67,7 +121,7 @@ export function SettingsScreen() {
   }
 
   async function chooseBackup() {
-    const choice = await run('choose', () => window.tracingGuatemala.chooseBackupToRestore())
+    const choice = await run('choose', () => backup.chooseBackupToRestore())
     if (!choice) return
     if (choice.ok) setPendingRestore(choice)
     else if (choice.reason !== 'cancelled') setMessage({ tone: 'error', text: problemMessages[choice.reason] })
@@ -75,7 +129,7 @@ export function SettingsScreen() {
 
   async function restore(choice: Ready) {
     setPendingRestore(null)
-    const result = await run('restore', () => window.tracingGuatemala.restoreBackup(choice.token))
+    const result = await run('restore', () => backup.restoreBackup(choice.token))
     if (!result) return
     if (result.ok) {
       reload()
@@ -97,72 +151,49 @@ export function SettingsScreen() {
   }
 
   return (
-    <section aria-labelledby="settings-heading" className="settings">
-      <h1 id="settings-heading">Settings &amp; Backup</h1>
+    <section aria-labelledby="backup-heading" className="card">
+      <h2 id="backup-heading">Backup</h2>
+      <p>
+        A backup is one file with all your clients, notes and contact history. It is <strong>not encrypted</strong>:
+        anyone who opens the file can read it. Save it somewhere private, such as your own external drive, and make a
+        new one regularly.
+      </p>
+      <div role="status" aria-live="polite">
+        {message?.tone === 'success' && <p className="flash">{message.text}</p>}
+      </div>
+      {message?.tone === 'error' && (
+        <Alert tone="error" title="Not done">
+          {message.text}
+        </Alert>
+      )}
+      <div className="button-row">
+        <button
+          type="button"
+          className="button button-primary"
+          disabled={busy !== null}
+          aria-busy={busy === 'backup'}
+          onClick={() => void createBackup()}
+        >
+          {busy === 'backup' ? 'Saving backup…' : 'Create backup…'}
+        </button>
+      </div>
 
-      <section aria-labelledby="data-heading">
-        <h2 id="data-heading">Your data</h2>
-        <p>
-          Your clients, notes and contact history are stored only on this computer, in your user account’s app data
-          folder. Nothing is sent over the internet, and nothing is uploaded to the cloud.
-        </p>
-      </section>
-
-      <section aria-labelledby="backup-heading" className="card">
-        <h2 id="backup-heading">Backup</h2>
-        <p>
-          A backup is one file with all your clients, notes and contact history. It is <strong>not encrypted</strong>:
-          anyone who opens the file can read it. Save it somewhere private, such as your own external drive, and make a
-          new one regularly.
-        </p>
-        <div role="status" aria-live="polite">
-          {message?.tone === 'success' && <p className="flash">{message.text}</p>}
-        </div>
-        {message?.tone === 'error' && (
-          <Alert tone="error" title="Not done">
-            {message.text}
-          </Alert>
-        )}
-        <div className="button-row">
-          <button
-            type="button"
-            className="button button-primary"
-            disabled={busy !== null}
-            aria-busy={busy === 'backup'}
-            onClick={() => void createBackup()}
-          >
-            {busy === 'backup' ? 'Saving backup…' : 'Create backup…'}
-          </button>
-        </div>
-
-        <h3>Restore</h3>
-        <p>
-          Restoring replaces everything in the app with the contents of a backup. Before anything is replaced, your
-          current data is kept as a safety copy on this computer.
-        </p>
-        <div className="button-row">
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={busy !== null}
-            aria-busy={busy === 'choose' || busy === 'restore'}
-            onClick={() => void chooseBackup()}
-          >
-            {busy === 'restore' ? 'Restoring…' : 'Restore from backup…'}
-          </button>
-        </div>
-      </section>
-
-      <section aria-labelledby="about-heading">
-        <h2 id="about-heading">About</h2>
-        {appInfo ? (
-          <p data-testid="app-version">
-            {appInfo.name} version {appInfo.version}
-          </p>
-        ) : (
-          <p>{loadFailed ? 'Version information is unavailable.' : 'Loading version…'}</p>
-        )}
-      </section>
+      <h3>Restore</h3>
+      <p>
+        Restoring replaces everything in the app with the contents of a backup. Before anything is replaced, your
+        current data is kept as a safety copy on this computer.
+      </p>
+      <div className="button-row">
+        <button
+          type="button"
+          className="button button-secondary"
+          disabled={busy !== null}
+          aria-busy={busy === 'choose' || busy === 'restore'}
+          onClick={() => void chooseBackup()}
+        >
+          {busy === 'restore' ? 'Restoring…' : 'Restore from backup…'}
+        </button>
+      </div>
 
       {pendingRestore && (
         <ConfirmDialog

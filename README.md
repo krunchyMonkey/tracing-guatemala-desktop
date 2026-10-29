@@ -21,6 +21,17 @@ npm run package:dir  # unpacked app for the current OS, in release/
 npm run smoke:packaged  # after package:dir: packaged app creates and reopens its database
 ```
 
+## Browser demo on your home network
+
+A browser-only preview of the same screens with fictional, in-memory data (nothing is saved; a refresh resets it). For a trusted home network only:
+
+```sh
+npm run demo:build
+npm run demo:lan     # prints http://<LAN-IP>:4173/#/clients; Ctrl+C stops it
+```
+
+See [docs/demo/lan-preview.md](docs/demo/lan-preview.md) for address selection, Windows firewall settings, limits and the second-device check.
+
 See [docs/privacy-and-backup.md](docs/privacy-and-backup.md) for where data is stored and how backups work.
 
 See [docs/architecture/electron-foundation.md](docs/architecture/electron-foundation.md) for all scripts, the security model, IPC conventions and packaging decisions.

@@ -7,27 +7,31 @@ import { ClientProfileScreen } from './screens/ClientProfileScreen'
 import { ClientsScreen } from './screens/ClientsScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { AppRuntimeProvider, desktopRuntime, type AppRuntime } from './runtime/AppRuntime'
 
 // Hash routing keeps every screen on the single app://renderer/index.html document.
-// Client screens read and save through the main process (window.tracingGuatemala).
-export function App() {
+// Client screens read and save through `runtime`: the main process on the desktop,
+// or the in-memory fictional data of the browser demo (#100).
+export function App({ runtime = desktopRuntime }: { runtime?: AppRuntime }) {
   return (
-    <HashRouter>
-      <ClientStoreProvider>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route index element={<HomeScreen />} />
-            <Route path="clients" element={<ClientsLoaded />}>
-              <Route index element={<ClientsScreen />} />
-              <Route path="new" element={<ClientFormScreen />} />
-              <Route path=":id" element={<ClientProfileScreen />} />
-              <Route path=":id/edit" element={<ClientFormScreen />} />
+    <AppRuntimeProvider runtime={runtime}>
+      <HashRouter>
+        <ClientStoreProvider>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route index element={<HomeScreen />} />
+              <Route path="clients" element={<ClientsLoaded />}>
+                <Route index element={<ClientsScreen />} />
+                <Route path="new" element={<ClientFormScreen />} />
+                <Route path=":id" element={<ClientProfileScreen />} />
+                <Route path=":id/edit" element={<ClientFormScreen />} />
+              </Route>
+              <Route path="settings" element={<SettingsScreen />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
-            <Route path="settings" element={<SettingsScreen />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </ClientStoreProvider>
-    </HashRouter>
+          </Routes>
+        </ClientStoreProvider>
+      </HashRouter>
+    </AppRuntimeProvider>
   )
 }

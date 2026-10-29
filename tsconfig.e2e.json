@@ -5,5 +5,5 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "outDir": "./node_modules/.tsbuild/e2e"
   },
-  "include": ["tests/e2e/**/*.ts"]
+  "include": ["tests/e2e/**/*.ts", "tests/demo/**/*.ts", "scripts/**/*.d.mts"]
 }

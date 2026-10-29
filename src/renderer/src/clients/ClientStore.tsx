@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { ClientMutationResult, TracingGuatemalaApi } from '../../../shared/ipc'
+import type { ClientMutationResult } from '../../../shared/ipc'
+import { useAppRuntime } from '../runtime/AppRuntime'
 import type { Client, ClientInput, DirectoryQuery, DuplicateCandidate } from './model'
 
 // Client state for the renderer. Clients are persisted by the main process
-// (#5/#6): this store caches every client, archived included (the duplicate
+// (#5/#6), or held in memory by the browser demo (#100): this store caches every client, archived included (the duplicate
 // advisory needs them), and updates the cache from each saved result. Notes are
 // loaded per profile (useClientNotes).
 
@@ -35,11 +36,8 @@ const ClientStoreContext = createContext<ClientStore | null>(null)
 
 const everyClient: DirectoryQuery = { text: '', status: 'all', sources: [], sort: 'name' }
 
-function api(): TracingGuatemalaApi {
-  return window.tracingGuatemala
-}
-
 export function ClientStoreProvider({ children }: { children: ReactNode }) {
+  const runtime = useAppRuntime()
   const [clients, setClients] = useState<Client[]>([])
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadAttempt, setLoadAttempt] = useState(0)
@@ -47,7 +45,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let current = true
-    api()
+    runtime.data
       .listClients(everyClient)
       .then(
         (list) => {
@@ -62,7 +60,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       current = false
     }
-  }, [loadAttempt])
+  }, [runtime, loadAttempt])
 
   const reload = useCallback(() => {
     setLoadState('loading')
@@ -88,7 +86,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   const refreshClient = useCallback(async (id: string) => {
     let fresh: Client | null
     try {
-      fresh = await api().getClient(id)
+      fresh = await runtime.data.getClient(id)
     } catch {
       return // Keep showing the cached copy; the next save reports any real problem.
     }
@@ -96,7 +94,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       const others = list.filter((c) => c.id !== id)
       return fresh ? [...others, fresh] : others
     })
-  }, [])
+  }, [runtime])
 
   const store = useMemo<ClientStore>(
     () => ({
@@ -104,16 +102,16 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       loadState,
       reload,
       refreshClient,
-      searchClients: (query) => api().listClients(query),
-      findDuplicates: (input, excludeId) => api().findDuplicateClients(input, excludeId),
+      searchClients: (query) => runtime.data.listClients(query),
+      findDuplicates: (input, excludeId) => runtime.data.findDuplicateClients(input, excludeId),
       directoryHref: `/clients${directorySearch}`,
       rememberDirectorySearch: setDirectorySearch,
-      createClient: (input) => mutate(() => api().createClient(input)),
-      updateClient: (id, input) => mutate(() => api().updateClient(id, input)),
-      archiveClient: (id) => mutate(() => api().archiveClient(id)),
-      restoreClient: (id) => mutate(() => api().restoreClient(id))
+      createClient: (input) => mutate(() => runtime.data.createClient(input)),
+      updateClient: (id, input) => mutate(() => runtime.data.updateClient(id, input)),
+      archiveClient: (id) => mutate(() => runtime.data.archiveClient(id)),
+      restoreClient: (id) => mutate(() => runtime.data.restoreClient(id))
     }),
-    [clients, loadState, directorySearch, reload, refreshClient, mutate]
+    [runtime, clients, loadState, directorySearch, reload, refreshClient, mutate]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>

@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from 'react-router'
+import { useAppRuntime } from '../runtime/AppRuntime'
+import { DemoBanner } from './DemoBanner'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -7,11 +9,13 @@ const navItems = [
 ]
 
 export function AppLayout() {
+  const demo = useAppRuntime().mode === 'demo'
   return (
-    <div className="app-shell">
+    <div className={demo ? 'app-shell has-demo-banner' : 'app-shell'}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
+      {demo && <DemoBanner />}
       <aside className="sidebar">
         <p className="brand">
           Tracing Guatemala

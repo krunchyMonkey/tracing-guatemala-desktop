@@ -686,7 +686,7 @@ fieldset {
 
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
   gap: 0 1rem;
 }
 
@@ -834,7 +834,7 @@ fieldset {
 
 .profile-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
   gap: 1.25rem;
 }
 
@@ -968,6 +968,7 @@ fieldset {
 .timeline-body {
   margin: 0.2rem 0 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .kind-system .timeline-body {
@@ -987,4 +988,169 @@ fieldset {
 /* Headings receive focus programmatically after an action; they are not controls. */
 h1[tabindex='-1']:focus {
   outline: none;
+}
+
+/* ---------- browser demo (#100) ---------- */
+
+.app-shell.has-demo-banner {
+  grid-template-rows: auto 1fr;
+}
+
+.demo-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.75rem;
+  padding: 0.65rem 1.5rem;
+  border-bottom: 3px solid var(--color-marigold);
+  background: var(--color-marigold-soft);
+  color: #4a3200;
+}
+
+.demo-banner-title {
+  font-size: 1.05rem;
+}
+
+/* ---------- tablets and phones ----------
+   The desktop window is at least 900px wide (src/main/index.ts), so these
+   layouts are only reached by the browser demo. */
+
+@media (max-width: 860px) {
+  .app-shell,
+  .app-shell.has-demo-banner {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .app-shell:not(.has-demo-banner) {
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .brand {
+    margin: 0;
+  }
+
+  .sidebar ul {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .content {
+    max-width: none;
+    padding: 1.5rem 1.25rem 2.5rem;
+  }
+
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .demo-banner {
+    padding: 0.6rem 1rem;
+  }
+
+  .brand-tagline {
+    display: none;
+  }
+
+  .sidebar a {
+    padding: 0.45rem 0.7rem;
+  }
+
+  .content {
+    padding: 1.25rem 1rem 2rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    overflow-wrap: anywhere;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar,
+  .card,
+  .form-section {
+    padding: 1rem;
+  }
+
+  .profile-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .profile-actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+
+  .detail-list > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .dialog {
+    padding: 1.25rem;
+  }
+
+  .dialog-actions {
+    flex-wrap: wrap;
+  }
+
+  /* The directory table becomes one card per client. */
+  .client-table,
+  .client-table tbody,
+  .client-table tr,
+  .client-table th,
+  .client-table td {
+    display: block;
+  }
+
+  .client-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .client-table tbody tr {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .client-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .client-table th,
+  .client-table td {
+    padding: 0.1rem 0;
+    border-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .client-table td[data-label]::before {
+    content: attr(data-label) ': ';
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+
+  .client-table td.contact-cell::before {
+    display: none;
+  }
 }

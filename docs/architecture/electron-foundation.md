@@ -43,11 +43,14 @@ tests/
 | `npm run lint` | ESLint, including the renderer import boundary. |
 | `npm run typecheck` | Type-check main/preload/shared, renderer, and e2e projects. |
 | `npm test` | Unit and renderer tests (Vitest). |
-| `npm run test:e2e` | Build, then run the Playwright launch + security smoke test. |
+| `npm run test:e2e` | Build the app and the browser demo, then run the Playwright Electron launch + security smoke tests and the browser-demo tests. |
 | `npm run check` | All of the above, in order. |
 | `npm run package:dir` | Build an unpacked app for the current OS in `release/` (no installer). |
 | `npm run package` | Build the installer for the current OS (see open choices below). |
 | `npm run smoke:packaged` | After `package:dir`: launch the packaged app twice against a temporary profile and check its database. |
+| `npm run demo:build` | Build the browser-only LAN demo (fictional in-memory data) into `dist-demo/`. Not part of the desktop app. See [LAN preview](../demo/lan-preview.md). |
+| `npm run demo:lan` | Serve `dist-demo/` over plain HTTP on one home-LAN address, port 4173. |
+| `npm run demo:dev` | Browser demo with hot reload, on this computer only (`http://localhost:5174`). |
 
 > If you run Electron from a VS Code terminal and the app exits immediately, check for `ELECTRON_RUN_AS_NODE=1` in the environment and unset it. The e2e test strips it automatically.
 
