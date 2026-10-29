@@ -21,6 +21,8 @@
 
 ## Client data model v1 — proposal for #2
 
+> **Superseded by the detailed #2 proposal:** [client-data-model.md](./client-data-model.md) (field rules, validation, personal-data classes, lifecycle and approval checklist). The table below is kept as the original baseline.
+
 These are suggested fields, **not** claims about the researcher's preferences:
 
 | Field | Required | Purpose / notes |
