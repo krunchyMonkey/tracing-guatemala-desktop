@@ -78,3 +78,47 @@ test('persists clients across restarts and keeps the IPC boundary strict', async
   expect(restored).toMatchObject({ ok: true, client: { id: client.id, status: 'active', archivedAt: null } })
   await app.close()
 })
+
+test('a client created, edited and archived in the UI is unchanged after a restart', async () => {
+  const userData = createTestUserData()
+  // Option inputs are visually hidden; click their visible labels as a person would.
+  const pick = (page: Page, name: string) => page.locator('label').filter({ hasText: new RegExp(`^${name}$`) }).click()
+
+  let app = await launchBuiltApp(userData)
+  let page = await app.firstWindow()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Clients' }).click()
+  await page.getByRole('link', { name: 'Add your first client' }).click()
+  await page.getByLabel(/^Name/).fill('Grace Ejemplo')
+  await pick(page, 'Fiverr')
+  await page.getByLabel(/^Fiverr username/).fill('@grace_demo')
+  await page.getByRole('button', { name: 'Save client' }).click()
+  await expect(page.getByText('Client added.')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Edit details' }).click()
+  await page.getByLabel(/^Email/).fill('grace.example@example.com')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('Changes saved.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Archive' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Archive client' }).click()
+  await expect(page.getByText(/This profile is read-only/)).toBeVisible()
+  const profileUrl = page.url()
+  await app.close()
+
+  app = await launchBuiltApp(userData)
+  page = await app.firstWindow()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Clients' }).click()
+  await expect(page.getByText('0 active · 1 archived')).toBeVisible()
+  await page.evaluate((url) => (window.location.href = url), profileUrl)
+  await expect(page.getByRole('heading', { level: 1, name: 'Grace Ejemplo' })).toBeVisible()
+  await expect(page.getByText(/This profile is read-only/)).toBeVisible()
+  const contact = page.getByRole('region', { name: 'Contact' })
+  await expect(contact.getByText('@grace_demo')).toBeVisible()
+  await expect(contact.getByText('grace.example@example.com')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Restore client' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Restore client' }).click()
+  await expect(page.getByText('Client restored.')).toBeVisible()
+  expect(page.url()).toBe(profileUrl)
+  await app.close()
+})

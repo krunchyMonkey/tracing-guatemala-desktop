@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { Outlet } from 'react-router'
 import { useClientStore } from './ClientStore'
 import { sourceLabels, type ClientSource, type ClientStatus } from './model'
 
@@ -101,34 +102,28 @@ export function ConfirmDialog({ title, children, confirmLabel, tone = 'default',
   )
 }
 
-/** Review-only controls so the researcher can see empty and error states. Not part of the proposed product. */
-export function PrototypeBanner() {
-  const { clients, loadSample, clearAll, simulateFailures, setSimulateFailures } = useClientStore()
-  return (
-    <aside className="prototype-banner" aria-label="Prototype controls">
-      <p>
-        <strong>Prototype for review.</strong> Sample clients are fictional, and nothing is saved when you close the
-        app.
+/** Renders the client screens once the saved clients have loaded, with loading and retry states. */
+export function ClientsLoaded() {
+  const { loadState, reload } = useClientStore()
+  if (loadState === 'loading') {
+    return (
+      <p role="status" className="muted">
+        Loading clients…
       </p>
-      <div className="prototype-controls">
-        {clients.length > 0 ? (
-          <button type="button" className="button button-small button-ghost" onClick={clearAll}>
-            Show empty directory
+    )
+  }
+  if (loadState === 'error') {
+    return (
+      <section aria-labelledby="load-error-heading">
+        <h1 id="load-error-heading">Clients</h1>
+        <Alert tone="error" title="Your clients couldn’t be loaded">
+          <p>Nothing was changed or lost. Try again, or restart the app if this keeps happening.</p>
+          <button type="button" className="button button-secondary" onClick={reload}>
+            Try again
           </button>
-        ) : (
-          <button type="button" className="button button-small button-ghost" onClick={loadSample}>
-            Load sample clients
-          </button>
-        )}
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={simulateFailures}
-            onChange={(event) => setSimulateFailures(event.target.checked)}
-          />
-          Simulate save errors
-        </label>
-      </div>
-    </aside>
-  )
+        </Alert>
+      </section>
+    )
+  }
+  return <Outlet />
 }

@@ -1,5 +1,6 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router'
 import { ClientStoreProvider } from './clients/ClientStore'
+import { ClientsLoaded } from './clients/components'
 import { AppLayout } from './components/AppLayout'
 import { ClientFormScreen } from './screens/ClientFormScreen'
 import { ClientProfileScreen } from './screens/ClientProfileScreen'
@@ -8,7 +9,7 @@ import { HomeScreen } from './screens/HomeScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 
 // Hash routing keeps every screen on the single app://renderer/index.html document.
-// Client screens are the #3 prototype: in-memory fictional data, nothing persisted.
+// Client screens read and save through the main process (window.tracingGuatemala).
 export function App() {
   return (
     <HashRouter>
@@ -16,10 +17,12 @@ export function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<HomeScreen />} />
-            <Route path="clients" element={<ClientsScreen />} />
-            <Route path="clients/new" element={<ClientFormScreen />} />
-            <Route path="clients/:id" element={<ClientProfileScreen />} />
-            <Route path="clients/:id/edit" element={<ClientFormScreen />} />
+            <Route path="clients" element={<ClientsLoaded />}>
+              <Route index element={<ClientsScreen />} />
+              <Route path="new" element={<ClientFormScreen />} />
+              <Route path=":id" element={<ClientProfileScreen />} />
+              <Route path=":id/edit" element={<ClientFormScreen />} />
+            </Route>
             <Route path="settings" element={<SettingsScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

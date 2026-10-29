@@ -33,7 +33,7 @@ test('launches from app://renderer and navigates between placeholder screens', a
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
 })
 
-test('client prototype screens render under the production CSP without violations', async () => {
+test('client screens render under the production CSP without violations', async () => {
   await page.evaluate(() => {
     const w = window as unknown as { __cspViolations: string[] }
     w.__cspViolations = []
@@ -42,7 +42,10 @@ test('client prototype screens render under the production CSP without violation
 
   const nav = page.getByRole('navigation', { name: 'Main' })
   await nav.getByRole('link', { name: 'Clients' }).click()
-  await page.getByRole('link', { name: 'Daniel Ochoa' }).click()
+  await page.getByRole('link', { name: /Add client/ }).click()
+  await page.getByLabel(/^Name/).fill('Daniel Ochoa')
+  await page.locator('label').filter({ hasText: /^Direct$/ }).click()
+  await page.getByRole('button', { name: 'Save client' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Daniel Ochoa' })).toBeVisible()
   await page.getByRole('button', { name: 'Archive' }).click()
   await expect(page.getByRole('alertdialog')).toBeVisible()

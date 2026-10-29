@@ -1,5 +1,7 @@
 # Client directory and profile — clickable prototype (#3)
 
+> **Update (#6):** The Clients screens now save to the local database through the main process. The *Prototype for review* strip, the sample data and *Simulate save errors* were removed, because clearing the directory would now mean deleting saved data. The walkthrough and screenshots below record the #3 prototype as it was reviewed. The screenshot script was retired with the strip; fresh MVP screenshots come with the #12 pilot.
+
 **Status:** **Owner-authorized working UI baseline.** This clickable prototype and the v1 client model are approved for engineering implementation; they have **not** received researcher feedback. Present the integrated persisted MVP to her at #12 for actual feedback/approval. This guide remains useful for that walkthrough.
 
 **What it is:** The real app's Clients section, running on **fictional, in-memory sample data**. Nothing is saved: closing or reloading the app resets everything. There is no database, no IPC for client data, and no network access. The Electron security model from #4 is unchanged.
@@ -50,7 +52,7 @@ All data shown is fictional.
 | Archived, read-only profile ![](../screenshots/issue-3/09-archived-profile.png) | Edit: preferred-channel rule ![](../screenshots/issue-3/10-edit-validation.png) |
 | Save failure keeps your text ![](../screenshots/issue-3/11-save-error.png) | |
 
-To refresh them after a design change: `npm run build`, then `CAPTURE_SCREENSHOTS=1 npx playwright test prototype-screenshots`.
+These screenshots were captured from the #3 prototype and are no longer regenerated (see the update note above).
 
 ## Coverage of the #3 acceptance criteria
 
