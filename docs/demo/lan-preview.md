@@ -1,0 +1,114 @@
+# LAN browser preview (demo)
+
+A browser-only copy of the Tracing Guatemala screens, for showing the current client workflows on a phone, tablet or another computer on the **same trusted home network** without installing the desktop app (#100).
+
+- **Fictional data only.** It starts with eight made-up clients and their notes. Every screen shows a *Demo Mode — Fictional Data Only* banner.
+- **Nothing is saved.** Changes live in that browser tab's memory. Refreshing the page, or opening it again, goes back to the sample clients.
+- **No backups.** Settings explains that backup and restore exist only in the desktop app.
+- **It is not the real app.** It has no Electron, no SQLite database and no server API. It can't read the desktop app's data, files or backups, and the desktop app's data is never changed by it. The page's Content Security Policy blocks all network requests (`connect-src 'none'`).
+
+## Start it
+
+Requires Node.js 22.12 or newer, on the computer that will serve the demo.
+
+```sh
+npm ci              # first time, or after pulling changes
+npm run demo:build  # builds dist-demo/
+npm run demo:lan    # serves it over HTTP on port 4173
+```
+
+`demo:lan` uses this computer's home-network address and prints the link to open, for example:
+
+```
+Open on a phone, tablet or computer on the same home network:
+  http://192.168.1.24:4173/#/clients
+```
+
+**Stop it** with <kbd>Ctrl</kbd>+<kbd>C</kbd> in that terminal. Closing the terminal also stops it.
+
+### Choosing the address or port
+
+`demo:lan` skips the virtual adapters that Hyper-V, WSL, Docker, VirtualBox and VMware add, and says so. If several real adapters remain (for example Wi-Fi and Ethernet, or a VPN), it lists them and asks you to choose:
+
+```sh
+npm run demo:lan -- --host 192.168.1.24
+npm run demo:lan -- --host 192.168.1.24 --port 4180
+```
+
+`DEMO_HOST` and `DEMO_PORT` environment variables work too. For this computer only, use `--host 127.0.0.1`.
+
+The server only listens on one private address (10.x.x.x, 172.16–31.x.x or 192.168.x.x) or loopback. It refuses `0.0.0.0` (every adapter) and public addresses. Vite's host check and its localhost-only CORS default stay on.
+
+### Finding the computer's LAN address yourself
+
+- **Windows:** run `ipconfig` and look for **IPv4 Address** under your Wi-Fi or Ethernet adapter.
+- **macOS:** System Settings → Wi-Fi → Details → **IP address**, or `ipconfig getifaddr en0`.
+- **Linux:** `hostname -I` or `ip -4 addr`.
+
+## Windows firewall
+
+The first time `demo:lan` runs, Windows may ask whether Node.js may communicate on networks.
+
+1. Make sure your home Wi-Fi is set to **Private**: Settings → Network & internet → Wi-Fi → (your network) → Network profile type → **Private network**.
+2. In the prompt, allow **Private networks** only. Leave **Public networks** unchecked.
+
+If you dismissed the prompt or want a narrower rule, open PowerShell **as administrator** and allow only the demo port, only on Private networks, only from your local subnet:
+
+```powershell
+New-NetFirewallRule -DisplayName "Tracing Guatemala LAN demo" -Direction Inbound -Protocol TCP -LocalPort 4173 -Profile Private -RemoteAddress LocalSubnet -Action Allow
+```
+
+Remove it when you no longer need the demo:
+
+```powershell
+Remove-NetFirewallRule -DisplayName "Tracing Guatemala LAN demo"
+```
+
+**Never** set up port forwarding on your router for this port, put it in a DMZ, or expose it to the internet in any other way. It is plain HTTP for a trusted home network, not a website.
+
+## Second-device check
+
+Run this once on the real home network after `npm run demo:lan` is running. (The automated tests open the demo at this computer's own LAN address; they can't test a second physical device.)
+
+1. On a phone or tablet on the **same Wi-Fi**, open the printed link (`http://<LAN-IP>:4173/#/clients`).
+2. The *Demo Mode — Fictional Data Only* banner is visible, and the Clients list shows **7 active · 1 archived**.
+3. Search `lucia` → one client. Clear it, then tap **Referral** under Source → only María José Alvarado. Tap **All** under Status → the archived Rosa Chávez Ixcoy appears too.
+4. Open **Lucía Fernández**, add a note, and see it at the top of the history.
+5. **Add client** named `Daniel Ochoa` → the "This might be someone you already have" warning appears. Choose *Save as a new client anyway*.
+6. **Archive** that new client → the profile becomes read-only. **Restore client** → editable again.
+7. Open **Settings & Backup** → it says backup is only available in the desktop app, with no backup buttons.
+8. Refresh the page → the list is back to **7 active · 1 archived** and the new client and note are gone.
+9. Turn the phone sideways and back → no sideways scrolling, and the menu stays reachable.
+10. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd> → the page no longer loads on the phone after a refresh.
+
+If the phone can't connect: check that both devices are on the same Wi-Fi (not a guest network, which often isolates devices), that the Windows network profile is Private, and that the firewall allows port 4173.
+
+## Sample data
+
+| Client | What it shows |
+| --- | --- |
+| Lucía Fernández (Quetzaltenango line) | Fiverr client with notes and logged contacts |
+| Daniel Ochoa | Try adding a client with this name to see the duplicate warning |
+| María José Alvarado | Referral, prefers email |
+| Sofía Tzul | Direct client with an "other" contact method |
+| Grace Whitfield | Fiverr username only, no notes |
+| Ethan Morales-Reyes | Recently updated |
+| Tomás Recinos | Returning client: archived, then restored, with system entries |
+| Rosa Chávez Ixcoy | Archived (read-only) profile |
+
+All names, contact details and notes are invented. Email addresses use the reserved `example.com` / `example.org` domains.
+
+## Limits
+
+- Plain HTTP: anyone on the same network who knows the address can open the demo while it runs. Use it only on a home network you trust, and only with fictional data.
+- One browser tab = one copy of the data. Two devices don't see each other's changes.
+- No backup, restore, export or persistence of any kind.
+- Tested in Chromium-based browsers (Edge) at 375px, 768px and 1280px widths. Safari and Firefox on phones haven't been checked yet.
+- `npm run demo:dev` is for development only: hot reload, on `localhost` only, and without the production CSP.
+
+## For developers
+
+- Entry: `src/renderer/demo/index.html` → `src/renderer/src/demo/main.tsx`; build config `vite.demo.config.ts`; server `scripts/demo-lan.mjs` + `scripts/demo-server.mjs`.
+- The shared UI reads data through `useAppRuntime()` (`src/renderer/src/runtime/AppRuntime.tsx`). The desktop runtime forwards to the preload bridge; the demo runtime uses `createDemoApi()` with the same shared validation, search and duplicate rules, and has no backup API. ESLint stops non-demo renderer code from importing `demo/` or reading `window.tracingGuatemala` directly, and a Playwright test checks that the desktop bundle contains no demo data.
+- `crypto.randomUUID()` doesn't exist on non-secure origins such as `http://192.168.x.x`; the demo builds v4 UUIDs from `crypto.getRandomValues()` instead (never `Math.random()`).
+- Tests: `tests/renderer/DemoMode.test.tsx`, `tests/unit/demo-server.test.ts`, and the `browser-demo` Playwright project (`tests/demo/`), which runs `demo:lan` against a private LAN address of the test machine when one exists. On Windows it uses the installed Edge; elsewhere run `npx playwright install chromium` once. Refresh screenshots with `npm run demo:build && CAPTURE_SCREENSHOTS=1 npx playwright test --project browser-demo` (writes `docs/screenshots/issue-100/`).

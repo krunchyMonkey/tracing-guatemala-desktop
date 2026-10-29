@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { NoteMutationResult } from '../../../shared/ipc'
+import { useAppRuntime } from '../runtime/AppRuntime'
 import { compareNotes, type ClientNote, type NoteInput } from './model'
 
 // Saved notes and contact entries for one client (#9), read and written
-// through the main process.
+// through the main process (or the browser demo's memory, #100).
 
 /** A main-process outcome, or `failed` when the call itself did not complete. */
 export type NoteSaveResult = NoteMutationResult | { ok: false; reason: 'failed' }
@@ -21,13 +22,14 @@ export interface ClientNotes {
  * its own (archive and restore add system entries), so the list is re-read.
  */
 export function useClientNotes(clientId: string, version: string): ClientNotes {
+  const { data } = useAppRuntime()
   const [state, setState] = useState<ClientNotes['state']>('loading')
   const [notes, setNotes] = useState<ClientNote[]>([])
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let current = true
-    window.tracingGuatemala.listNotes(clientId).then(
+    data.listNotes(clientId).then(
       (list) => {
         if (!current) return
         setNotes(list)
@@ -40,7 +42,7 @@ export function useClientNotes(clientId: string, version: string): ClientNotes {
     return () => {
       current = false
     }
-  }, [clientId, version, attempt])
+  }, [data, clientId, version, attempt])
 
   const save = useCallback(async (call: () => Promise<NoteMutationResult>): Promise<NoteSaveResult> => {
     let result: NoteMutationResult
@@ -64,12 +66,12 @@ export function useClientNotes(clientId: string, version: string): ClientNotes {
       setAttempt((n) => n + 1)
     }, []),
     create: useCallback(
-      (input: NoteInput) => save(() => window.tracingGuatemala.createNote(clientId, input)),
-      [clientId, save]
+      (input: NoteInput) => save(() => data.createNote(clientId, input)),
+      [data, clientId, save]
     ),
     update: useCallback(
-      (noteId: string, input: NoteInput) => save(() => window.tracingGuatemala.updateNote(clientId, noteId, input)),
-      [clientId, save]
+      (noteId: string, input: NoteInput) => save(() => data.updateNote(clientId, noteId, input)),
+      [data, clientId, save]
     )
   }
 }

@@ -252,19 +252,19 @@ export function ClientsScreen() {
                     <th scope="row">
                       <Link to={`/clients/${client.id}`}>{client.displayName}</Link>
                     </th>
-                    <td className="contact-cell">
+                    <td className="contact-cell" data-label="Contact">
                       {client.fiverrUsername && <span>@{client.fiverrUsername}</span>}
                       {client.email && <span>{client.email}</span>}
                       {!client.fiverrUsername && !client.email && (
                         <span className="muted">{client.otherContact ? 'See profile' : 'No contact details'}</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Source">
                       <SourceTag source={client.source} />
                     </td>
-                    <td>{formatDate(client.updatedAt)}</td>
+                    <td data-label="Last updated">{formatDate(client.updatedAt)}</td>
                     {query.status !== 'active' && (
-                      <td>
+                      <td data-label="Status">
                         <StatusBadge status={client.status} />
                       </td>
                     )}

@@ -7,13 +7,17 @@
 ## Current status (verified from GitHub)
 - **Core Phase 1 engineering (#1–#11):** complete; PRs #95–#106 have merged.
 - **#12 pilot preparation:** PR #107 merged, including `docs/pilot/phase-1-pilot-guide.md`, screenshots and Windows installer validation. **The researcher pilot itself is open**; do not claim researcher approval.
-- **Next:** [#100 — Local HTTP browser demo](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/100), **ready for immediate implementation** on the merged `main` state.
+- **#100 — Local HTTP browser demo:** implemented on branch `feat/100-lan-demo` (PR open, **not merged**). `npm run demo:build` / `demo:lan` / `demo:dev` exist; see [LAN preview](./docs/demo/lan-preview.md). Automated tests run the demo at the dev machine's own LAN address; the **second-device check is a manual owner step** and has not been done.
 - **After #100 merges and LAN preview works:** [#102 — Provider-neutral Driver.js walkthrough](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102). Separate PR and worktree, not part of #100.
 - Both #100 and #102 are **optional developer/researcher-preview enhancements** and **do not block** the installed desktop MVP pilot (#12).
 
 Read [Phase 1 plan](./docs/phase-1-client-management-spec.md), [Electron foundation](./docs/architecture/electron-foundation.md), [client storage](./docs/architecture/client-storage.md), [pilot guide](./docs/pilot/phase-1-pilot-guide.md), and the applicable GitHub issue before modifying code.
 
-## Next coding task: #100 — browser LAN HTTP demo
+## #100 — browser LAN HTTP demo (implemented, in review)
+
+**As built:** the shared UI reads data through `useAppRuntime()` (`src/renderer/src/runtime/AppRuntime.tsx`); desktop forwards to the preload bridge, the demo (`src/renderer/src/demo/`, `vite.demo.config.ts`, `scripts/demo-lan.mjs`) uses an in-memory fictional API and has no backup API. Electron main/preload/CSP/SQLite are unchanged. Original brief below.
+
+### Original brief
 
 **Goal:** re-use the existing React UI as a demo site on a trusted home LAN, with **fictional, temporary data only**. No Electron process, SQLite connection, backend, native IPC, credentials or cloud services. Separate browser Vite entry, browser demo data adapter, truthful demo-specific Settings state and `Demo Mode — Fictional Data Only` banner.
 

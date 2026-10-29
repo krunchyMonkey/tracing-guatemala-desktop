@@ -5,7 +5,8 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 // The renderer is untrusted web content: it may only reach the main process
-// through the typed preload API (window.tracingGuatemala).
+// through the typed preload API (window.tracingGuatemala), and only via the
+// runtime adapter (runtime/AppRuntime.tsx) so the browser demo can swap it out.
 const rendererForbiddenImports = [
   'electron',
   'electron/*',
@@ -25,11 +26,11 @@ const rendererForbiddenImports = [
 ]
 
 export default defineConfig(
-  { ignores: ['out/**', 'release/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**'] },
+  { ignores: ['out/**', 'dist-demo/**', 'release/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**'] },
   js.configs.recommended,
   tseslint.configs.recommended,
   {
-    files: ['src/main/**', 'src/preload/**', 'tests/unit/**', 'tests/e2e/**', 'scripts/**', '*.config.*'],
+    files: ['src/main/**', 'src/preload/**', 'tests/unit/**', 'tests/e2e/**', 'tests/demo/**', 'scripts/**', '*.config.*'],
     languageOptions: { globals: globals.node }
   },
   {
@@ -52,6 +53,37 @@ export default defineConfig(
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
             }
+          ]
+        }
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'window',
+          property: 'tracingGuatemala',
+          message: 'Use useAppRuntime() so the browser demo can provide its own data.'
+        }
+      ]
+    }
+  },
+  {
+    files: ['src/renderer/src/runtime/AppRuntime.tsx'],
+    rules: { 'no-restricted-properties': 'off' }
+  },
+  {
+    // The demo's fictional data and entry point must never reach the desktop bundle.
+    files: ['src/renderer/src/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/src/demo/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: rendererForbiddenImports,
+              message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
+            },
+            { group: ['**/demo/**', './demo', '../demo'], message: 'Only the browser demo entry may import demo code.' }
           ]
         }
       ]

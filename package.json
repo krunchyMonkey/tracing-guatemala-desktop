@@ -17,11 +17,14 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && npm run demo:build && playwright test",
     "check": "npm run lint && npm run typecheck && npm test && npm run test:e2e",
     "package:dir": "npm run build && electron-builder --dir",
     "package": "npm run build && electron-builder",
-    "smoke:packaged": "node --no-warnings scripts/packaged-smoke.mjs"
+    "smoke:packaged": "node --no-warnings scripts/packaged-smoke.mjs",
+    "demo:build": "vite build --configLoader runner --config vite.demo.config.ts",
+    "demo:lan": "node scripts/demo-lan.mjs",
+    "demo:dev": "vite --configLoader runner --config vite.demo.config.ts"
   },
   "dependencies": {
     "react": "^19.3.1",
