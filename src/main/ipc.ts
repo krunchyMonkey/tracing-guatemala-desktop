@@ -1,5 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
+import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
 import type {
   CaseEvent,
   CaseInput,
@@ -84,6 +85,12 @@ export interface CaseService {
   setState(id: string, to: CaseState): CaseMutationResult
   archive(id: string): CaseMutationResult
   unarchive(id: string): CaseMutationResult
+}
+
+/** Case research brief operations for the local web host (CaseBriefRepository in production). */
+export interface BriefService {
+  get(caseId: string): CaseBrief | null
+  save(caseId: string, input: CaseBriefInput): CaseBriefMutationResult
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */

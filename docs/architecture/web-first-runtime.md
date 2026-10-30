@@ -65,7 +65,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 | Another OS user on the same computer | Data is useless without a session, and sessions start only from the launch link printed in the host's own terminal | Unit tests for wrong tokens and forged cookies |
 | Clickjacking | `frame-ancestors 'none'`, `X-Frame-Options: DENY` | Header test |
 | Script injection | CSP `script-src 'self'`, no inline scripts, `connect-src 'self'`; React escaping | Header test |
-| Oversized or malformed requests | JSON ≤ 64 KB, uploads ≤ 512 MB (rejected by `Content-Length` before reading), strict schemas, timeouts | Unit tests |
+| Oversized or malformed requests | JSON ≤ 256 KB (a full research brief, #17), uploads ≤ 512 MB (rejected by `Content-Length` before reading), strict schemas, timeouts | Unit tests |
 | Path traversal | Static files and downloads are confined to their folder; downloads only allow generated names | Unit tests |
 | Two hosts on one database (or a restore under a running host) | `web-host.lock` with PID; stale locks replaced; in-process double open refused | Unit test |
 | Silent desktop data migration | Separate profile folder; refuses the desktop profile and Chromium-style folders | Unit test |

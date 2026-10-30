@@ -122,6 +122,32 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'case events are append-only');
       END;
     `
+  },
+  {
+    version: 4,
+    name: 'case_briefs',
+    sql: `
+      CREATE TABLE case_briefs (
+        case_id TEXT PRIMARY KEY NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        objective TEXT CHECK (objective IS NULL OR length(objective) BETWEEN 1 AND 4000),
+        facts TEXT CHECK (facts IS NULL OR length(facts) BETWEEN 1 AND 10000),
+        people TEXT CHECK (people IS NULL OR length(people) BETWEEN 1 AND 10000),
+        hypotheses TEXT CHECK (hypotheses IS NULL OR length(hypotheses) BETWEEN 1 AND 10000),
+        questions TEXT CHECK (questions IS NULL OR length(questions) BETWEEN 1 AND 10000),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TRIGGER case_briefs_no_delete BEFORE DELETE ON case_briefs
+      BEGIN
+        SELECT RAISE(ABORT, 'case briefs are never deleted');
+      END;
+
+      CREATE TRIGGER case_briefs_immutable_case BEFORE UPDATE OF case_id ON case_briefs
+      BEGIN
+        SELECT RAISE(ABORT, 'a brief belongs to one case');
+      END;
+    `
   }
 ]
 

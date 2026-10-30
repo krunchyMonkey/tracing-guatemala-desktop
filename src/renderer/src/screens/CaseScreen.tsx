@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDate, formatDateTime } from '../clients/components'
+import { BriefCard } from '../cases/BriefCard'
 import { ArchivedBadge, CaseNotFound, CasesLoadError, DueDate, StateBadge } from '../cases/components'
 import {
   CASE_TRANSITIONS,
@@ -18,8 +19,8 @@ import {
 import { useCaseApi } from '../cases/useCaseApi'
 import { useLoad } from '../cases/useLoad'
 
-// Case overview (#16): the case's details, its state controls, history, and
-// archive. Archived cases and cases of archived clients are read-only.
+// Case overview (#16): the case's details, its state controls, research brief
+// (#17), history, and archive. Archived cases and cases of archived clients are read-only.
 
 type Pending = { kind: 'state'; to: CaseState } | { kind: 'archive' } | { kind: 'unarchive' }
 
@@ -255,6 +256,16 @@ function CaseOverview({ caseId }: { caseId: string }) {
           )}
         </section>
       </div>
+
+      <BriefCard
+        researchCase={researchCase}
+        readOnly={readOnly}
+        readOnlyReason={
+          caseArchived
+            ? 'This case is archived, so its brief can’t be changed.'
+            : 'This client is archived, so the brief can’t be changed.'
+        }
+      />
 
       <History caseId={researchCase.id} version={version} />
 

@@ -122,7 +122,9 @@ export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; back
     updateCase: (id, input) => call('updateCase', id, input),
     setCaseState: (id, to) => call('setCaseState', id, to),
     archiveCase: (id) => call('archiveCase', id),
-    unarchiveCase: (id) => call('unarchiveCase', id)
+    unarchiveCase: (id) => call('unarchiveCase', id),
+    getCaseBrief: (caseId) => call('getCaseBrief', caseId),
+    saveCaseBrief: (caseId, input) => call('saveCaseBrief', caseId, input)
   }
 
   return { data, backup, cases }

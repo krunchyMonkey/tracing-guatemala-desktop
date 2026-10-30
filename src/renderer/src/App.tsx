@@ -3,6 +3,7 @@ import { ClientStoreProvider } from './clients/ClientStore'
 import { ClientsLoaded } from './clients/components'
 import { AppLayout } from './components/AppLayout'
 import { CaseFormScreen } from './screens/CaseFormScreen'
+import { CaseBriefScreen } from './screens/CaseBriefScreen'
 import { CaseScreen } from './screens/CaseScreen'
 import { CasesScreen } from './screens/CasesScreen'
 import { ClientFormScreen } from './screens/ClientFormScreen'
@@ -35,6 +36,7 @@ export function App({ runtime = desktopRuntime }: { runtime?: AppRuntime }) {
                   <Route path="new" element={<CaseFormScreen />} />
                   <Route path=":caseId" element={<CaseScreen />} />
                   <Route path=":caseId/edit" element={<CaseFormScreen />} />
+                  <Route path=":caseId/brief" element={<CaseBriefScreen />} />
                 </Route>
               )}
               <Route path="settings" element={<SettingsScreen />} />

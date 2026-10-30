@@ -1,3 +1,4 @@
+import { checkCaseBrief, emptyBrief, type CaseBrief, type CaseBriefMutationResult } from '../../../shared/case-brief'
 import {
   canTransition,
   checkCase,
@@ -16,12 +17,15 @@ import type { DemoClock } from './demoApi'
 // memory only. Same shared rules and check order as the host's repository
 // (src/main/database/case-repository.ts): not found, then client archived (create)
 // or case/client archived (changes), then the transition matrix, then validation.
+// Research briefs (#17) follow the same rules: not found, then case/client
+// archived, then validation; a save also moves the case's updated time.
 // Cases read client status through the demo's own client data, so archiving a
 // client in the demo makes its cases read-only like everywhere else.
 
 export interface DemoCaseData {
   cases: ResearchCase[]
   events: CaseEvent[]
+  briefs: CaseBrief[]
 }
 
 export function createDemoCases(
@@ -31,6 +35,7 @@ export function createDemoCases(
 ): CaseApi {
   let cases = structuredClone(initial.cases)
   let events = structuredClone(initial.events)
+  let briefs = structuredClone(initial.briefs)
 
   const reply = async <T>(work: () => T): Promise<T> => structuredClone(work())
 
@@ -121,6 +126,22 @@ export function createDemoCases(
       const at = clock.now().toISOString()
       addEvent(id, 'unarchived', null, null, at)
       return structuredClone(store({ ...existing, archivedAt: null, updatedAt: at }))
+    },
+
+    getCaseBrief: (caseId) =>
+      reply(() => (cases.some((c) => c.id === caseId) ? (briefs.find((b) => b.caseId === caseId) ?? emptyBrief(caseId)) : null)),
+
+    async saveCaseBrief(caseId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as CaseBriefMutationResult
+      const { input, issues } = checkCaseBrief(raw)
+      if (!input) return { ok: false, reason: 'invalid', issues }
+
+      const at = clock.now().toISOString()
+      const brief: CaseBrief = { ...input, caseId, updatedAt: at }
+      briefs = [...briefs.filter((b) => b.caseId !== caseId), brief]
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, brief })
     }
   }
 }

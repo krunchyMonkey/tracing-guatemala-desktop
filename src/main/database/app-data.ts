@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { CaseBriefRepository } from './case-brief-repository'
 import { CaseRepository } from './case-repository'
 import { ClientRepository } from './client-repository'
 import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase } from './connection'
@@ -121,6 +122,7 @@ export class AppData {
   clients: ClientRepository
   notes: NoteRepository
   cases: CaseRepository
+  briefs: CaseBriefRepository
 
   constructor(
     private readonly userDataDir: string,
@@ -130,6 +132,7 @@ export class AppData {
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
     this.cases = new CaseRepository(this.opened.db)
+    this.briefs = new CaseBriefRepository(this.opened.db)
   }
 
   get file(): string {
@@ -235,5 +238,6 @@ export class AppData {
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
     this.cases = new CaseRepository(this.opened.db)
+    this.briefs = new CaseBriefRepository(this.opened.db)
   }
 }
