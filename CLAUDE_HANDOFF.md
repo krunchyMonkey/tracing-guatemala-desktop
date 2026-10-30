@@ -1,7 +1,33 @@
-# Claude handoff — Web-first pivot / nightly execution queue (2026-10-29)
+# Claude handoff — Web-first (updated 2026-10-30 after Phase 2.5)
 
 **Repository:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
-**Base:** `main` · **Current owner direction: WEB CLIENT FIRST** · **No autonomous merge**
+**Base:** `main` · **Current owner direction: WEB CLIENT FIRST** · **No autonomous merge** unless the owner authorizes a named set of PRs (Phase 2.5 #135–#138 was authorized on 2026-10-30; that authorization does not cover #111, #139 or later work)
+
+## Verified state (2026-10-30)
+GitHub is the source of status and the code is the truth; re-check both before acting on this file.
+
+- **Phase 2 web engineering:** merged (#13–#20, #109, #110, #112–#117). **#21 researcher pilot stays OPEN** until the researcher actually reviews and decides. Never close it on engineering evidence.
+- **Phase 2.5 — opt-in HTTP LAN Live (#134):** merged as PRs #140 (#135 LAN listener), #141 (#136 device enrollment), #142 (#137 UX, controls, Demo/Live LAN switching; closed #136 and #137) and #143 (#138 automated validation).
+  - #135, #136 and #137 are closed.
+  - **#138 is open:** its owner manual checklist in `docs/pilot/phase-2.5-lan-validation.md` is NOT RUN, and the owner has not approved engineering readiness.
+  - #134 is open until #138 closes.
+- **Next:** #139 (Phase 2.6, HTTPS LAN). Not authorized for autonomous merge.
+- **Open, not in scope:** docs PR #111.
+- **Gate:** `npm run check` (lint, typecheck, Vitest, Playwright electron + browser-demo + web-live), plus `smoke:live`, `pilot:rehearsal`, `lan:rehearsal` and `demo:build`. This repo has **no GitHub CI and no branch protection**, so record local results and never claim CI.
+
+### LAN Live rules (Phase 2.5) — read `docs/operations/lan-live.md`
+- **Default is unchanged:** `npm run live` listens on `127.0.0.1` only. LAN needs `--lan-host <private IPv4 of this computer>`: RFC 1918, on exactly one adapter, no wildcard, no env var.
+- **Fictional test profiles only.** `--lan-host` refuses the default data folder and any folder without `lan-test-profile.json`. `--init-lan-test-profile` marks only a new or empty folder. While LAN is on, restore and backup upload are disabled. Real records over LAN wait for HTTPS (#139) and an explicit owner decision.
+- **Devices:**
+  - pair with a 5-minute, one-time code shown in host Settings;
+  - each device gets its own memory-only session (`tg_lan_<port>`, HttpOnly, SameSite=Strict, `Secure` automatic on https), with 60 min idle / 12 h absolute expiry;
+  - revoke, logout and **Turn off home-network access** (`disableLan`) are available;
+  - backups and device admin are host-only.
+- **Demo/Live switching on the LAN** needs `--lan-demo-name <dns name resolving to the LAN IP>`, so the demo is a different *site* from Live's IP. Switch targets come only from server configuration (the session `demoUrl`, the `tg-live-url` meta tag). Never run `demo:lan` alongside LAN Live (same IP = same site).
+- **Plain HTTP encrypts nothing:** codes, cookies and records can be read on the network. Never describe pairing as protection against interception. No router forwarding, UPnP, guest/public Wi-Fi or internet ingress. No LAN IPs, codes or links in public GitHub.
+- Test hook `TG_TEST_RESOLVE` works only with `TG_TEST_HOOKS=1` (automated tests only).
+
+The sections below are the 2026-10-29 Phase 2 queue, kept for history; their "pending" notes are superseded by the state above.
 
 ## Latest direction (supersedes desktop-first ticket language)
 The project's **React/Vite WEB application is now the primary feature client**, chosen to accelerate iterative development. Continue using the existing shared React UI. **Preserve but PAUSE** Electron-specific feature development, installer polish, and desktop packaging as a merge gate. When the WEB client is feature-complete, the owner will reassess whether to maintain/ship a desktop client. Do not delete desktop files or data and do not falsely close #12 (its installed desktop researcher pilot has not occurred).
@@ -10,7 +36,7 @@ Read [Phase 2 web-first roadmap](./docs/phase-2-case-management-spec.md) and [#1
 
 ### Two *separate* web modes — security boundary
 1. **`demo:build` / `demo:lan` / `demo:dev`**: existing trusted-LAN **plain HTTP, fictional, in-memory demo**, resets on refresh. **NEVER** accepts or displays real clients/research records or accesses SQLite. #102 adds a Driver.js tour (`src/renderer/src/guidance/`, demo-only dynamic import; see `docs/architecture/guidance-service.md`) and an *opt-in* (`npm run demo:lan:feedback`, `scripts/demo-feedback.mjs`) server-side private GitHub Project draft feedback bridge; no GitHub tokens in browser, no fallback to PUBLIC repo issues.
-2. **Persistent local web app, added by #110**: use a compact Node host plus typed same-origin HTTP API, shared validation and SQLite. Start **loopback-only** (127.0.0.1) on the same computer, with Host/Origin/CSRF/session safeguards and transactional backups. No remote-LAN real data or unencrypted access to sensitive records. New feature pages and tests use **this** app as the primary working product.
+2. **Persistent local web app, added by #110**: use a compact Node host plus typed same-origin HTTP API, shared validation and SQLite. Starts **loopback-only** (127.0.0.1) by default, with Host/Origin/CSRF/session safeguards and transactional backups. Phase 2.5 adds an explicit opt-in LAN listener for **fictional test profiles only** (see above); no real records over unencrypted LAN. New feature pages and tests use **this** app as the primary working product.
 
 Electron and its DB remain preserved, but no automatic migration from the researcher's existing `userData` database. Do not make actual client records public, upload data to GitHub, or bundle secrets in `dist-demo/`.
 
@@ -46,7 +72,7 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 ## Definition of complete
 The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
 
-## #110 web-first runtime: implemented (PR pending review)
+## #110 web-first runtime (merged)
 - `npm run web:dev` (127.0.0.1:5175, HMR + API, `.web-dev-data/`), `npm run web:build` (`dist-web/`), `npm run web:local` (127.0.0.1:4180, real data in its own profile folder).
 - Runtime `mode: 'live'` with `src/renderer/src/web/liveApi.ts`; the host is in `src/server/`. Contracts are shared via `src/main/contracts.ts`, services via `src/main/data-services.ts`.
 - Security: loopback only, Host check, launch link → HttpOnly SameSite=Strict cookie, Origin + CSRF header on writes, size and media-type limits, CSP `connect-src 'self'`. See `docs/architecture/web-first-runtime.md`.
