@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ACTIVITY_TYPES,
   formatClock,
@@ -83,7 +83,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const versionRef = useRef<number | null>(null)
   const reviewShownFor = useRef<number | null>(null)
   const timer = synced.timer
-  useEffect(() => {
+  // Layout effect: the version must be current before any interval tick or click can read it.
+  useLayoutEffect(() => {
     versionRef.current = timer?.version ?? null
   })
 
