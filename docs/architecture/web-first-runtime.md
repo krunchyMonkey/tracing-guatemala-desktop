@@ -86,7 +86,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 - Nothing in the backups folder or the safety copies is deleted automatically; the retention habit is a proposal in [live-readiness](../operations/live-readiness.md). The data folder is `0700` on macOS/Linux; on Windows it relies on the per-user AppData permissions.
 - `node:sqlite` is still marked experimental in Node; `web:local` hides that warning.
 
-**Deferred on purpose:** real access to data from another device (phone, tablet). That needs device enrollment and sign-in (#136), hardened sessions, HTTPS (#139) and a separate privacy review. Until then the opt-in home-network listener (#135) serves the page only. `demo:lan` stays fictional-only and has no API.
+**Deferred on purpose:** real client data on another device (phone, tablet). The opt-in home-network listener (#135) with device enrollment (#136) and its UX (#137) runs only on a marked fictional-test profile over plain HTTP; real records need HTTPS, hardened sessions and a privacy decision (#139). `demo:lan` stays fictional-only and has no API.
 
 ## Opt-in home-network listener (#135)
 
@@ -185,7 +185,7 @@ Runbook: [docs/operations/lan-live.md](../operations/lan-live.md).
 | Remote Live page, Live to Demo (`web/demoLink.ts`) | Only the LAN form: `http:`, a DNS host name (not an IP, not localhost) different from `location.hostname`, explicit port 1024-65535, path `/`, no query, credentials or fragment; rebuilt from the parts. On the host's own page the loopback form (#114) applies unchanged. |
 | Non-loopback demo page, Demo to Live (`demo/modeLink.ts`) | Reads `meta[name="tg-live-url"]` (trusted server configuration, never URL parameters). It must be exactly `http://<RFC 1918 IPv4>:<1024-65535>/` and differ from `location.hostname`; the link is rebuilt from the parts. Otherwise plain text "Live mode opens only on the researcher's own computer." Never a loopback link on a non-loopback page. |
 | Loopback demo page | The meta is ignored; the existing `?live=<port>` rule applies. |
-| `npm run demo:lan` | Unchanged: no meta, no Live link. |
+| `npm run demo:lan` | Unchanged: no meta, no Live link. Don't run it while Live is on the LAN: same IP means same site, so the Live LAN cookie would reach it. |
 
 Cookie isolation is checked in a real browser (`tests/web/live-lan.spec.ts`): the demo origin holds no cookie, and Live's `tg_lan_<port>` cookie is scoped to the IP only.
 

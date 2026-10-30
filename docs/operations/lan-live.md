@@ -38,6 +38,8 @@ All commands run on the researcher's computer, in the project folder, after `npm
 
 The standalone `npm run demo:lan` is unchanged: fictional-only, no API, and **no link to Live** (it has no `tg-live-url` marker; a link to a phone's own `127.0.0.1` would be wrong). Use `--lan-demo-name` when you want a Live link from the LAN demo.
 
+**Don't run `npm run demo:lan` while Live is on the home network.** `demo:lan` is opened by the same IP address as LAN Live, only on another port, and browsers treat that as the same site: the device's Live cookie would be sent to the demo server too (it ignores it, but the Demo/Live site boundary is gone). Stop one before starting the other, or use `--lan-demo-name`, which serves the demo under a different host name.
+
 ## Firewall and network
 
 - **Windows:** the network must be set to **Private** (Settings, Network and internet, your Wi-Fi or Ethernet, Network profile type). When Windows asks whether to allow Node.js through the firewall, tick **Private networks only** and never Public. If the prompt never appeared, allow `node.exe` for the Private profile only in Windows Security, Firewall, Allow an app. Tracing Guatemala makes **no automatic firewall edits**.
