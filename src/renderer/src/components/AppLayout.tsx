@@ -8,8 +8,13 @@ const navItems = [
   { to: '/settings', label: 'Settings & Backup', end: false }
 ]
 
+const casesItem = { to: '/cases', label: 'Cases', end: false }
+
 export function AppLayout() {
-  const demo = useAppRuntime().mode === 'demo'
+  const runtime = useAppRuntime()
+  const demo = runtime.mode === 'demo'
+  // Research cases exist only where the runtime provides them (not in the desktop app).
+  const items = runtime.cases ? [...navItems.slice(0, 2), casesItem, ...navItems.slice(2)] : navItems
   return (
     <div className={demo ? 'app-shell has-demo-banner' : 'app-shell'}>
       <a className="skip-link" href="#main-content">
@@ -23,7 +28,7 @@ export function AppLayout() {
         </p>
         <nav aria-label="Main">
           <ul>
-            {navItems.map((item) => (
+            {items.map((item) => (
               <li key={item.to}>
                 <NavLink to={item.to} end={item.end}>
                   {item.label}

@@ -24,7 +24,7 @@ export interface DemoClock {
   newId: () => string
 }
 
-const defaultClock: DemoClock = { now: () => new Date(), newId: () => randomUuid() }
+export const defaultClock: DemoClock = { now: () => new Date(), newId: () => randomUuid() }
 
 export interface DemoData {
   clients: Client[]

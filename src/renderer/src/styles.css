@@ -323,6 +323,7 @@ input[type='text'],
 input[type='email'],
 input[type='search'],
 input[type='datetime-local'],
+input[type='date'],
 select,
 textarea {
   width: 100%;
@@ -1010,6 +1011,200 @@ h1[tabindex='-1']:focus {
 
 .demo-banner-title {
   font-size: 1.05rem;
+}
+
+/* ---------- research cases (#16) ---------- */
+
+/* Progress badges: each state has its own tint and a text label, never colour alone. */
+.state-badge {
+  border: 1px solid transparent;
+}
+
+.state-intake {
+  background: var(--color-info-soft);
+  color: #34406b;
+  border-color: #d3d8ec;
+}
+
+.state-active {
+  background: var(--color-teal-soft);
+  color: var(--color-teal);
+}
+
+.state-waiting {
+  background: var(--color-marigold-soft);
+  color: var(--color-marigold);
+}
+
+.state-delivered {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.state-closed {
+  background: var(--color-surface);
+  color: var(--color-muted);
+  border-color: var(--color-border);
+}
+
+.case-toolbar {
+  grid-template-columns: minmax(16rem, 2fr) repeat(2, minmax(10rem, 1fr));
+  align-items: end;
+}
+
+.case-toolbar fieldset:nth-of-type(2) {
+  grid-column: 2 / -1;
+}
+
+.case-table td .badge + .badge {
+  margin-left: 0.35rem;
+}
+
+.case-ref {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.due-date {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.overdue-tag {
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  background: var(--color-error-soft);
+  color: var(--color-error);
+  border: 1px solid #efc2bc;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.case-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.case-header h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.case-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.preserve-lines {
+  white-space: pre-line;
+}
+
+.state-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.state-note {
+  margin: 0.75rem 0 0;
+}
+
+.archive-row {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.timeline-item.kind-case-state::before {
+  background: var(--color-teal);
+}
+
+.timeline-item.kind-case-archived::before,
+.timeline-item.kind-case-unarchived::before {
+  background: #a3989a;
+}
+
+.case-group h3 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.case-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.case-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.case-list li:last-child {
+  border-bottom: 0;
+}
+
+.case-list a {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.case-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 860px) {
+  .case-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .case-toolbar fieldset:nth-of-type(2) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .case-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .state-actions .button {
+    flex: 1 1 100%;
+  }
+
+  /* The case table reuses the client table's one-card-per-row layout. */
+  .case-table tbody th a {
+    overflow-wrap: anywhere;
+  }
 }
 
 /* ---------- tablets and phones ----------

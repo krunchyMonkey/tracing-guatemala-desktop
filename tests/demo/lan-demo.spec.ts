@@ -200,3 +200,105 @@ test('keeps demo code and sample data out of the desktop bundle', () => {
     expect(bundle).not.toContain(marker)
   }
 })
+
+// ---------- research cases (#16) ----------
+
+const casesShotsDir = join(root, 'docs/screenshots/issue-16')
+const demoIds = {
+  lucia: 'de300000-0000-4000-8000-000000000001',
+  daniel: 'de300000-0000-4000-8000-000000000002',
+  paternal: 'de300000-0000-4000-8000-200000000001',
+  maternal: 'de300000-0000-4000-8000-200000000002',
+  reunion: 'de300000-0000-4000-8000-200000000006'
+}
+const overflowOf = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+test('walks through cases: filter, open, change state, create under a client, then resets on refresh', async ({ page }) => {
+  await page.goto(`${server.url}#/clients`)
+  await nav(page).getByRole('link', { name: 'Cases' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Cases' })).toBeVisible()
+  await expect(page.locator('.result-count')).toHaveText('3 cases')
+  await expect(page.getByText('Overdue')).toHaveCount(1)
+
+  // Filter by state group, archived flag and client.
+  await pick(page, 'Closed')
+  await expect(page.locator('.result-count')).toHaveText(/^2 cases · /)
+  await pick(page, 'Archived')
+  await expect(page.getByRole('link', { name: 'Short family history for a reunion' })).toBeVisible()
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+  await page.getByLabel('Client', { exact: true }).selectOption({ label: 'Daniel Ochoa' })
+  await expect(page.locator('.result-count')).toHaveText(/^1 case · /)
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+
+  // Open a case and change its state; delivered asks first.
+  await page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: /Paternal line/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Waiting on someone' }).click()
+  await expect(page.getByText('Case is now waiting.')).toBeVisible()
+  await page.getByRole('button', { name: 'Mark delivered' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Mark delivered' }).click()
+  await expect(page.getByText('Case is now delivered.')).toBeVisible()
+  const history = page.getByRole('region', { name: 'History' })
+  await expect(history.getByText('Marked delivered')).toBeVisible()
+  await expect(history.getByText('Waiting on someone')).toBeVisible()
+
+  // Create a case under a client from its profile.
+  await page.goto(`${server.url}#/clients/${demoIds.daniel}`)
+  await page.getByRole('link', { name: 'New case' }).click()
+  await page.getByLabel(/^Title/).fill('Demo: parish records search')
+  await page.getByLabel(/^Requested outcome/).fill('Find the parish where the family was baptized.')
+  await page.getByRole('button', { name: 'Create case' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Demo: parish records search' })).toBeVisible()
+  await expect(page.getByText('Case created.')).toBeVisible()
+
+  await page.goto(`${server.url}#/cases`)
+  await expect(page.getByRole('link', { name: 'Demo: parish records search' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' })).toHaveCount(0) // delivered cases leave the Open list
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(page.locator('.result-count')).toHaveText('3 cases')
+  await expect(page.getByRole('link', { name: 'Demo: parish records search' })).toHaveCount(0)
+  await page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' }).click()
+  await expect(page.locator('.state-now')).toContainText('Active')
+})
+
+test('locks a client’s cases in the demo when the client is archived', async ({ page }) => {
+  await page.goto(`${server.url}#/clients/${demoIds.lucia}`)
+  await page.getByRole('button', { name: 'Archive' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Archive client' }).click()
+  await expect(page.getByText(/This profile is read-only/)).toBeVisible()
+  await expect(page.getByText('Restore this client to start a new case')).toBeVisible()
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await expect(page.getByText(/Their cases are read-only/)).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Change state' })).toHaveCount(0)
+})
+
+for (const viewport of viewports) {
+  test(`fits case screens on a ${viewport.name} (${viewport.width}px) without sideways scrolling`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    const routes = [
+      ['cases', '#/cases?state=all'],
+      ['case', `#/cases/${demoIds.maternal}`],
+      ['case-archived', `#/cases/${demoIds.reunion}`],
+      ['case-form', `#/cases/new?client=${demoIds.daniel}`],
+      ['profile-cases', `#/clients/${demoIds.lucia}`]
+    ] as const
+    for (const [name, hash] of routes) {
+      await page.goto(`${server.url}${hash}`)
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expect(page.locator('table, .card, form').first()).toBeVisible()
+      expect(await overflowOf(page), `${name} overflows`).toBeLessThanOrEqual(0)
+    }
+  })
+}
+
+test('captures the demo case list for the PR', async ({ page }) => {
+  test.skip(!capture, 'Screenshots are opt-in: CAPTURE_SCREENSHOTS=1')
+  for (const viewport of [viewports[2]!, viewports[0]!]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`${server.url}#/cases?state=all`)
+    await expect(page.locator('.result-count')).toBeVisible()
+    await page.screenshot({ path: join(casesShotsDir, `demo-${viewport.name}-case-list.png`), fullPage: true })
+  }
+})
