@@ -55,7 +55,10 @@ const callable = {
   archiveCase: caseContracts.archiveCase,
   unarchiveCase: caseContracts.unarchiveCase,
   getCaseBrief: caseContracts.getCaseBrief,
-  saveCaseBrief: caseContracts.saveCaseBrief
+  saveCaseBrief: caseContracts.saveCaseBrief,
+  listJournalEntries: caseContracts.listJournalEntries,
+  createJournalEntry: caseContracts.createJournalEntry,
+  updateJournalEntry: caseContracts.updateJournalEntry
 } as const
 
 export type CallName = keyof typeof callable
@@ -154,7 +157,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -180,7 +183,10 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     archiveCase: ([id]) => cases.archive(id),
     unarchiveCase: ([id]) => cases.unarchive(id),
     getCaseBrief: ([caseId]) => briefs.get(caseId),
-    saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input)
+    saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input),
+    listJournalEntries: ([caseId]) => journal.list(caseId),
+    createJournalEntry: ([caseId, input]) => journal.create(caseId, input),
+    updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

@@ -328,3 +328,34 @@ test('shows a seeded fictional research brief, lets it be edited, and a refresh 
   await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
   await expect(page.getByRole('region', { name: 'Research brief' }).getByText('No research brief yet.')).toBeVisible()
 })
+
+test('shows a seeded fictional research journal, lets an entry be added, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const journal = page.getByRole('region', { name: 'Research journal' })
+  const list = journal.getByRole('list', { name: 'Journal entries, newest first' })
+  await expect(list.getByRole('listitem')).toHaveCount(3)
+  await expect(list.getByRole('listitem').first()).toContainText('Client communication')
+  await expect(journal).toContainText('diocesan index')
+  await expect(journal).toContainText('separate from the client’s notes and contact history')
+
+  // Another case of the same client has its own entries.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(journal.getByRole('listitem')).toHaveCount(2)
+  await expect(journal).not.toContainText('diocesan index')
+
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await journal.getByLabel('Activity (optional)').fill('Record analysis')
+  await journal.getByLabel('What you did or found').fill('An entry added in the demo.')
+  await journal.getByRole('button', { name: 'Add entry' }).click()
+  await expect(list.getByRole('listitem')).toHaveCount(4)
+  await expect(list.getByRole('listitem').first()).toContainText('An entry added in the demo.')
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(list.getByRole('listitem')).toHaveCount(3)
+  await expect(journal.getByText('An entry added in the demo.')).toHaveCount(0)
+
+  // A case without seeded entries shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(journal.getByText('No journal entries yet.')).toBeVisible()
+})

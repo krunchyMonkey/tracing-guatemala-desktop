@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../../../shared/case-brief'
+import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../../../shared/case-journal'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
 import type { TracingGuatemalaApi } from '../../../shared/ipc'
 
@@ -30,6 +31,10 @@ export interface CaseApi {
   /** The case's research brief (all-empty if never saved); null for an unknown case. */
   getCaseBrief(caseId: string): Promise<CaseBrief | null>
   saveCaseBrief(caseId: string, input: CaseBriefInput): Promise<CaseBriefMutationResult>
+  /** The case's research journal, newest first; empty for an unknown case. */
+  listJournalEntries(caseId: string): Promise<JournalEntry[]>
+  createJournalEntry(caseId: string, input: JournalEntryInput): Promise<JournalMutationResult>
+  updateJournalEntry(caseId: string, entryId: string, input: JournalEntryInput): Promise<JournalMutationResult>
 }
 
 export type AppRuntime =

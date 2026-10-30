@@ -1449,3 +1449,25 @@ h1[tabindex='-1']:focus {
 .brief-meta {
   margin: 0;
 }
+
+/* ---------- research journal (#18) ---------- */
+
+.journal-intro {
+  margin: 0 0 0.75rem;
+}
+
+.journal-readonly {
+  margin: 0 0 0.75rem;
+}
+
+.journal-list .timeline-body {
+  overflow-wrap: anywhere;
+}
+
+.timeline-item.kind-journal::before {
+  background: var(--color-marigold);
+}
+
+.journal-activity {
+  overflow-wrap: anywhere;
+}

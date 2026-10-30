@@ -148,6 +148,33 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'a brief belongs to one case');
       END;
     `
+  },
+  {
+    version: 5,
+    name: 'case_journal_entries',
+    sql: `
+      CREATE TABLE case_journal_entries (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        occurred_at TEXT NOT NULL,
+        activity TEXT CHECK (activity IS NULL OR length(activity) BETWEEN 1 AND 60),
+        body TEXT NOT NULL CHECK (length(body) BETWEEN 1 AND 10000),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX case_journal_entries_case_idx ON case_journal_entries (case_id, occurred_at);
+
+      CREATE TRIGGER case_journal_entries_no_delete BEFORE DELETE ON case_journal_entries
+      BEGIN
+        SELECT RAISE(ABORT, 'journal entries are never deleted');
+      END;
+
+      CREATE TRIGGER case_journal_entries_immutable_keys BEFORE UPDATE OF id, case_id ON case_journal_entries
+      BEGIN
+        SELECT RAISE(ABORT, 'journal entry id and case are immutable');
+      END;
+    `
   }
 ]
 

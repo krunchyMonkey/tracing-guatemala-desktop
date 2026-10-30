@@ -261,7 +261,7 @@ export interface NoteCheck {
 }
 
 /** Entries may be back-dated, but not dated more than a day ahead (time zones and clock drift). */
-const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
+export const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000
 
 /** Normalize and validate a note. Contact entries need a channel and direction; notes have neither. */
 export function checkNote(raw: NoteInput, now: Date = new Date()): NoteCheck {

@@ -124,7 +124,10 @@ export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; back
     archiveCase: (id) => call('archiveCase', id),
     unarchiveCase: (id) => call('unarchiveCase', id),
     getCaseBrief: (caseId) => call('getCaseBrief', caseId),
-    saveCaseBrief: (caseId, input) => call('saveCaseBrief', caseId, input)
+    saveCaseBrief: (caseId, input) => call('saveCaseBrief', caseId, input),
+    listJournalEntries: (caseId) => call('listJournalEntries', caseId),
+    createJournalEntry: (caseId, input) => call('createJournalEntry', caseId, input),
+    updateJournalEntry: (caseId, entryId, input) => call('updateJournalEntry', caseId, entryId, input)
   }
 
   return { data, backup, cases }
