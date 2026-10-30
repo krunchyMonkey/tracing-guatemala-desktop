@@ -4,16 +4,20 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { DatabaseTooNewError } from '../main/database/migrations'
 import { DataDirInUseError, defaultLiveDataDir } from './data-dir'
+import { LanHostError } from './lan'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
 import { openInBrowser } from './open-browser'
 import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 
-// `npm run web:local [-- --port <n>] [-- --data-dir <folder>] [-- --open] [-- --no-demo]`:
+// `npm run web:local [-- --port <n>] [-- --data-dir <folder>] [-- --open] [-- --no-demo] [-- --lan-host <address>]`:
 // the persistent Live web app on this computer only (#110); --open also opens the
 // private link in the default browser (#117, `npm run live`). Built by
 // `npm run web:build` into dist-web/server/main.mjs, next to the client in
 // dist-web/client/. Unless --no-demo is given it also serves the fictional demo
 // (dist-demo/) on the next port as http://localhost:<port + 1>/ (#114).
+// --lan-host <private IPv4 address of this computer> adds an opt-in, unencrypted
+// home-network listener that serves the page only and no data (#135). It is a
+// flag and not an environment variable so nothing can switch it on by accident.
 
 declare const __APP_VERSION__: string
 
@@ -22,7 +26,8 @@ const { values } = parseArgs({
     port: { type: 'string' },
     'data-dir': { type: 'string' },
     open: { type: 'boolean', default: false },
-    'no-demo': { type: 'boolean' }
+    'no-demo': { type: 'boolean' },
+    'lan-host': { type: 'string' }
   }
 })
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
@@ -45,9 +50,7 @@ let demoNote = 'Fictional demo: not served (--no-demo).'
 if (!values['no-demo']) {
   try {
     mirror = await startDemoMirror({ port: port + 1, demoDir })
-    demoNote = mirror
-      ? `Fictional demo on this computer: ${mirror.origin}/`
-      : 'Fictional demo: not served (run `npm run web:build` to include it).'
+    demoNote = mirror ? `Fictional demo on this computer: ${mirror.origin}/` : 'Fictional demo: not served (run `npm run web:build` to include it).'
   } catch (error) {
     demoNote =
       (error as NodeJS.ErrnoException).code === 'EADDRINUSE'
@@ -56,12 +59,15 @@ if (!values['no-demo']) {
   }
 }
 
+const lanHost = values['lan-host'] ?? null
+
 let server: Awaited<ReturnType<typeof startLiveServer>>
 try {
   server = await startLiveServer({
     dataDir,
     port,
     staticDir,
+    lanHost,
     demoUrl: mirror ? `${mirror.origin}/?live=${port}` : null,
     appInfo: { name: 'Tracing Guatemala', version: __APP_VERSION__, platform: 'web' }
   })
@@ -70,20 +76,37 @@ try {
   // Only messages written by this app are shown; SQLite messages can quote stored values.
   if (error instanceof DataDirInUseError) console.error('Tracing Guatemala is already running with this data. Use that window, or stop it first.')
   else if (error instanceof DatabaseTooNewError) console.error('This data was saved by a newer version of Tracing Guatemala. Nothing was changed.')
-  else if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') console.error(`Port ${port} is in use. Stop the other program or use --port <n>.`)
+  else if (error instanceof LanHostError) console.error(error.message)
+  else if (
+    lanHost &&
+    ['EADDRNOTAVAIL', 'EADDRINUSE', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '') &&
+    (error as { address?: unknown }).address === lanHost
+  ) {
+    console.error(`The home-network address ${lanHost}:${port} could not be used (it is busy or no longer available). Nothing was started.`)
+  } else if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') console.error(`Port ${port} is in use. Stop the other program or use --port <n>.`)
   else if (error instanceof Error && error.message.startsWith('That ')) console.error(error.message)
   else console.error(`The web app could not start: ${error instanceof Error ? error.name : 'unknown error'}. Nothing was changed.`)
   process.exit(1)
 }
 
+const lanNote = server.lanOrigin
+  ? `
+  Home network (opt-in): ${server.lanOrigin}/
+    UNENCRYPTED HTTP, trusted home network only. Anyone on this network can read
+    or change the traffic. Devices can't open any data yet: device sign-in isn't
+    available in this version. Never forward this port on your router or expose
+    it to the internet.
+`
+  : ''
+
 console.log(`
-Tracing Guatemala — Live (your real data, this computer only)
+Tracing Guatemala — Live (${server.lanOrigin ? 'your real data; the private link works on this computer only' : 'your real data, this computer only'})
 
   Open this private link in your browser on THIS computer:
     ${server.launchUrl}
 
   ${demoNote}
-
+${lanNote}
   Don't share the link: it signs the browser in. It stops working when this
   window is closed. Press Ctrl+C to stop.
 `)

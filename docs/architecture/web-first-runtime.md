@@ -8,7 +8,7 @@ The shared React UI (`src/renderer/src`) gets all data through `useAppRuntime()`
 
 | `mode` | Entry | Data | Backups | Reachable from |
 | --- | --- | --- | --- | --- |
-| `live` | `src/renderer/src/web/main.tsx`, `npm run web:*` | SQLite through the local web host (`src/server`) | Download + upload | **This computer only** (`127.0.0.1`) |
+| `live` | `src/renderer/src/web/main.tsx`, `npm run web:*` | SQLite through the local web host (`src/server`) | Download + upload | **This computer only** (`127.0.0.1`) by default; with the opt-in `--lan-host`, the static page alone is also served on one home-network address (#135) |
 | `demo` | `src/renderer/src/demo/main.tsx`, `npm run demo:*` | In-memory, fictional; resets on refresh | None | Trusted home LAN, plain HTTP |
 | `desktop` | `src/renderer/src/main.tsx`, Electron | SQLite through IPC (preload bridge) | Native dialogs | The desktop window (paused) |
 
@@ -31,14 +31,15 @@ A plain `node:http` server with no framework:
 
 | Module | Purpose |
 | --- | --- |
-| `server.ts` | Opens the data folder (lock + `AppData`) and listens on **`127.0.0.1` only**. There is no host option. |
+| `server.ts` | Opens the data folder (lock + `AppData`) and listens on **`127.0.0.1`**, plus, only with an explicit `lanHost`, one validated private address that serves the static client and no data (#135). Failure to set up the second listener closes everything. |
 | `demo-mirror.ts` | Static-only listener for the fictional demo on `127.0.0.1:<port + 1>` (#114). |
-| `live-host.ts` | Request handler: launch link, `/api/v1/*`, static client files. |
-| `access.ts` | Launch token, sessions, CSRF tokens, Host/Origin checks. |
+| `lan.ts` | Strict IPv4 parsing and `validateLanHost` for the opt-in home-network address (#135). |
+| `live-host.ts` | Request handlers: `handle` (loopback: launch link, `/api/v1/*`, static client) and `handleLan` (static client only; data refused), each with its own Host/origin policy. |
+| `access.ts` | Launch token, sessions, CSRF tokens, Host allowlists and Origin checks against the listener's own origin. |
 | `backup.ts` | Backups in `<data>/backups`, downloads, upload-and-check, restore. |
 | `data-dir.ts` | Default profile folder, desktop-profile refusal, single-host lock. |
 | `open-browser.ts` | `--open`: validates the launch link and builds the OS "open" command (no shell). |
-| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`). |
+| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`, `--lan-host`). |
 
 ### API (v1)
 
@@ -60,9 +61,13 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 
 | Threat | Protection | Test |
 | --- | --- | --- |
-| Another device on the LAN/Wi-Fi | Listens on `127.0.0.1` only, with no option to change it | `live-host.test.ts`: connecting via this computer's LAN address fails |
+| Another device on the LAN/Wi-Fi (default) | Listens on `127.0.0.1` only unless `--lan-host` is given | `live-host.test.ts`: connecting via this computer's LAN address fails; `live-lan.test.ts`: default start has no LAN origin |
+| Data read or changed over the opted-in home network (#135) | The LAN listener serves the static client only. Every `/api` path except the signed-out `session` probe answers `401 not-signed-in` before any body or session is read; `/launch` is `404` and never reads the token; no cookie is set or read | `live-lan.test.ts`: a valid loopback session, CSRF token and LAN Origin still get `401` on call, upload and download |
+| A wildcard, public, link-local or wrong-adapter bind (#135) | `validateLanHost`: strict dotted quad, RFC 1918 only, must be a non-internal IPv4 address of exactly one adapter; no auto-pick, never `0.0.0.0` | `lan.test.ts` (every refusal); `live-lan.test.ts` fails closed on invalid or busy address |
+| DNS rebinding or wrong-name access on the LAN listener (#135) | Host must equal `<address>:<port>`; `127.0.0.1`, `localhost`, hostnames and other ports get `421`; the loopback listener refuses the LAN Host | `live-lan.test.ts` |
+| Eavesdropping or tampering on the home network (#135) | **Not mitigated**: plain HTTP. Only the public static client is served, no data. HTTPS is future work (#139) | Documented; the startup banner warns |
 | A malicious website in the same browser (CSRF) | Writes need `Origin` = the host's own origin, `Sec-Fetch-Site` same-origin when sent, `application/json`/`octet-stream` (forces a CORS preflight, which is refused), and the per-session CSRF header. The cookie is `SameSite=Strict`. | Unit tests; E2E "refuses writes from another site" |
-| DNS rebinding | Every route requires `Host` = `127.0.0.1:<port>` (421 otherwise; `localhost` is refused because it's the demo mirror's site, #114) | Unit test on every route |
+| DNS rebinding | Every route on the loopback listener requires `Host` = `127.0.0.1:<port>` (421 otherwise; `localhost` is refused because it's the demo mirror's site, #114) | Unit test on every route |
 | Other pages on `127.0.0.1` (e.g. the demo on loopback) | Cookies ignore ports, so another loopback port counts as same-site. Origin equality and the CSRF token still block it, and the cookie name includes the port. | Unit test with `Origin: http://127.0.0.1:4173` |
 | Another OS user on the same computer | Data is useless without a session, and sessions start only from the launch link printed in the host's own terminal | Unit tests for wrong tokens and forged cookies |
 | Clickjacking | `frame-ancestors 'none'`, `X-Frame-Options: DENY` | Header test |
@@ -81,7 +86,19 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 - Nothing in the backups folder or the safety copies is deleted automatically; the retention habit is a proposal in [live-readiness](../operations/live-readiness.md). The data folder is `0700` on macOS/Linux; on Windows it relies on the per-user AppData permissions.
 - `node:sqlite` is still marked experimental in Node; `web:local` hides that warning.
 
-**Deferred on purpose:** any access from another device (phone, tablet). That needs authentication beyond a link, HTTPS, hardened sessions and a separate privacy review, and it is not part of Phase 2. `demo:lan` stays fictional-only and has no API.
+**Deferred on purpose:** real access to data from another device (phone, tablet). That needs device enrollment and sign-in (#136), hardened sessions, HTTPS (#139) and a separate privacy review. Until then the opt-in home-network listener (#135) serves the page only. `demo:lan` stays fictional-only and has no API.
+
+## Opt-in home-network listener (#135)
+
+Off by default. `npm run live -- --lan-host <address>` (or `web:local`) starts a second `http.Server` bound to exactly that address and the Live port, next to the unchanged loopback listener. It is a command-line flag only: no environment variable can switch it on.
+
+- **Address rules** (`src/server/lan.ts`): a strict dotted quad (four decimal parts, no leading zeros, no spaces); RFC 1918 only (`10/8`, `172.16/12`, `192.168/16`); it must be assigned to a non-internal IPv4 interface of this computer, and to only one. Refused with a plain-English message: hostnames, IPv6, `0.0.0.0`, loopback, link-local `169.254/16`, CGNAT `100.64/10`, public addresses, addresses this computer lacks (the private addresses found are listed) and ambiguous duplicates. The address is never guessed.
+- **No wildcard, no UPnP, no port forwarding.** After binding, the bound address must equal the requested one.
+- **Fail closed:** the address is validated before anything is bound or opened. If the second listener cannot start (for example the port is busy on that address) the loopback listener, the database and the folder lock are all released and the command exits with an error.
+- **Host allowlist:** built from the bound address and port: `<address>:<port>` only. `localhost`, `127.0.0.1`, hostnames and other ports get `421 bad-host`. The loopback listener in turn refuses the LAN Host. Origin checks compare against each listener's own configured origin, with the scheme as a parameter so HTTPS can follow.
+- **Data API closed until device sign-in (#136):** the LAN listener serves the static client (same CSP and security headers). `GET /api/v1/session` answers `{ authenticated: false, demoUrl: null, remote: true }` without looking up sessions, and the signed-out page then says Live on the home network cannot open data yet. Every other `/api` path, any method, is `401 not-signed-in`. `/launch` is `404`. No `Set-Cookie`, no CORS headers. Log lines start with `lan ` and hold only method, route label and status.
+- **Unencrypted:** traffic is plain HTTP. Anyone on the network can read or change it. The banner says so. Only use a trusted home network; never forward the port on a router.
+- The private launch link, `--open` and sessions stay loopback-only.
 
 ## Demo and Live on the host (#114)
 

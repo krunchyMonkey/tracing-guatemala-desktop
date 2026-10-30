@@ -81,7 +81,7 @@ If anything fails after the files are swapped, the app puts the previous data ba
 
 ## Local session and access assumptions
 
-- The host listens on **127.0.0.1 only**; there is no option for another address. Another device on the network cannot reach it.
+- By default the host listens on **127.0.0.1 only**, so another device on the network cannot reach it. The opt-in `--lan-host <address>` (#135) adds a plain-HTTP home-network listener that serves the page only and refuses all data until device sign-in exists (#136).
 - A browser is signed in only through the private launch link printed in the host's window. The link works for as long as that host runs.
 - **Same-OS-user caveat:** loopback is not isolation between programs. Anything running as the same operating-system user can read the data folder, the window's output and the browser history (which includes the launch link until the host restarts). That is the same exposure as the desktop app. Use a separate OS account for any other person, and lock the screen.
 - Plain HTTP on loopback is fine because nothing leaves the computer. Remote access is deliberately not supported (see `docs/architecture/web-first-runtime.md`).

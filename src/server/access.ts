@@ -2,8 +2,10 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 
 // Who may use the Live web host (#110). Layers, all required for data calls:
-//  1. Loopback only: the server listens on 127.0.0.1 and accepts only its own
-//     Host header, which defeats DNS rebinding.
+//  1. Bound address: each listener accepts only its own Host header (the
+//     loopback one 127.0.0.1:<port>; the opt-in home-network one, #135, only
+//     <its private address>:<port>), which defeats DNS rebinding. The
+//     home-network listener never reaches steps 2-4: it refuses all data calls.
 //  2. Launch link: the host prints a secret link when it starts. Opening it
 //     gives the browser an HttpOnly, SameSite=Strict session cookie. Other OS
 //     users and other devices never see the link.
@@ -82,25 +84,32 @@ export function readCookie(req: IncomingMessage, name: string): string | undefin
 }
 
 /**
- * Host headers this host answers to: 127.0.0.1 and its port only. Not `localhost`:
- * that name is the fictional demo mirror's site (#114), so Live's cookie must never
- * be set there.
+ * Host headers the loopback listener answers to: 127.0.0.1 and its port only. Not
+ * `localhost`: that name is the fictional demo mirror's site (#114), so Live's
+ * cookie must never be set there.
  */
 export function allowedHosts(port: number): string[] {
   return [`127.0.0.1:${port}`]
 }
 
-export function hostIsAllowed(req: IncomingMessage, port: number): boolean {
-  const host = req.headers.host
-  return typeof host === 'string' && allowedHosts(port).includes(host.toLowerCase())
+/** Host headers the opt-in home-network listener answers to (#135): its own address and port, nothing else. */
+export function lanAllowedHosts(address: string, port: number): string[] {
+  return [`${address}:${port}`]
 }
 
-/** For writes: the request comes from a page served by this host. */
-export function isSameOriginRequest(req: IncomingMessage): boolean {
-  const origin = req.headers.origin
+export function hostIsAllowed(req: IncomingMessage, hosts: readonly string[]): boolean {
   const host = req.headers.host
-  if (typeof origin !== 'string' || typeof host !== 'string') return false
-  if (origin.toLowerCase() !== `http://${host.toLowerCase()}`) return false
+  return typeof host === 'string' && hosts.includes(host.toLowerCase())
+}
+
+/**
+ * For writes: the request comes from a page served by this listener. `origin` is
+ * the listener's own configured origin (scheme included, so HTTPS can follow),
+ * never something reflected from the request.
+ */
+export function isSameOriginRequest(req: IncomingMessage, origin: string): boolean {
+  const claimed = req.headers.origin
+  if (typeof claimed !== 'string' || claimed.toLowerCase() !== origin.toLowerCase()) return false
   const site = req.headers['sec-fetch-site']
   return site === undefined || site === 'same-origin'
 }
