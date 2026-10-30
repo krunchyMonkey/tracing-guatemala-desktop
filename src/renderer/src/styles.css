@@ -152,6 +152,73 @@ a {
   font-weight: 600;
 }
 
+/* Roadmap preview: visible future phases, never active links. */
+.upcoming-nav {
+  margin-top: 1.75rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.sidebar .upcoming-nav-heading {
+  margin: 0 0 0.6rem;
+  padding: 0 0.75rem;
+  color: var(--color-accent-strong);
+  font: 700 0.72rem/1.5 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.upcoming-nav-heading span {
+  color: var(--color-marigold);
+}
+
+.sidebar .upcoming-nav-list {
+  gap: 0.3rem;
+}
+
+.upcoming-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-muted);
+  text-align: left;
+  cursor: not-allowed;
+}
+
+.upcoming-nav-item:disabled {
+  opacity: 0.75;
+}
+
+.upcoming-nav-lock {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--color-accent-strong);
+}
+
+.upcoming-nav-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.87rem;
+  font-weight: 500;
+}
+
+.upcoming-nav-phase {
+  flex: none;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.3rem;
+  background: var(--color-surface);
+  color: var(--color-accent-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 .content {
   padding: 2rem 3rem 3rem;
   max-width: 72rem;
@@ -1042,6 +1109,21 @@ h1[tabindex='-1']:focus {
   .sidebar ul {
     display: flex;
     flex-wrap: wrap;
+  }
+
+  .sidebar nav {
+    width: 100%;
+  }
+
+  .upcoming-nav {
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+  }
+
+  .sidebar .upcoming-nav-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(9.2rem, 100%), 1fr));
+    gap: 0.25rem 0.5rem;
   }
 
   .content {
