@@ -155,7 +155,7 @@ describe('ModeSwitcher', () => {
 
   it('Demo: links back to Live only for the link kind', () => {
     renderSwitcher(demo({ kind: 'link', href: 'http://127.0.0.1:4180/' }))
-    expect(screen.getByRole('region', { name: 'Workspace mode' }).textContent).toContain('Demo · nothing is saved')
+    expect(screen.getByRole('region', { name: 'Workspace mode' }).textContent).toContain('Demo · fictional, resets on refresh')
     expect(screen.getByRole('link', { name: 'Back to Live (your real data)' }).getAttribute('href')).toBe('http://127.0.0.1:4180/')
   })
 

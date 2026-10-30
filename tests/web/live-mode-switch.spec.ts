@@ -119,7 +119,7 @@ test('switches Live -> demo -> Live without leaking data or the session either w
   await expect(page).toHaveURL(`${demoOrigin}/?live=${livePort}`)
   expect(new URL(page.url()).origin).toBe(demoOrigin)
   await expect(page.getByRole('region', { name: 'Demo mode' })).toContainText('Demo Mode — Fictional Data Only')
-  await expect(switcher(page)).toContainText('Demo · nothing is saved')
+  await expect(switcher(page)).toContainText('Demo · fictional, resets on refresh')
   if (capture) await page.screenshot({ path: join(shotsDir, 'demo-on-host-switcher.png') })
   await nav(page).getByRole('link', { name: 'Clients' }).click()
   await expect(page.getByText('43 active · 5 archived')).toBeVisible()

@@ -204,6 +204,11 @@ export class DeviceAccess {
     return this.removeDevice(id)
   }
 
+  /** Forgets the pairing code, so none can be redeemed. */
+  clearCode(): void {
+    this.code = null
+  }
+
   /** Removes every device and session; returns how many devices there were. */
   revokeAll(): number {
     const count = this.devices.size

@@ -220,7 +220,7 @@ for (const viewport of viewports) {
 test('on the LAN address, never links to Live, even when asked to with ?live=4180', async ({ page }) => {
   test.skip(!lanAddress, 'No private LAN address on this computer; the unit tests cover every hostname.')
   await page.goto(`${server.url}?live=4180#/clients`)
-  await expect(page.getByRole('region', { name: 'Workspace mode' })).toContainText('Demo · nothing is saved')
+  await expect(page.getByRole('region', { name: 'Workspace mode' })).toContainText('Demo · fictional, resets on refresh')
   await expect(page.getByText('Live mode opens only on the researcher’s own computer.')).toBeVisible()
   await expect(page.getByRole('link', { name: /Back to Live/ })).toHaveCount(0)
   const hrefs = await page.locator('a[href]').evaluateAll((links) => links.map((a) => a.getAttribute('href') ?? ''))

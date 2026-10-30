@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router'
 import { useAppRuntime } from '../runtime/AppRuntime'
 import { TimerProvider } from '../cases/TimerContext'
 import { DemoBanner } from './DemoBanner'
+import { HttpRiskBanner } from './HttpRiskBanner'
 import { ModeSwitcher } from './ModeSwitcher'
 import { TimerPill } from './TimerPill'
 
@@ -28,15 +29,18 @@ const upcomingItems = [
 export function AppLayout() {
   const runtime = useAppRuntime()
   const demo = runtime.mode === 'demo'
+  // A paired home-network device always sees the HTTP warning (#137).
+  const remote = runtime.mode === 'live' && runtime.remote === true
   // Research cases exist only where the runtime provides them (not in the desktop app).
   const items = runtime.cases ? [...navItems.slice(0, 2), casesItem, ...navItems.slice(2)] : navItems
   return (
     <TimerProvider>
-    <div className={demo ? 'app-shell has-demo-banner' : 'app-shell'}>
+    <div className={demo || remote ? 'app-shell has-demo-banner' : 'app-shell'}>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       {demo && <DemoBanner />}
+      {remote && <HttpRiskBanner />}
       <aside className="sidebar">
         <p className="brand">
           Tracing Guatemala

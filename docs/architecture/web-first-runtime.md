@@ -32,14 +32,14 @@ A plain `node:http` server with no framework:
 | Module | Purpose |
 | --- | --- |
 | `server.ts` | Opens the data folder (lock + `AppData`) and listens on **`127.0.0.1`**, plus, only with an explicit `lanHost`, one validated private address that serves the static client and no data (#135). Failure to set up the second listener closes everything. |
-| `demo-mirror.ts` | Static-only listener for the fictional demo on `127.0.0.1:<port + 1>` (#114). |
-| `lan.ts` | Strict IPv4 parsing and `validateLanHost` for the opt-in home-network address (#135). |
+| `demo-mirror.ts` | Static-only listener for the fictional demo on `127.0.0.1:<port + 1>` (#114); with `bindAddress`/`hosts`/`liveUrl` it is also the LAN demo (#137). |
+| `lan.ts` | Strict IPv4 parsing and `validateLanHost` for the opt-in home-network address (#135); `validateLanDemoName` and the DNS check for `--lan-demo-name` (#137). |
 | `live-host.ts` | Request handlers: `handle` (loopback: launch link, `/api/v1/*`, static client) and `handleLan` (static client only; data refused), each with its own Host/origin policy. |
 | `access.ts` | Launch token, sessions, CSRF tokens, Host allowlists and Origin checks against the listener's own origin. |
 | `backup.ts` | Backups in `<data>/backups`, downloads, upload-and-check, restore. |
 | `data-dir.ts` | Default profile folder, desktop-profile refusal, single-host lock. |
 | `open-browser.ts` | `--open`: validates the launch link and builds the OS "open" command (no shell). |
-| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`, `--lan-host`). |
+| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`, `--lan-host`, `--lan-demo-name`). |
 
 ### API (v1)
 
@@ -147,7 +147,7 @@ Host check first (`421 bad-host`). `/launch` is `404` and never touches the laun
 | --- | --- | --- |
 | Clients, notes, cases, briefs, journal, tasks, hours, timer, studio summary, app info | yes | yes |
 | `createBackup`, `restoreBackup`, `getBackupStatus`, backup upload and download | yes (restore and upload are off while the LAN listener is on) | no, `403 host-only` |
-| `getLanStatus`, `createPairingCode` (`409 lan-off` if the listener is off), `listDevices`, `revokeDevice`, `revokeAllDevices` | yes | no, `403 host-only` |
+| `getLanStatus`, `createPairingCode` (`409 lan-off` if the listener is off), `listDevices`, `revokeDevice`, `revokeAllDevices`, `disableLan` (#137) | yes | no, `403 host-only` |
 
 The remote allowlist is `callable` minus the host-only names (`REMOTE_CALL_NAMES` in `live-host.ts`).
 
@@ -164,6 +164,39 @@ The remote allowlist is `callable` minus the host-only names (`REMOTE_CALL_NAMES
 | Real backup imported into a LAN-exposed profile | Restore and upload refused on loopback while the listener is on | `live-lan.test.ts` |
 | Real data exposed over HTTP | Real-data gate (default profile refused; marker required) | `live-lan.test.ts` |
 | **Session theft, code theft or record sniffing over plaintext HTTP** | **Not mitigated.** Anyone who can observe the network can read the code, the cookie and every record, and can hijack a session. `HttpOnly` and `SameSite` do not help against that. Only HTTPS (#139) does. Use a trusted network and fictional data only. | n/a |
+
+### Operational controls and LAN switching (#137)
+
+Runbook: [docs/operations/lan-live.md](../operations/lan-live.md).
+
+**`disableLan`** (host-only: loopback session and CSRF) is one-way until restart. It sets the host's LAN policy to off, revokes every device, clears the pairing code, closes the LAN listener and the LAN demo listener (`onDisableLan` passed into `createLiveHost` by `startLiveServer`; also `RunningLiveServer.disableLan()`), and logs one console line. `getLanStatus` then reports `enabled: false`, `createPairingCode` answers `409 lan-off`, and restore and upload work again. Turning it on again needs a restart with `--lan-host`; nothing turns LAN on at startup or after a reinstall.
+
+**Remote page UX.** Every page of a paired device carries an `Unencrypted HTTP — trusted home network only` banner (the enrollment page keeps its own notice). A page is "remote" when `location.hostname` is not `127.0.0.1`. There an unreachable host (the session probe or a call cannot connect) shows "Can't reach the researcher's computer…" with Retry and never the private-link text, and a 401 mid-use returns to enrollment with "Your session ended…".
+
+**The site boundary.** Cookies ignore ports, so Live at `http://<ip>:<port>` and a demo at `http://<ip>:<other port>` would be one site. The LAN demo is therefore reached by a DNS name (`--lan-demo-name`; requires `--lan-host`; ignored with `--no-demo`), which is a different site from the IP:
+
+- The name must be DNS syntax (labels `[a-z0-9-]`, no leading or trailing hyphen, at most 253 characters, at least one dot), not an IP literal (a numeric last label counts as one), not `localhost` or `*.localhost`.
+- It is resolved with `dns.promises.lookup(name, { all: true, family: 4 })` and the results must include the LAN address. On any failure Live LAN still starts, the demo is not served, the console says why, and remote pages show "Demo not available from this device".
+- A second `demo-mirror` listener binds the LAN address on `port + 1` and accepts the Host `<name>:<port + 1>` exactly; the IP Host, `localhost` and every other name get `421`. It serves the same `dist-demo/` with the same headers and CSP (`connect-src 'none'`), has no API and sets no cookie. Its `index.html` gets `<meta name="tg-live-url" content="http://<lanIP>:<port>/">` inserted right after `<head>` with an escaped attribute. The loopback mirror injects nothing.
+- The Live LAN session reply reports `demoUrl: "http://<name>:<port + 1>/"` or `null`. The loopback reply is unchanged.
+
+| Page | Link rule |
+| --- | --- |
+| Remote Live page, Live to Demo (`web/demoLink.ts`) | Only the LAN form: `http:`, a DNS host name (not an IP, not localhost) different from `location.hostname`, explicit port 1024-65535, path `/`, no query, credentials or fragment; rebuilt from the parts. On the host's own page the loopback form (#114) applies unchanged. |
+| Non-loopback demo page, Demo to Live (`demo/modeLink.ts`) | Reads `meta[name="tg-live-url"]` (trusted server configuration, never URL parameters). It must be exactly `http://<RFC 1918 IPv4>:<1024-65535>/` and differ from `location.hostname`; the link is rebuilt from the parts. Otherwise plain text "Live mode opens only on the researcher's own computer." Never a loopback link on a non-loopback page. |
+| Loopback demo page | The meta is ignored; the existing `?live=<port>` rule applies. |
+| `npm run demo:lan` | Unchanged: no meta, no Live link. |
+
+Cookie isolation is checked in a real browser (`tests/web/live-lan.spec.ts`): the demo origin holds no cookie, and Live's `tg_lan_<port>` cookie is scoped to the IP only.
+
+Test hook: `TG_TEST_RESOLVE=<name>=<ip>` is honoured only with `TG_TEST_HOOKS=1` and prints a warning when active (the unit tests inject `lanDemoResolve` instead).
+
+| Threat | Protection | Test |
+| --- | --- | --- |
+| LAN demo and Live sharing a site or cookies | Demo only under a DNS name; the IP Host is refused with `421`; the name is validated and must resolve to the LAN address; the demo never sets a cookie | `live-lan-ux.test.ts`, `live-lan.spec.ts` |
+| Hostile switch destination (`javascript:`, IP, same host, extra parameters) | Strict re-validation and rebuilding in `demoLink.ts` and `modeLink.ts`; URL parameters never choose the Live address on a non-loopback page | `LanUx.test.tsx` |
+| LAN access left on by accident | Flag only, never at startup; `disableLan` closes both listeners and revokes all devices | `live-lan-ux.test.ts`, `live-lan.spec.ts` |
+| Test resolver hook used in a real run | Ignored unless `TG_TEST_HOOKS=1`; warns when active | `live-lan.spec.ts` |
 
 ### HTTPS migration contract
 
@@ -191,7 +224,7 @@ The researcher needs to look at the fictional demo and at her real data from the
 
 - *Live to demo:* the host reports `demoUrl` (`http://localhost:<port + 1>/?live=<port>`). The page accepts only `http:`, hostname `localhost`, an explicit port 1024-65535, path `/`, no credentials or fragment and no query other than `?live=<port>`, and rebuilds the link from those parts. Anything else means "Demo not available". The link opens in the same tab. The signed-out screen offers it too.
 - *Demo to Live:* computed from `window.location` alone (`demo/modeLink.ts`). If the hostname is `localhost` or `127.0.0.1` and `live` is exactly one integer 1024-65535, the link is `http://127.0.0.1:<live>/`. A loopback page without a usable `live` says "Start Tracing Guatemala on this computer to use Live." Any other hostname says "Live mode opens only on the researcher's own computer." and has **no link at all**, even when `?live=` is present.
-- The sidebar always shows the current mode and what persists ("Live · saved on this computer", "Demo · nothing is saved"); the demo banner stays. The unavailable cases are plain text: no anchor, no button.
+- The sidebar always shows the current mode and what persists ("Live · saved on this computer", "Demo · fictional, resets on refresh"); the demo banner stays. The unavailable cases are plain text: no anchor, no button.
 - Back in Live nobody is asked for the launch link again: the cookie belongs to `127.0.0.1` and the demo never touched it. The page document is static; the session is read by the page's own same-origin request, which `SameSite=Strict` allows.
 
 **On the home network.** `demo:lan` is unchanged: fictional-only, no API. A phone opening it at `http://192.168.x.x:4173/` is *not* on the host, so the demo offers no link to Live; a `127.0.0.1` link there would open the phone's own localhost. The mirror listens on loopback only and is not reachable from the LAN.

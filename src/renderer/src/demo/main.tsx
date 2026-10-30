@@ -30,7 +30,7 @@ const runtime: AppRuntime = {
     data.listClients({ text: '', status: 'all', sources: [], sort: 'name' })
   ),
   // Decided from this page's own address only; the demo makes no network calls (#114).
-  switcher: demoModeSwitch(window.location)
+  switcher: demoModeSwitch(window.location, document.querySelector('meta[name="tg-live-url"]')?.getAttribute('content'))
 }
 
 const container = document.getElementById('root')

@@ -21,6 +21,12 @@ import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 // only starts on a folder marked as fictional test data, made once with
 // --init-lan-test-profile --data-dir <new folder>. It is a flag and not an
 // environment variable so nothing can switch it on by accident.
+// --lan-demo-name <host name> (#137, needs --lan-host, ignored with --no-demo) also
+// serves the fictional demo on the LAN address at port + 1, reached by that name
+// (which must resolve to the LAN address) so Live and the demo are different
+// sites. If it can't be served, Live still starts and the console says why.
+// Test only: TG_TEST_HOOKS=1 with TG_TEST_RESOLVE=<name>=<address> makes that
+// name resolve server-side without touching DNS; it does nothing otherwise.
 
 declare const __APP_VERSION__: string
 
@@ -31,12 +37,14 @@ const { values } = parseArgs({
     open: { type: 'boolean', default: false },
     'no-demo': { type: 'boolean' },
     'lan-host': { type: 'string' },
+    'lan-demo-name': { type: 'string' },
     'init-lan-test-profile': { type: 'boolean' }
   }
 })
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
 const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? defaultLiveDataDir())
 const lanHost = values['lan-host'] ?? null
+const lanDemoName = values['lan-demo-name'] ?? null
 const staticDir = fileURLToPath(new URL('../client/', import.meta.url))
 const demoDir = fileURLToPath(new URL('../../dist-demo/', import.meta.url))
 
@@ -47,6 +55,24 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
 if (!existsSync(join(staticDir, 'index.html'))) {
   console.error('The web app is not built. Run `npm run web:build` first.')
   process.exit(1)
+}
+
+if (lanDemoName !== null && !lanHost) {
+  console.error('--lan-demo-name needs --lan-host <address>: the demo is served on that home-network address.')
+  process.exit(1)
+}
+
+// Strictly test-gated: without TG_TEST_HOOKS=1 the system resolver is always used.
+let lanDemoResolve: ((name: string) => Promise<string[]>) | undefined
+if (process.env['TG_TEST_HOOKS'] === '1' && process.env['TG_TEST_RESOLVE']) {
+  const [testName, testAddress] = process.env['TG_TEST_RESOLVE'].split('=')
+  if (testName && testAddress) {
+    console.warn('TEST HOOK ACTIVE: a demo name is resolved from TG_TEST_RESOLVE. Never set TG_TEST_HOOKS outside automated tests.')
+    lanDemoResolve = async (name) => {
+      if (name !== testName) throw new Error('unresolved')
+      return [testAddress]
+    }
+  }
 }
 
 if (values['init-lan-test-profile']) {
@@ -86,6 +112,9 @@ try {
     port,
     staticDir,
     lanHost,
+    lanDemoName: values['no-demo'] ? null : lanDemoName,
+    demoDir,
+    ...(lanDemoResolve ? { lanDemoResolve } : {}),
     demoUrl: mirror ? `${mirror.origin}/?live=${port}` : null,
     appInfo: { name: 'Tracing Guatemala', version: __APP_VERSION__, platform: 'web' }
   })
@@ -100,7 +129,9 @@ try {
     ['EADDRNOTAVAIL', 'EADDRINUSE', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '') &&
     (error as { address?: unknown }).address === lanHost
   ) {
-    console.error(`The home-network address ${lanHost}:${port} could not be used (it is busy or no longer available). Nothing was started.`)
+    console.error(
+      `The home-network address ${lanHost}:${port} could not be used (it is busy or no longer available). Nothing was started. If the computer's network address changed, restart with the new --lan-host address; paired devices pair again.`
+    )
   } else if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') console.error(`Port ${port} is in use. Stop the other program or use --port <n>.`)
   else if (error instanceof Error && error.message.startsWith('That ')) console.error(error.message)
   else console.error(`The web app could not start: ${error instanceof Error ? error.name : 'unknown error'}. Nothing was changed.`)
@@ -115,7 +146,17 @@ const lanNote = server.lanOrigin
     DATA ONLY. Pair a device from Settings on this computer: the pairing code is
     shown there. Pairing controls who can sign in; it does not encrypt anything.
     Never forward this port on your router or expose it to the internet.
+    Turn it off from Settings on this computer, or stop this window. Restart with
+    --lan-host to turn it on again.
+${
+    server.lanDemoUrl
+      ? `    Fictional demo on the home network: ${server.lanDemoUrl}
 `
+      : lanDemoName && !values['no-demo']
+        ? `    Fictional demo on the home network: not served (${server.lanDemoNote ?? 'unknown reason'}). Live works without it.
+`
+        : ''
+  }`
   : ''
 
 console.log(`

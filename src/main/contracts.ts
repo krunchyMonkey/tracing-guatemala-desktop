@@ -611,5 +611,9 @@ export const liveContracts = {
   revokeAllDevices: {
     args: z.tuple([]),
     result: z.strictObject({ revoked: count })
+  },
+  disableLan: {
+    args: z.tuple([]),
+    result: z.strictObject({ disabled: z.boolean() })
   }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

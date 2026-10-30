@@ -1522,6 +1522,19 @@ h1[tabindex='-1']:focus {
   }
 }
 
+/* ---------- paired-device HTTP warning (#137) ---------- */
+
+.http-risk-banner {
+  grid-column: 1 / -1;
+  padding: 0.6rem 1rem;
+  border-bottom: 3px solid var(--color-marigold);
+  background: var(--color-marigold-soft);
+  color: #4a3200;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- research brief (#17) ---------- */
 
 .brief-header {

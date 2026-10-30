@@ -1,4 +1,6 @@
+import { promises as dns } from 'node:dns'
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os'
+import { isDemoHostname } from '../shared/dns-name'
 
 // Validation for the opt-in home-network listener (#135). The address must be
 // given explicitly and must be one private IPv4 address that belongs to exactly
@@ -70,7 +72,7 @@ export function validateLanHost(requested: string, interfaces: Interfaces = netw
   )
   if (matches.length === 0) {
     const list = found.length ? found.map((a) => `${a.address} (${a.name})`).join(', ') : 'none'
-    return refuse(`${requested} is not an address of this computer. Home-network addresses found: ${list}.`)
+    return refuse(`${requested} is not an address of this computer. Home-network addresses found: ${list}. If the computer's network address changed, restart with the new --lan-host address; paired devices pair again.`)
   }
   if (matches.length > 1) {
     return refuse(
@@ -78,4 +80,38 @@ export function validateLanHost(requested: string, interfaces: Interfaces = netw
     )
   }
   return { ok: true, address: requested, interfaceName: matches[0]! }
+}
+
+// The LAN demo (#137) must be a different *site* from the Live address, and
+// cookies ignore ports, so it is reached by a DNS name that points at this
+// computer. The name is checked for syntax and must resolve to the LAN address.
+
+/** Looks a name up as IPv4 addresses. Test-only injection replaces it. */
+export type LanDemoResolve = (name: string) => Promise<string[]>
+
+const systemResolve: LanDemoResolve = async (name) => (await dns.lookup(name, { all: true, family: 4 })).map((entry) => entry.address)
+
+export function validateLanDemoName(requested: string): { ok: true; name: string } | { ok: false; error: string } {
+  const name = requested.trim().toLowerCase()
+  if (!isDemoHostname(name)) {
+    return {
+      ok: false,
+      error: `"${requested.slice(0, 80)}" can't be used as a demo name. Use a host name such as tg-demo.home.arpa (letters, digits and hyphens, at least one dot; not an IP address, not localhost).`
+    }
+  }
+  return { ok: true, name }
+}
+
+/** Resolves `name` and requires the LAN address among the answers; returns an error message or null. */
+export async function checkLanDemoResolves(name: string, address: string, resolve: LanDemoResolve = systemResolve): Promise<string | null> {
+  let found: string[]
+  try {
+    found = await resolve(name)
+  } catch {
+    return `${name} does not resolve to an address. Add it to your router's DNS or this network's hosts file, pointing at ${address}.`
+  }
+  if (!found.includes(address)) {
+    return `${name} resolves to ${found.length ? found.join(', ') : 'nothing'}, not to ${address}. Point it at ${address}.`
+  }
+  return null
 }

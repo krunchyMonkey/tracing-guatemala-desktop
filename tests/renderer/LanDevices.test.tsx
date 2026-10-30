@@ -130,7 +130,8 @@ describe('host device panel', () => {
         const count = devices.length
         devices = []
         return { revoked: count }
-      })
+      }),
+      disableLan: vi.fn(async () => ({ disabled: true }))
     }
     const fake = createFakeApi()
     const runtime: AppRuntime = {
