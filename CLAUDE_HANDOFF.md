@@ -16,23 +16,23 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 
 ## Current reality
 - Core Phase 1 #1–#11 and LAN preview #100 merged (PR #108, commit `b17881c`).
-- **#102** (Driver.js guided walkthrough + private Project draft feedback) remains OPEN and is the last planned Phase 1 web-demo feature. Implement/test with fictional data. If private Project ID/credential unavailable, ship opt-in feedback disabled with mock tests and explicit owner setup. Do not invent a private Project or post user feedback to the public repo.
+- **#102** (Driver.js guided walkthrough + private Project draft feedback) moved from Phase 1 to **Phase 2, Milestone 2** as optional, parallel demo-experience work. It does NOT block #110. Implement/test with fictional data. If private Project ID/credential unavailable, ship opt-in feedback disabled with mock tests and explicit owner setup. Do not invent a private Project or post user feedback to the public repo.
 - **#12** remains OPEN/**deferred** because desktop acceptance hasn't happened. This is not an engineering blocker for web-first Phase 2.
 - **#110** is the new Phase 2 P0 **web-first persistent local runtime foundation**.
 - Phase 2 groomed: **#13–#21 plus #109**. Each issue defines tests, scope and dependencies. All substantive design defaults are provisional, with actual researcher review in the **WEB-first pilot #21**.
 
 ## Suggested coding sequence for tonight
 
-1. **#102** — final Phase 1 web-demo tour + optional private Project feedback. One focused PR with browser E2E/CSP/security checks. No public feedback issues, no default external connections.
-2. **#110** — web-first persistent *localhost* runtime (P0). One PR with `web:dev`, `web:build`, `web:local` or documented equivalents, typed React adapters, Phase 1 persisted client/note parity, local SQLite/backup safety and browser API security tests.
-3. **#13** — short owner-authorized *provisional* research case lifecycle/intake design; **#14** — one-to-many case schema/data/typed API design. These two may be drafted separately while #110 is in flight; do not fabricate researcher approval.
-4. **#15** — case storage, migration and web API; **#16** — browser case directory/detail/forms and fictional-demo parity.
-5. **#17**, **#18**, **#19** — case research brief, journal, tasks/optional deadlines; can run as independent PRs only when #15/#16's case contract is stable.
-6. **#109** — actual research hours per case (timer + manual sessions) after case overview; prefer after journal.
-7. **#20** — web-browser user-triggered Markdown/text summary download plus strict client/case isolation.
-8. **#21** — integrated WEB researcher pilot kit and test evidence. **Do not close** until the actual researcher completes her review and gives a decision.
+1. **#110** — P0 persistent *localhost* runtime: `web:dev`, `web:build`, `web:local`, typed React adapters, Phase 1 client/note parity, SQLite/backup safety and browser API security tests. This is independent of #102.
+2. **#13 / #14** — short provisional lifecycle/intake design and case schema/API contract; may run while #110 is in flight.
+3. **#15 / #16** — case storage, migration and local web API, then case directory/detail/forms and fictional-demo parity.
+4. **#17 / #18 / #19** — research brief, journal, tasks/optional deadlines; independent PRs once case contracts are stable.
+5. **#109** — research time sessions, timer and manual entries after case overview, preferably after journal.
+6. **#20** — browser-triggered selected-case Markdown/text export with strict cross-client isolation.
+7. **#102 (parallel Phase 2 showcase)** — optional Driver.js guided fictional-demo tour and opt-in private Project draft feedback. Does not block #110 or real-data readiness. Keep LAN demo and local Live runtime fully isolated.
+8. **#21** — integrated web researcher pilot and real approval; do not close until actual researcher feedback.
 
-**Priority if the night is short:** make #102 and #110 solid and open a first complete #13/#14/#15 vertical slice rather than dozens of incomplete PRs. No developer may assert PRs are merged or tests passed without verifying it.
+**Priority if the night is short:** make #110 solid, then deliver a first complete case vertical slice. #102 can be worked independently for the release showcase, but must not delay safe persistence. No developer may assert PRs are merged or tests passed without verifying it.
 
 ## Git/worktree and PR workflow
 
@@ -44,4 +44,4 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 - Every PR: summary, issue/dependencies, scope, screenshots for UI, exact test results/unrun checks, security/privacy impact, manual steps and known limitations. No real names, research records, credentials or screenshots in PUBLIC GitHub.
 
 ## Definition of complete
-The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
+Phase 1 core engineering is merged; **#102 is now a Phase 2 showcase ticket**, not a Phase 1 gate. The installed desktop **pilot #12 remains deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
