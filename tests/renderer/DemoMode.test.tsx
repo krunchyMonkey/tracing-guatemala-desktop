@@ -27,7 +27,13 @@ const newClient: ClientInput = {
 
 const note: NoteInput = { kind: 'note', occurredAt: new Date().toISOString(), channel: null, direction: null, body: 'Hi' }
 
-const demoRuntime = (): AppRuntime => ({ mode: 'demo', data: createDemoApi(buildDemoData(), appInfo), backup: null, switcher: { kind: 'unavailable', reason: 'not-available' } })
+const demoRuntime = (): AppRuntime => ({
+  mode: 'demo',
+  data: createDemoApi(buildDemoData(), appInfo),
+  backup: null,
+  cases: null,
+  switcher: { kind: 'unavailable', reason: 'not-available' }
+})
 
 describe('randomUuid', () => {
   it('uses crypto.randomUUID where the browser provides it', () => {
@@ -60,8 +66,14 @@ describe('demo data', () => {
   it('starts with fictional active, archived and returning clients and their history', async () => {
     const api = createDemoApi(buildDemoData(), appInfo)
     const clients = await api.listClients(everyClient)
-    expect(clients).toHaveLength(8)
-    expect(clients.filter((c) => c.status === 'archived').map((c) => c.displayName)).toEqual(['Rosa Chávez Ixcoy'])
+    expect(clients).toHaveLength(48)
+    expect(clients.filter((c) => c.status === 'archived').map((c) => c.displayName).sort()).toEqual([
+      'Armando Rosales Tzep',
+      'Aurelio Pop Chajón',
+      'Iván Choc Pop',
+      'Rosa Chávez Ixcoy',
+      'Teresa Ajxup Cahuec'
+    ])
     expect(new Set(clients.map((c) => c.source))).toEqual(new Set(['fiverr', 'referral', 'direct', 'other']))
     for (const c of clients) if (c.email) expect(c.email).toMatch(/@example\.(com|org)$/)
 
@@ -116,7 +128,7 @@ describe('demo data', () => {
 
     const reload = createDemoApi(data, appInfo)
     const clients = await reload.listClients(everyClient)
-    expect(clients).toHaveLength(8)
+    expect(clients).toHaveLength(48)
     expect(clients.find((c) => c.id === demoClientIds.daniel)!.status).toBe('active')
   })
 })

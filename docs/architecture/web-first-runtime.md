@@ -37,7 +37,8 @@ A plain `node:http` server with no framework:
 | `access.ts` | Launch token, sessions, CSRF tokens, Host/Origin checks. |
 | `backup.ts` | Backups in `<data>/backups`, downloads, upload-and-check, restore. |
 | `data-dir.ts` | Default profile folder, desktop-profile refusal, single-host lock. |
-| `main.ts` | `web:local` command line. |
+| `open-browser.ts` | `--open`: validates the launch link and builds the OS "open" command (no shell). |
+| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`). |
 
 ### API (v1)
 
@@ -49,7 +50,7 @@ A plain `node:http` server with no framework:
 | `POST /api/v1/backup/upload` | Cookie + Origin + CSRF | `application/octet-stream`, ≤ 512 MB. Checked before anything changes; returns a one-time restore token. |
 | `GET /api/v1/backup/download/<file>` | Cookie, not cross-site | Only file names this host generated |
 
-Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup` and `restoreBackup`. Later Phase 2 features (cases, journal, tasks, hours) add contracts and names here.
+Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup`, `restoreBackup` and `getBackupStatus` (#117: `{ lastBackupAt, fileName, backupCount }`, names and dates only), plus the research case calls below. Later Phase 2 features (journal, tasks, hours) add contracts and names here.
 
 Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-signed-in` (401), `not-same-origin`/`bad-csrf-token` (403), `unsupported-media-type` (415), `too-large` (413), `invalid-arguments` (400), `not-found` (404) and `internal-error` (500). They never echo submitted or stored values. Logs hold method, route template and status only. They never hold bodies, ids, names, paths or tokens; database errors are logged by error name only.
 
@@ -66,7 +67,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 | Another OS user on the same computer | Data is useless without a session, and sessions start only from the launch link printed in the host's own terminal | Unit tests for wrong tokens and forged cookies |
 | Clickjacking | `frame-ancestors 'none'`, `X-Frame-Options: DENY` | Header test |
 | Script injection | CSP `script-src 'self'`, no inline scripts, `connect-src 'self'`; React escaping | Header test |
-| Oversized or malformed requests | JSON ≤ 64 KB, uploads ≤ 512 MB (rejected by `Content-Length` before reading), strict schemas, timeouts | Unit tests |
+| Oversized or malformed requests | JSON ≤ 256 KB (a full research brief, #17), uploads ≤ 512 MB (rejected by `Content-Length` before reading), strict schemas, timeouts | Unit tests |
 | Path traversal | Static files and downloads are confined to their folder; downloads only allow generated names | Unit tests |
 | Two hosts on one database (or a restore under a running host) | `web-host.lock` with PID; stale locks replaced; in-process double open refused | Unit test |
 | Silent desktop data migration | Separate profile folder; refuses the desktop profile and Chromium-style folders | Unit test |
@@ -77,7 +78,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 - Plain HTTP on loopback: traffic never leaves the computer, so TLS adds nothing here. Remote access would need it.
 - Sessions live in memory. Restarting the host signs every browser out (the page says so; nothing is lost). The launch link works for as long as the host runs, and opening it again starts another session (at most 20 are kept).
 - Backups (`<data>/backups/*.tgbackup`) and downloads are **not encrypted**, the same as the desktop backup. Pre-migration and pre-restore safety copies stay in `<data>/data/`.
-- No retention policy yet for the backups folder (#117).
+- Nothing in the backups folder or the safety copies is deleted automatically; the retention habit is a proposal in [live-readiness](../operations/live-readiness.md). The data folder is `0700` on macOS/Linux; on Windows it relies on the per-user AppData permissions.
 - `node:sqlite` is still marked experimental in Node; `web:local` hides that warning.
 
 **Deferred on purpose:** any access from another device (phone, tablet). That needs authentication beyond a link, HTTPS, hardened sessions and a separate privacy review, and it is not part of Phase 2. `demo:lan` stays fictional-only and has no API.
@@ -142,13 +143,46 @@ The layout inside matches the desktop's (`data/tracing-guatemala.sqlite`, `data/
 ```sh
 npm run web:dev     # React HMR + API on http://127.0.0.1:5175, prints a sign-in link; data in .web-dev-data/
 npm run web:build   # demo → dist-demo, client → dist-web/client, host → dist-web/server/main.mjs
-npm run web:local   # Live on http://127.0.0.1:4180, demo on http://localhost:4181/ (--port <n>, --data-dir <folder>, --no-demo); Ctrl+C stops
+npm run web:local   # Live on http://127.0.0.1:4180, demo on http://localhost:4181/ (--port <n>, --data-dir <folder>, --open, --no-demo); Ctrl+C stops
+npm run live        # build if missing, then web:local --open (scripts/live.mjs)
+npm run smoke:live  # drill against the built host: restart, backup, restore, isolation
 ```
 
-On a clean machine (Node ≥ 22.12): `npm ci`, then `npm run web:build`, then `npm run web:local`, then open the printed link **on the same computer**. One-click start and stop, backup reminders and a readiness checklist belong to #117.
+On a clean machine (Node ≥ 22.12): `npm ci`, then `npm run web:build`, then `npm run web:local`, then open the printed link **on the same computer**. `npm run live`, `Start Tracing Guatemala.cmd` and `start-tracing-guatemala.sh` build if needed, start the host and open the browser (#117; see [live-readiness](../operations/live-readiness.md) for stop, backups, recovery and the release checklist). The Demo/Live entry UX is #114: the sidebar shows the current mode and links to the other one at its own address.
+
 ## Tests
 
 - `tests/unit/live-host.test.ts`: real HTTP against the host. Covers the launch link and cookies, Host spoofing, cross-origin and unauthenticated writes, CSRF, media types, sizes, strict arguments, no echo or logging of values, CSP and headers, path traversal, persistence across restart, cross-client note isolation, backup create/download/upload/restore, rejection of junk files, LAN unreachability, data-folder guards and the lock.
+- `tests/unit/backup-status.test.ts`, `tests/unit/live-launch.test.ts` (#117): the backup status file and `getBackupStatus`, restoring a schema-v2 backup by upload, the `--open` link check and per-platform commands, and the `0700` folder mode.
 - `tests/renderer/LiveWeb.test.tsx`: the browser adapter (CSRF header, session loss, download, upload, cancel) and the sign-in screen.
 - `tests/unit/demo-mirror.test.ts`, `tests/renderer/ModeSwitch.test.tsx`, `tests/web/live-mode-switch.spec.ts` and the LAN case in `tests/demo/lan-demo.spec.ts` (#114): the demo mirror, every switch rule, and the two-origin journey in a real browser.
 - `tests/web/live-web.spec.ts` (Playwright `web-live`): the built host in Edge/Chromium. Covers sign-in guidance, CRUD + notes persisting across reload and host restart, backup download, a hostile page in the same browser, demo-bundle isolation, and 375/768/1280px layouts.
+
+## #15 status: research cases (storage and typed API)
+
+Cases arrive as storage and API only; the screens belong to #16. The rules, states and schema are in `docs/case-data-model.md` (`case-model/v1`). Migration 3 adds `research_cases` and `case_events` (forward-only, nothing cascades or deletes). Case changes and their event row are written in one transaction.
+
+| Call | Args | Result |
+| --- | --- | --- |
+| `listCases` | `[CaseQuery]` | `ResearchCase[]` |
+| `getCase` | `[caseId]` | `ResearchCase \| null` |
+| `listCaseEvents` | `[caseId]` | `CaseEvent[]`, newest first |
+| `createCase` | `[clientId, CaseInput]` | `CaseMutationResult` |
+| `updateCase` | `[caseId, CaseInput]` | `CaseMutationResult` |
+| `setCaseState` | `[caseId, CaseState]` | `CaseMutationResult` |
+| `archiveCase` / `unarchiveCase` | `[caseId]` | `CaseMutationResult` |
+
+- The contracts live in `caseContracts` (`src/main/contracts.ts`) and have no Electron IPC channel: desktop stays frozen, so `AppRuntime.cases` is `null` there and in the demo until #16 adds the in-memory adapter. `CaseInput` is strict, so `id`, `clientId`, `state` and timestamps are rejected as `invalid-arguments`.
+- Tests: `tests/unit/{case-model,cases,live-cases}.test.ts` (rules, transition matrix, real v2 to v3 migration, backup round trips, HTTP), the case block in `tests/renderer/LiveWeb.test.tsx`, and `tests/web/live-cases.spec.ts` (port 4192, built host, persistence across restart).
+
+## Case summary export (#20)
+
+"Export summary…" on a case page saves a Markdown summary of that one case. It is composed entirely in the browser and needs nothing new from the host.
+
+- **No server involvement, no writes.** The page reads the selected case with its existing, case-scoped calls (`getCase`, `getClient`, `getCaseBrief`, `listJournalEntries`, `listCaseTasks`, `listCaseEvents`), composes the text with `src/shared/case-summary.ts` (pure, no DOM) and saves it with an ordinary browser download (`Blob` + a temporary `<a download>`, `src/renderer/src/cases/downloadText.ts`; the loader is `exportSummary.ts`). There is no export endpoint, the host writes no file, and SQLite is never changed by exporting. A blob download needs no `connect-src`, so the production CSP is unchanged; `tests/web/live-case-export.spec.ts` checks the real download and that only those read calls go over the wire.
+- **Scope check.** `checkSummaryScope` requires the client id to match the case's client and every brief, journal entry, task and event to carry that case's id. `composeCaseSummary` throws, producing no output, when anything does not match. `tests/unit/live-case-export.test.ts` loads look-alike cases of two clients over real HTTP and asserts that none of the other cases' or clients' text appears.
+- **Included:** the case title, the client's display name, state, archived flag, order reference, due date (with "(overdue)"), created/updated/generated times, the requested outcome, the research brief (hypotheses always prefixed "Hypothesis — not established:", known facts labelled "as reported — not verified"), next steps, the research journal and the case history. In the demo the file starts with "Fictional demo data — not a real client."
+- **Excluded:** every client contact detail (email, Fiverr username, other contact, source detail), client notes and the contact log. The summary data type carries only the client's id and display name, so they cannot be added by mistake. Research hours are not included.
+- **Safe text.** User text is kept as typed, but a leading Markdown marker on any line is backslash-escaped and `<` becomes `&lt;`, so it cannot create headings, lists, quotes or HTML. Due dates are written as the stored `YYYY-MM-DD`, never shifted by a time zone.
+- **The file is not encrypted.** The dialog says so and asks the researcher to keep it private. The file name is `case-summary-<slug>-<YYYY-MM-DD>.md` (ASCII slug, at most 50 characters, no separators).
+- **Where it goes is the browser's business.** The app cannot know whether the browser saved the file or where, so the copy says "Your browser will save it or ask where to save it" and never claims more. Archived cases can be exported (it is read-only).

@@ -68,7 +68,7 @@ test('serves the shared UI over plain HTTP, with no Electron bridge and no other
 
   await expect(page.getByRole('region', { name: 'Demo mode' })).toContainText('Demo Mode — Fictional Data Only')
   await expect(page.getByRole('heading', { level: 1, name: 'Clients' })).toBeVisible()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   expect(await page.evaluate(() => 'tracingGuatemala' in window)).toBe(false)
 
   await nav(page).getByRole('link', { name: 'Settings & Backup' }).click()
@@ -144,11 +144,11 @@ test('walks through search, notes, duplicates and archive/restore, then resets o
   await expect(page.getByText('Client restored.')).toBeVisible()
 
   await nav(page).getByRole('link', { name: 'Clients' }).click()
-  await expect(page.getByText('8 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('44 active · 5 archived')).toBeVisible()
 
   // Refresh: back to the documented sample set.
   await page.reload()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   await expect(page.getByRole('link', { name: 'daniel ochoa', exact: true })).toHaveCount(0)
   await page.getByRole('link', { name: 'Lucía Fernández (Quetzaltenango line)' }).click()
   await expect(page.getByRole('region', { name: 'Contact' }).getByText('lucia.fernandez@example.com')).toBeVisible()
@@ -219,6 +219,31 @@ test('without a usable live port, the demo says Live is not running on this comp
   await expect(page.getByRole('link', { name: /Back to Live/ })).toHaveCount(0)
 })
 
+// ---------- 48-client fictional portfolio (#115) ----------
+
+test('lists the 48 fictional clients, finds one by search, and opens it', async ({ page }) => {
+  await page.goto(`${server.url}#/clients`)
+  await pick(page, 'All')
+  await expect(page.locator('.result-count')).toHaveText(/^48 clients · /)
+
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+  await page.getByLabel('Search clients').fill('ixchel')
+  await expect(page.locator('.result-count')).toHaveText(/^1 client · /)
+  await page.getByRole('link', { name: 'Ixchel Barrios Mencos' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ixchel Barrios Mencos' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Contact' }).getByText('ixchel.barrios@example.com')).toBeVisible()
+})
+
+test('fits the full 48-client directory on a phone (375px) without sideways scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto(`${server.url}#/clients`)
+  await pick(page, 'All')
+  await expect(page.locator('.result-count')).toHaveText(/^48 clients · /)
+  await expect(page.getByRole('region', { name: 'Demo mode' })).toBeVisible()
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `directory overflows by ${overflow}px`).toBeLessThanOrEqual(0)
+})
+
 test('keeps demo code and sample data out of the desktop bundle', () => {
   const assets = resolve(__dirname, '../../out/renderer/assets')
   const bundle = readdirSync(assets)
@@ -229,4 +254,267 @@ test('keeps demo code and sample data out of the desktop bundle', () => {
   for (const marker of ['Tracing Guatemala browser demo', 'de300000-0000-4000', 'Lucía Fernández', 'getRandomValues']) {
     expect(bundle).not.toContain(marker)
   }
+})
+
+// ---------- research cases (#16) ----------
+
+const casesShotsDir = join(root, 'docs/screenshots/issue-16')
+const demoIds = {
+  lucia: 'de300000-0000-4000-8000-000000000001',
+  daniel: 'de300000-0000-4000-8000-000000000002',
+  paternal: 'de300000-0000-4000-8000-200000000001',
+  maternal: 'de300000-0000-4000-8000-200000000002',
+  secondBranch: 'de300000-0000-4000-8000-200000000005',
+  reunion: 'de300000-0000-4000-8000-200000000006'
+}
+const overflowOf = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+test('walks through cases: filter, open, change state, create under a client, then resets on refresh', async ({ page }) => {
+  await page.goto(`${server.url}#/clients`)
+  await nav(page).getByRole('link', { name: 'Cases' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Cases' })).toBeVisible()
+  await expect(page.locator('.result-count')).toHaveText('28 cases')
+  await expect(page.getByText('Overdue')).toHaveCount(5)
+
+  // Filter by state group, archived flag and client.
+  await pick(page, 'Closed')
+  await expect(page.locator('.result-count')).toHaveText(/^9 cases · /)
+  await pick(page, 'Archived')
+  await expect(page.getByRole('link', { name: 'Short family history for a reunion' })).toBeVisible()
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+  await page.getByLabel('Client', { exact: true }).selectOption({ label: 'Daniel Ochoa' })
+  await expect(page.locator('.result-count')).toHaveText(/^1 case · /)
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+
+  // Open a case and change its state; delivered asks first.
+  await page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: /Paternal line/ })).toBeVisible()
+  await page.getByRole('button', { name: 'Waiting on someone' }).click()
+  await expect(page.getByText('Case is now waiting.')).toBeVisible()
+  await page.getByRole('button', { name: 'Mark delivered' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Mark delivered' }).click()
+  await expect(page.getByText('Case is now delivered.')).toBeVisible()
+  const history = page.getByRole('region', { name: 'History' })
+  await expect(history.getByText('Marked delivered')).toBeVisible()
+  await expect(history.getByText('Waiting on someone')).toBeVisible()
+
+  // Create a case under a client from its profile.
+  await page.goto(`${server.url}#/clients/${demoIds.daniel}`)
+  await page.getByRole('link', { name: 'New case' }).click()
+  await page.getByLabel(/^Title/).fill('Demo: parish records search')
+  await page.getByLabel(/^Requested outcome/).fill('Find the parish where the family was baptized.')
+  await page.getByRole('button', { name: 'Create case' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Demo: parish records search' })).toBeVisible()
+  await expect(page.getByText('Case created.')).toBeVisible()
+
+  await page.goto(`${server.url}#/cases`)
+  await expect(page.getByRole('link', { name: 'Demo: parish records search' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' })).toHaveCount(0) // delivered cases leave the Open list
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(page.locator('.result-count')).toHaveText('28 cases')
+  await expect(page.getByRole('link', { name: 'Demo: parish records search' })).toHaveCount(0)
+  await page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' }).click()
+  await expect(page.locator('.state-now')).toContainText('Active')
+})
+
+test('locks a client’s cases in the demo when the client is archived', async ({ page }) => {
+  await page.goto(`${server.url}#/clients/${demoIds.lucia}`)
+  await page.getByRole('button', { name: 'Archive' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Archive client' }).click()
+  await expect(page.getByText(/This profile is read-only/)).toBeVisible()
+  await expect(page.getByText('Restore this client to start a new case')).toBeVisible()
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await expect(page.getByText(/Their cases are read-only/)).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Change state' })).toHaveCount(0)
+})
+
+for (const viewport of viewports) {
+  test(`fits case screens on a ${viewport.name} (${viewport.width}px) without sideways scrolling`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    const routes = [
+      ['cases', '#/cases?state=all'],
+      ['case', `#/cases/${demoIds.maternal}`],
+      ['case-archived', `#/cases/${demoIds.reunion}`],
+      ['case-brief-form', `#/cases/${demoIds.paternal}/brief`],
+      ['case-form', `#/cases/new?client=${demoIds.daniel}`],
+      ['profile-cases', `#/clients/${demoIds.lucia}`]
+    ] as const
+    for (const [name, hash] of routes) {
+      await page.goto(`${server.url}${hash}`)
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expect(page.locator('table, .card, form').first()).toBeVisible()
+      expect(await overflowOf(page), `${name} overflows`).toBeLessThanOrEqual(0)
+    }
+  })
+}
+
+test('captures the demo case list for the PR', async ({ page }) => {
+  test.skip(!capture, 'Screenshots are opt-in: CAPTURE_SCREENSHOTS=1')
+  for (const viewport of [viewports[2]!, viewports[0]!]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`${server.url}#/cases?state=all`)
+    await expect(page.locator('.result-count')).toBeVisible()
+    await page.screenshot({ path: join(casesShotsDir, `demo-${viewport.name}-case-list.png`), fullPage: true })
+  }
+})
+
+test('shows a seeded fictional research brief, lets it be edited, and a refresh resets the edit', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const brief = page.getByRole('region', { name: 'Research brief' })
+  await expect(brief.getByRole('heading', { name: 'Known facts (as reported)' })).toBeVisible()
+  await expect(brief).toContainText('Teodoro Ejemplo')
+  await expect(brief.locator('.brief-hypotheses')).toContainText('Hypothesis — not established')
+
+  await brief.getByRole('link', { name: 'Edit brief' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Research brief' })).toBeVisible()
+  await page.getByLabel(/^Open questions/).fill('A question added in the demo?')
+  await page.getByRole('button', { name: 'Save brief' }).click()
+  await expect(page.getByText('Brief saved.')).toBeVisible()
+  await expect(brief.locator('.brief-questions .brief-text')).toHaveText('A question added in the demo?')
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(brief.locator('.brief-questions .brief-text')).toContainText('Which parish covered the village')
+  await expect(brief.getByText('A question added in the demo?')).toHaveCount(0)
+
+  // A case without a seeded brief shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(page.getByRole('region', { name: 'Research brief' }).getByText('No research brief yet.')).toBeVisible()
+})
+
+test('shows a seeded fictional research journal, lets an entry be added, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const journal = page.getByRole('region', { name: 'Research journal' })
+  const list = journal.getByRole('list', { name: 'Journal entries, newest first' })
+  await expect(list.getByRole('listitem')).toHaveCount(3)
+  await expect(list.getByRole('listitem').first()).toContainText('Client communication')
+  await expect(journal).toContainText('diocesan index')
+  await expect(journal).toContainText('separate from the client’s notes and contact history')
+
+  // Another case of the same client has its own entries.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(journal.getByRole('listitem')).toHaveCount(2)
+  await expect(journal).not.toContainText('diocesan index')
+
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await journal.getByLabel('Activity (optional)').fill('Record analysis')
+  await journal.getByLabel('What you did or found').fill('An entry added in the demo.')
+  await journal.getByRole('button', { name: 'Add entry' }).click()
+  await expect(list.getByRole('listitem')).toHaveCount(4)
+  await expect(list.getByRole('listitem').first()).toContainText('An entry added in the demo.')
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(list.getByRole('listitem')).toHaveCount(3)
+  await expect(journal.getByText('An entry added in the demo.')).toHaveCount(0)
+
+  // A case without seeded entries shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(journal.getByText('No journal entries yet.')).toBeVisible()
+})
+
+test('shows seeded fictional next steps including an overdue one, lets one be completed, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const steps = page.getByRole('region', { name: 'Next steps' })
+  const open = steps.getByRole('list', { name: 'Open next steps' }).getByRole('listitem')
+  await expect(open).toHaveCount(5)
+  await expect(open.first()).toContainText('Ask the client for the photograph and letters')
+  await expect(open.first()).toContainText('Overdue by 2 days')
+  await expect(open.nth(1)).toContainText('Due today')
+  await expect(open.nth(2)).toContainText('Due in 2 days')
+  await expect(open.nth(4)).toContainText('No deadline')
+  await expect(steps.getByText('Completed (1)')).toBeVisible()
+
+  // Another case has its own steps.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(open).toHaveCount(2)
+  await expect(steps).not.toContainText('photograph')
+
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await open.first().getByRole('button', { name: /^Mark done:/ }).click()
+  await expect(open).toHaveCount(4)
+  await expect(steps.getByText('Completed (2)')).toBeVisible()
+  await expect(steps.getByText('Overdue by 2 days')).toHaveCount(0)
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(open).toHaveCount(5)
+  await expect(steps.getByText('Completed (1)')).toBeVisible()
+  await expect(open.first()).toContainText('Overdue by 2 days')
+
+  // A case without seeded steps shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(steps.getByText('No next steps yet.')).toBeVisible()
+})
+
+test('exports a fictional case summary as a file under the demo CSP, without contact details or requests', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(`${request.method()} ${request.url()}`))
+  await page.getByRole('button', { name: 'Export summary…' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText('The file is not encrypted.')
+  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Download' }).click()])
+
+  expect(download.suggestedFilename()).toMatch(/^case-summary-paternal-line-quetzaltenango-1880s-\d{4}-\d{2}-\d{2}\.md$/)
+  const text = readFileSync((await download.path())!, 'utf8')
+  expect(text.split('\n').slice(0, 3)).toEqual(['# Case summary: Paternal line — Quetzaltenango, 1880s', '', 'Fictional demo data — not a real client.'])
+  expect(text).toContain('- Client: Lucía Fernández (Quetzaltenango line)')
+  expect(text).toContain('Compare spelling variants of the surname')
+  expect(text).not.toContain('@example.')
+  expect(text).not.toContain('lucia_roots_demo')
+  expect(text).not.toContain('Maternal grandparents')
+  expect(requests.filter((request) => !request.includes(`http://${host}:${port}/`) || !request.startsWith('GET'))).toEqual([])
+})
+
+test('shows seeded fictional research hours, runs an in-memory timer, writes nothing to browser storage, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const hours = page.getByRole('region', { name: 'Research hours' })
+  const entries = hours.getByRole('list', { name: 'Hours entries' }).getByRole('listitem')
+  const pill = page.getByRole('region', { name: 'Research timer' })
+  const total = hours.getByText('Total hours').locator('xpath=following-sibling::dd')
+
+  await expect(entries).toHaveCount(4)
+  await expect(total).toHaveText('7:30')
+  await expect(entries.first()).toContainText('1:30')
+  await expect(entries.first()).toContainText('Research')
+  await expect(hours).toContainText('Nothing here is billed or sent to anyone')
+  await expect(pill).toHaveCount(0)
+
+  // Another case has its own, separate hours.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(total).toHaveText('1:50')
+  await expect(entries).toHaveCount(2)
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(hours.getByText('No hours recorded yet.')).toBeVisible()
+
+  // The timer runs in memory and follows the person across screens.
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await hours.getByRole('button', { name: 'Start timer' }).click()
+  await expect(pill.getByText('Running')).toBeVisible()
+  await pill.getByRole('button', { name: /^Pause timer on/ }).click()
+  await expect(pill.getByText('Paused')).toBeVisible()
+  await page.goto(`${server.url}#/clients`)
+  await expect(pill).toBeVisible()
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+
+  // A manual entry works too.
+  const form = hours.getByRole('form', { name: 'Add hours by hand' })
+  await form.getByLabel('Minutes').fill('30')
+  await form.getByRole('button', { name: 'Add entry' }).click()
+  await expect(entries).toHaveCount(5)
+  await expect(total).toHaveText('8:00')
+
+  // Nothing is kept in the browser, and the guidance on the banner stays truthful.
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0)
+  expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0)
+  await expect(page.getByRole('region', { name: 'Demo mode' })).toContainText('reset when you refresh')
+
+  // Refresh: back to the documented sample set, and no timer.
+  await page.reload()
+  await expect(entries).toHaveCount(4)
+  await expect(total).toHaveText('7:30')
+  await expect(pill).toHaveCount(0)
 })

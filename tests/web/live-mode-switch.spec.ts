@@ -122,7 +122,7 @@ test('switches Live -> demo -> Live without leaking data or the session either w
   await expect(switcher(page)).toContainText('Demo · nothing is saved')
   if (capture) await page.screenshot({ path: join(shotsDir, 'demo-on-host-switcher.png') })
   await nav(page).getByRole('link', { name: 'Clients' }).click()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Lucía Viva Ficticia' })).toHaveCount(0)
   // The query survives in-demo navigation, so the way back stays available.
   expect(new URL(page.url()).search).toBe(`?live=${livePort}`)
@@ -164,7 +164,7 @@ test('switches Live -> demo -> Live without leaking data or the session either w
   await expect(page.getByRole('link', { name: 'Lucía Viva Ficticia' })).toBeVisible()
   await openDemo(page).click()
   await nav(page).getByRole('link', { name: 'Clients' }).click()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Visitante Demo' })).toHaveCount(0)
 })
 

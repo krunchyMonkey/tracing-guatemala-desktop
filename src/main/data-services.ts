@@ -1,12 +1,12 @@
 import type { AppData } from './database/app-data'
-import type { ClientService, NoteService } from './ipc'
+import type { BriefService, CaseService, JournalService, TaskService, TimeService, StudioService, ClientService, NoteService } from './ipc'
 
 /**
- * Client and note services over the live AppData, shared by the Electron main
+ * Client, note, case and brief services over the live AppData, shared by the Electron main
  * process and the local web host (#110). They look up the repositories on
  * every call, because a restore replaces the connection and repositories.
  */
-export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService } {
+export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService; briefs: BriefService; journal: JournalService; tasks: TaskService; time: TimeService; studio: StudioService } {
   return {
     clients: {
       list: (query) => current().clients.list(query),
@@ -21,6 +21,48 @@ export function createDataServices(current: () => AppData): { clients: ClientSer
       list: (clientId) => current().notes.list(clientId),
       create: (clientId, input) => current().notes.create(clientId, input),
       update: (clientId, noteId, input) => current().notes.update(clientId, noteId, input)
+    },
+    cases: {
+      list: (query) => current().cases.list(query),
+      get: (id) => current().cases.get(id),
+      listEvents: (caseId) => current().cases.listEvents(caseId),
+      create: (clientId, input) => current().cases.create(clientId, input),
+      update: (id, input) => current().cases.update(id, input),
+      setState: (id, to) => current().cases.setState(id, to),
+      archive: (id) => current().cases.archive(id),
+      unarchive: (id) => current().cases.unarchive(id)
+    },
+    briefs: {
+      get: (caseId) => current().briefs.get(caseId),
+      save: (caseId, input) => current().briefs.save(caseId, input)
+    },
+    journal: {
+      list: (caseId) => current().journal.list(caseId),
+      create: (caseId, input) => current().journal.create(caseId, input),
+      update: (caseId, entryId, input) => current().journal.update(caseId, entryId, input)
+    },
+    tasks: {
+      list: (caseId) => current().tasks.list(caseId),
+      create: (caseId, input) => current().tasks.create(caseId, input),
+      update: (caseId, taskId, input) => current().tasks.update(caseId, taskId, input),
+      complete: (caseId, taskId) => current().tasks.complete(caseId, taskId),
+      reopen: (caseId, taskId) => current().tasks.reopen(caseId, taskId)
+    },
+    time: {
+      list: (caseId) => current().time.list(caseId),
+      create: (caseId, input) => current().time.create(caseId, input),
+      update: (caseId, entryId, input) => current().time.update(caseId, entryId, input),
+      delete: (caseId, entryId) => current().time.delete(caseId, entryId),
+      getActiveTimer: () => current().time.getActiveTimer(),
+      start: (caseId) => current().time.start(caseId),
+      pause: (version) => current().time.pause(version),
+      resume: (version) => current().time.resume(version),
+      heartbeat: (version) => current().time.heartbeat(version),
+      stopAndSave: (version, options) => current().time.stopAndSave(version, options),
+      discard: (version) => current().time.discard(version)
+    },
+    studio: {
+      summary: () => current().studio.summary()
     }
   }
 }

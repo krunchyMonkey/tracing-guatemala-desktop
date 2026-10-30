@@ -67,6 +67,20 @@ export default defineConfig(
     }
   },
   {
+    // Driver.js stays behind the guidance seam: only its provider may import it (#102).
+    files: ['src/renderer/src/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/src/guidance/driverJsProvider.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportDeclaration[source.value=/^driver[.]js/]",
+          message: 'Only guidance/driverJsProvider.ts may import driver.js.'
+        }
+      ]
+    }
+  },
+  {
     files: ['src/renderer/src/runtime/AppRuntime.tsx'],
     rules: { 'no-restricted-properties': 'off' }
   },

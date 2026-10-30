@@ -1,5 +1,5 @@
 import type { BackupChoice } from '../../../shared/ipc'
-import type { AppDataApi, BackupApi } from '../runtime/AppRuntime'
+import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi } from '../runtime/AppRuntime'
 
 // The Live web app's data calls (#110): same-origin fetches to the loopback
 // local web host (src/server/live-host.ts). Every call carries the session's
@@ -59,7 +59,12 @@ export function downloadUrl(url: string): void {
   link.remove()
 }
 
-export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; backup: BackupApi } {
+export function createLiveApi(options: LiveApiOptions): {
+  data: AppDataApi
+  backup: BackupApi
+  backupStatus: BackupStatusApi
+  cases: CaseApi
+} {
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const pickFile = options.pickFile ?? pickBackupFile
   const download = options.download ?? downloadUrl
@@ -115,5 +120,40 @@ export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; back
     restoreBackup: (token) => call('restoreBackup', token)
   }
 
-  return { data, backup }
+  const backupStatus: BackupStatusApi = () => call('getBackupStatus')
+
+  const cases: CaseApi = {
+    listCases: (query) => call('listCases', query),
+    getCase: (id) => call('getCase', id),
+    listCaseEvents: (caseId) => call('listCaseEvents', caseId),
+    createCase: (clientId, input) => call('createCase', clientId, input),
+    updateCase: (id, input) => call('updateCase', id, input),
+    setCaseState: (id, to) => call('setCaseState', id, to),
+    archiveCase: (id) => call('archiveCase', id),
+    unarchiveCase: (id) => call('unarchiveCase', id),
+    getCaseBrief: (caseId) => call('getCaseBrief', caseId),
+    saveCaseBrief: (caseId, input) => call('saveCaseBrief', caseId, input),
+    listJournalEntries: (caseId) => call('listJournalEntries', caseId),
+    createJournalEntry: (caseId, input) => call('createJournalEntry', caseId, input),
+    updateJournalEntry: (caseId, entryId, input) => call('updateJournalEntry', caseId, entryId, input),
+    listCaseTasks: (caseId) => call('listCaseTasks', caseId),
+    createCaseTask: (caseId, input) => call('createCaseTask', caseId, input),
+    updateCaseTask: (caseId, taskId, input) => call('updateCaseTask', caseId, taskId, input),
+    completeCaseTask: (caseId, taskId) => call('completeCaseTask', caseId, taskId),
+    reopenCaseTask: (caseId, taskId) => call('reopenCaseTask', caseId, taskId),
+    listTimeEntries: (caseId) => call('listTimeEntries', caseId),
+    createTimeEntry: (caseId, input) => call('createTimeEntry', caseId, input),
+    updateTimeEntry: (caseId, entryId, input) => call('updateTimeEntry', caseId, entryId, input),
+    deleteTimeEntry: (caseId, entryId) => call('deleteTimeEntry', caseId, entryId),
+    getActiveTimer: () => call('getActiveTimer'),
+    startTimer: (caseId) => call('startTimer', caseId),
+    pauseTimer: (version) => call('pauseTimer', version),
+    resumeTimer: (version) => call('resumeTimer', version),
+    heartbeatTimer: (version) => call('heartbeatTimer', version),
+    stopAndSaveTimer: (version, options) => call('stopAndSaveTimer', version, options),
+    discardTimer: (version) => call('discardTimer', version),
+    getStudioSummary: () => call('getStudioSummary')
+  }
+
+  return { data, backup, backupStatus, cases }
 }

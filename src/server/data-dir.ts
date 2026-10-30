@@ -1,4 +1,4 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -52,6 +52,20 @@ export function checkLiveDataDir(dir: string, platform: Platform = currentPlatfo
   return { ok: true }
 }
 
+/**
+ * Creates `dir` (and parents) so that only its owner can open it. On macOS and
+ * Linux that is mode 0700, applied to an existing folder too. On Windows nothing
+ * is changed: the per-user AppData folder is already limited to the signed-in
+ * user (and administrators) by its inherited ACL, and POSIX modes don't apply.
+ */
+export function ensurePrivateDir(
+  dir: string,
+  { platform = process.platform, chmod = chmodSync }: { platform?: NodeJS.Platform; chmod?: (path: string, mode: number) => void } = {}
+): void {
+  mkdirSync(dir, { recursive: true })
+  if (platform !== 'win32') chmod(dir, 0o700)
+}
+
 /** Another host already holds this data folder. */
 export class DataDirInUseError extends Error {
   constructor() {
@@ -78,7 +92,7 @@ const heldHere = new Set<string>()
  * running is replaced. Returns the release function.
  */
 export function acquireDataDirLock(dir: string): () => void {
-  mkdirSync(dir, { recursive: true })
+  ensurePrivateDir(dir)
   const key = resolve(dir).toLowerCase()
   if (heldHere.has(key)) throw new DataDirInUseError()
   const lockFile = join(dir, 'web-host.lock')

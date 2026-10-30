@@ -36,12 +36,13 @@ interface ConfirmDialogProps {
   children: ReactNode
   confirmLabel: string
   tone?: 'default' | 'caution'
+  confirmDisabled?: boolean
   onConfirm(): void
   onCancel(): void
 }
 
 /** Modal confirmation. Focus starts on the safe choice (Cancel); Escape cancels. */
-export function ConfirmDialog({ title, children, confirmLabel, tone = 'default', onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, children, confirmLabel, tone = 'default', confirmDisabled = false, onConfirm, onCancel }: ConfirmDialogProps) {
   const titleId = useId()
   const bodyId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -60,7 +61,7 @@ export function ConfirmDialog({ title, children, confirmLabel, tone = 'default',
       return
     }
     if (event.key !== 'Tab' || !dialogRef.current) return
-    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button')
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, textarea')
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
     if (event.shiftKey && document.activeElement === first) {
@@ -92,6 +93,7 @@ export function ConfirmDialog({ title, children, confirmLabel, tone = 'default',
           <button
             type="button"
             className={`button ${tone === 'caution' ? 'button-caution' : 'button-primary'}`}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

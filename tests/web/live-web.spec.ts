@@ -140,6 +140,43 @@ test('makes a backup the browser downloads', async ({ page }) => {
   expect(readdirSync(join(dataDir, 'backups'))).toHaveLength(1)
 })
 
+test('shows when the last backup was made and stops reminding once there is one (#117)', async ({ page }) => {
+  let host = await startHost()
+  await page.goto(host.launchUrl)
+  await expect(page.getByText('Live · saved on this computer')).toBeVisible()
+
+  // No backup yet: a gentle note on Home, not a dialog.
+  await page.goto(`${origin}/#/`)
+  const reminder = page.getByRole('note', { name: 'Backup reminder' })
+  await expect(reminder).toContainText('You haven’t made a backup yet.')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await reminder.getByRole('link', { name: /Settings & Backup/ }).click()
+
+  const status = page.getByTestId('backup-status')
+  await expect(status).toContainText('No backup made yet')
+  await expect(status).toContainText('0 backups in the app’s backups folder.')
+  await expect(page.getByRole('heading', { name: 'Your data is not encrypted' })).toBeVisible()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Create backup…' }).click()
+  await download
+  const today = await page.evaluate(() => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date()))
+  await expect(status).toContainText(`Last backup: ${today}`)
+  await expect(status).toContainText('(today)')
+  await expect(status).toContainText('1 backup in the app’s backups folder.')
+
+  // Home no longer asks, and the status survives a host restart.
+  await page.goto(`${origin}/#/`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome' })).toBeVisible()
+  await expect(page.getByRole('note', { name: 'Backup reminder' })).toHaveCount(0)
+  await stopHost(host)
+  expect(JSON.parse(readFileSync(join(dataDir, 'backup-status.json'), 'utf8'))).toMatchObject({ clients: 0, notes: 0 })
+  host = await startHost()
+  await page.goto(host.launchUrl)
+  await page.goto(`${origin}/#/settings`)
+  await expect(page.getByTestId('backup-status')).toContainText('(today)')
+})
+
 test('refuses writes from another site, even in a browser signed in to Live', async ({ page, context }) => {
   const host = await startHost()
   await page.goto(host.launchUrl)
@@ -207,5 +244,17 @@ for (const viewport of [
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBeLessThanOrEqual(0)
     if (capture) await page.screenshot({ path: join(shotsDir, `clients-${viewport.width}.png`), fullPage: true })
+  })
+
+  test(`fits Settings & Backup on a ${viewport.name} screen (${viewport.width}px) without sideways scrolling (#117)`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    const host = await startHost()
+    await page.goto(host.launchUrl)
+    await page.goto(`${origin}/#/settings`)
+    await expect(page.getByTestId('backup-status')).toContainText('No backup made yet')
+    await expect(page.getByRole('heading', { name: 'Your data is not encrypted' })).toBeVisible()
+    await expect(page.getByText('Live · saved on this computer')).toBeVisible()
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    expect(overflow).toBeLessThanOrEqual(0)
   })
 }

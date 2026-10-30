@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { z } from 'zod'
-import { contracts, type ChannelContract } from '../main/contracts'
+import { caseContracts, contracts, liveContracts, type CallContract } from '../main/contracts'
 import { createDataServices } from '../main/data-services'
 import type { AppData } from '../main/database/app-data'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
@@ -28,7 +28,8 @@ import { createWebBackupService, MAX_UPLOAD_BYTES, UploadTooLargeError } from '.
 
 export const API_PREFIX = '/api/v1'
 export const LAUNCH_PATH = '/launch'
-const MAX_JSON_BYTES = 64 * 1024
+// Room for a full research brief at its raw bound (five sections, up to 4 bytes per character).
+const MAX_JSON_BYTES = 256 * 1024
 
 /** The data calls the browser may make, by name. Backup file choice is an upload instead. */
 const callable = {
@@ -44,7 +45,38 @@ const callable = {
   createNote: contracts.createNote,
   updateNote: contracts.updateNote,
   createBackup: contracts.createBackup,
-  restoreBackup: contracts.restoreBackup
+  restoreBackup: contracts.restoreBackup,
+  getBackupStatus: liveContracts.getBackupStatus,
+  listCases: caseContracts.listCases,
+  getCase: caseContracts.getCase,
+  listCaseEvents: caseContracts.listCaseEvents,
+  createCase: caseContracts.createCase,
+  updateCase: caseContracts.updateCase,
+  setCaseState: caseContracts.setCaseState,
+  archiveCase: caseContracts.archiveCase,
+  unarchiveCase: caseContracts.unarchiveCase,
+  getCaseBrief: caseContracts.getCaseBrief,
+  saveCaseBrief: caseContracts.saveCaseBrief,
+  listJournalEntries: caseContracts.listJournalEntries,
+  createJournalEntry: caseContracts.createJournalEntry,
+  updateJournalEntry: caseContracts.updateJournalEntry,
+  listCaseTasks: caseContracts.listCaseTasks,
+  createCaseTask: caseContracts.createCaseTask,
+  updateCaseTask: caseContracts.updateCaseTask,
+  completeCaseTask: caseContracts.completeCaseTask,
+  reopenCaseTask: caseContracts.reopenCaseTask,
+  listTimeEntries: caseContracts.listTimeEntries,
+  createTimeEntry: caseContracts.createTimeEntry,
+  updateTimeEntry: caseContracts.updateTimeEntry,
+  deleteTimeEntry: caseContracts.deleteTimeEntry,
+  getActiveTimer: caseContracts.getActiveTimer,
+  startTimer: caseContracts.startTimer,
+  pauseTimer: caseContracts.pauseTimer,
+  resumeTimer: caseContracts.resumeTimer,
+  heartbeatTimer: caseContracts.heartbeatTimer,
+  stopAndSaveTimer: caseContracts.stopAndSaveTimer,
+  discardTimer: caseContracts.discardTimer,
+  getStudioSummary: caseContracts.getStudioSummary
 } as const
 
 export type CallName = keyof typeof callable
@@ -149,7 +181,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -165,7 +197,38 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     createNote: ([clientId, input]) => notes.create(clientId, input),
     updateNote: ([clientId, noteId, input]) => notes.update(clientId, noteId, input),
     createBackup: () => backup.create(),
-    restoreBackup: ([token]) => backup.restore(token)
+    restoreBackup: ([token]) => backup.restore(token),
+    getBackupStatus: () => backup.status(),
+    listCases: ([query]) => cases.list(query),
+    getCase: ([id]) => cases.get(id),
+    listCaseEvents: ([caseId]) => cases.listEvents(caseId),
+    createCase: ([clientId, input]) => cases.create(clientId, input),
+    updateCase: ([id, input]) => cases.update(id, input),
+    setCaseState: ([id, to]) => cases.setState(id, to),
+    archiveCase: ([id]) => cases.archive(id),
+    unarchiveCase: ([id]) => cases.unarchive(id),
+    getCaseBrief: ([caseId]) => briefs.get(caseId),
+    saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input),
+    listJournalEntries: ([caseId]) => journal.list(caseId),
+    createJournalEntry: ([caseId, input]) => journal.create(caseId, input),
+    updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input),
+    listCaseTasks: ([caseId]) => tasks.list(caseId),
+    createCaseTask: ([caseId, input]) => tasks.create(caseId, input),
+    updateCaseTask: ([caseId, taskId, input]) => tasks.update(caseId, taskId, input),
+    completeCaseTask: ([caseId, taskId]) => tasks.complete(caseId, taskId),
+    reopenCaseTask: ([caseId, taskId]) => tasks.reopen(caseId, taskId),
+    listTimeEntries: ([caseId]) => time.list(caseId),
+    createTimeEntry: ([caseId, input]) => time.create(caseId, input),
+    updateTimeEntry: ([caseId, entryId, input]) => time.update(caseId, entryId, input),
+    deleteTimeEntry: ([caseId, entryId]) => time.delete(caseId, entryId),
+    getActiveTimer: () => time.getActiveTimer(),
+    startTimer: ([caseId]) => time.start(caseId),
+    pauseTimer: ([version]) => time.pause(version),
+    resumeTimer: ([version]) => time.resume(version),
+    heartbeatTimer: ([version]) => time.heartbeat(version),
+    stopAndSaveTimer: ([version, options]) => time.stopAndSave(version, options),
+    discardTimer: ([version]) => time.discard(version),
+    getStudioSummary: () => studio.summary()
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
@@ -205,7 +268,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       throw new RequestError(400, 'invalid-request')
     }
 
-    const contract = callable[name as CallName] as ChannelContract<z.ZodTuple, z.ZodType>
+    const contract = callable[name as CallName] as CallContract<z.ZodTuple, z.ZodType>
     const parsed = contract.args.safeParse((body as { args: unknown[] }).args)
     if (!parsed.success) throw new RequestError(400, 'invalid-arguments')
     let result: unknown

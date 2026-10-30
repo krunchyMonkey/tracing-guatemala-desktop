@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { CaseBriefRepository } from './case-brief-repository'
+import { CaseJournalRepository } from './case-journal-repository'
+import { CaseTaskRepository } from './case-task-repository'
+import { CaseTimeRepository } from './case-time-repository'
+import { StudioSummaryRepository } from './studio-summary-repository'
+import { CaseRepository } from './case-repository'
 import { ClientRepository } from './client-repository'
 import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase } from './connection'
 import { getSchemaVersion, migrate, migrations } from './migrations'
@@ -61,17 +67,25 @@ function readsAsSqlite(file: string): boolean {
   return header.toString('latin1') === SQLITE_HEADER
 }
 
-function hasTable(db: DatabaseSync, table: 'clients' | 'client_notes'): boolean {
+type CountedTable = 'clients' | 'client_notes' | 'research_cases'
+
+function hasTable(db: DatabaseSync, table: CountedTable): boolean {
   return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !== undefined
 }
 
-function count(db: DatabaseSync, table: 'clients' | 'client_notes'): number {
+function count(db: DatabaseSync, table: CountedTable): number {
   if (!hasTable(db, table)) return 0
   return (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 }
 
 /** Checks that `file` is an intact Tracing Guatemala database this app can read, and summarizes it. */
 export function inspectBackup(file: string): BackupSummary {
+  const { clients, notes, schemaVersion } = inspectBackupContents(file)
+  return { clients, notes, schemaVersion }
+}
+
+/** inspectBackup plus the case count, which restore verifies but the public summary doesn't carry. */
+function inspectBackupContents(file: string): BackupSummary & { cases: number } {
   if (!existsSync(file) || !readsAsSqlite(file)) throw new BackupInvalidError('not-a-backup')
 
   let db: DatabaseSync
@@ -96,7 +110,7 @@ export function inspectBackup(file: string): BackupSummary {
     if (schemaVersion > migrations.length) throw new BackupInvalidError('too-new')
     if (schemaVersion < 1 || !hasTable(db, 'clients')) throw new BackupInvalidError('not-a-backup')
 
-    return { clients: count(db, 'clients'), notes: count(db, 'client_notes'), schemaVersion }
+    return { clients: count(db, 'clients'), notes: count(db, 'client_notes'), cases: count(db, 'research_cases'), schemaVersion }
   } finally {
     db.close()
   }
@@ -111,6 +125,12 @@ export class AppData {
   private opened: OpenedDatabase
   clients: ClientRepository
   notes: NoteRepository
+  cases: CaseRepository
+  briefs: CaseBriefRepository
+  journal: CaseJournalRepository
+  tasks: CaseTaskRepository
+  time: CaseTimeRepository
+  studio: StudioSummaryRepository
 
   constructor(
     private readonly userDataDir: string,
@@ -119,6 +139,12 @@ export class AppData {
     this.opened = openAppDatabase(userDataDir, now)
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
+    this.cases = new CaseRepository(this.opened.db)
+    this.briefs = new CaseBriefRepository(this.opened.db)
+    this.journal = new CaseJournalRepository(this.opened.db)
+    this.tasks = new CaseTaskRepository(this.opened.db)
+    this.time = new CaseTimeRepository(this.opened.db)
+    this.studio = new StudioSummaryRepository(this.opened.db)
   }
 
   get file(): string {
@@ -156,7 +182,7 @@ export class AppData {
 
   /** Replaces all data with the backup in `file`. Throws BackupInvalidError or RestoreFailedError. */
   restoreBackup(file: string, options: RestoreOptions = {}): BackupSummary {
-    const expected = inspectBackup(file)
+    const expected = inspectBackupContents(file)
     const dir = dataDirectory(this.userDataDir)
     const stamp = timestampForFileName(this.now())
     const staging = join(dir, `restore-staging-${randomUUID()}.sqlite`)
@@ -195,6 +221,9 @@ export class AppData {
       this.reopen()
       const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }).length
       if (restoredClients !== expected.clients) throw new Error('restored client count differs from the backup')
+      if (count(this.opened.db, 'research_cases') !== expected.cases) {
+        throw new Error('restored case count differs from the backup')
+      }
       options.verify?.(this)
     } catch (error) {
       try {
@@ -220,5 +249,11 @@ export class AppData {
     this.opened = openAppDatabase(this.userDataDir, this.now)
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
+    this.cases = new CaseRepository(this.opened.db)
+    this.briefs = new CaseBriefRepository(this.opened.db)
+    this.journal = new CaseJournalRepository(this.opened.db)
+    this.tasks = new CaseTaskRepository(this.opened.db)
+    this.time = new CaseTimeRepository(this.opened.db)
+    this.studio = new StudioSummaryRepository(this.opened.db)
   }
 }

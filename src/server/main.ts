@@ -5,10 +5,12 @@ import { parseArgs } from 'node:util'
 import { DatabaseTooNewError } from '../main/database/migrations'
 import { DataDirInUseError, defaultLiveDataDir } from './data-dir'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
+import { openInBrowser } from './open-browser'
 import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 
-// `npm run web:local [-- --port <n>] [-- --data-dir <folder>] [-- --no-demo]`:
-// the persistent Live web app on this computer only (#110). Built by
+// `npm run web:local [-- --port <n>] [-- --data-dir <folder>] [-- --open] [-- --no-demo]`:
+// the persistent Live web app on this computer only (#110); --open also opens the
+// private link in the default browser (#117, `npm run live`). Built by
 // `npm run web:build` into dist-web/server/main.mjs, next to the client in
 // dist-web/client/. Unless --no-demo is given it also serves the fictional demo
 // (dist-demo/) on the next port as http://localhost:<port + 1>/ (#114).
@@ -16,7 +18,12 @@ import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 declare const __APP_VERSION__: string
 
 const { values } = parseArgs({
-  options: { port: { type: 'string' }, 'data-dir': { type: 'string' }, 'no-demo': { type: 'boolean' } }
+  options: {
+    port: { type: 'string' },
+    'data-dir': { type: 'string' },
+    open: { type: 'boolean', default: false },
+    'no-demo': { type: 'boolean' }
+  }
 })
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
 const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? defaultLiveDataDir())
@@ -81,8 +88,18 @@ Tracing Guatemala — Live (your real data, this computer only)
   window is closed. Press Ctrl+C to stop.
 `)
 
+// Only after a successful start: every failure above exits without opening anything.
+if (values.open) {
+  const opened = openInBrowser(server.launchUrl, () => console.log('Your browser could not be opened. Open the private link above yourself.'))
+  if (opened) console.log('Opening your browser…')
+}
+
+// A launcher may forward the signal the terminal already delivered, so stop only once.
+let stopping = false
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
+  process.on(signal, () => {
+    if (stopping) return
+    stopping = true
     void Promise.all([server.close(), mirror?.close()]).finally(() => {
       console.log('Tracing Guatemala stopped. Your data is saved.')
       process.exit(0)

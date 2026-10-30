@@ -8,6 +8,7 @@ import { AppRuntimeProvider, desktopRuntime, type AppRuntime, type ModeSwitch } 
 import { LaunchRequired } from '../../src/renderer/src/web/LaunchRequired'
 import { liveModeSwitch, validDemoHref } from '../../src/renderer/src/web/demoLink'
 import { createFakeApi } from './fakeApi'
+import { emptySummary } from './fixtures/studio'
 
 // Switching between the fictional demo and Live (#114): each entry point decides
 // the link from its own address, and the shared UI only renders it.
@@ -131,8 +132,8 @@ function renderSwitcher(runtime: AppRuntime) {
   )
 }
 
-const live = (switcher: ModeSwitch): AppRuntime => ({ mode: 'live', data: createFakeApi().api, backup: createFakeApi().api, switcher })
-const demo = (switcher: ModeSwitch): AppRuntime => ({ mode: 'demo', data: createFakeApi().api, backup: null, switcher })
+const live = (switcher: ModeSwitch): AppRuntime => ({ mode: 'live', data: createFakeApi().api, backup: createFakeApi().api, cases: { getStudioSummary: async () => emptySummary() } as never, switcher })
+const demo = (switcher: ModeSwitch): AppRuntime => ({ mode: 'demo', data: createFakeApi().api, backup: null, cases: null, switcher })
 
 describe('ModeSwitcher', () => {
   it('Live: shows what persists and links to the demo in the same tab', () => {

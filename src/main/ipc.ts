@@ -1,5 +1,18 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
+import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
+import type { StudioSummary } from '../shared/studio-summary'
+import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../shared/case-tasks'
+import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../shared/case-time'
+import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
+import type {
+  CaseEvent,
+  CaseInput,
+  CaseMutationResult,
+  CaseQuery,
+  CaseState,
+  ResearchCase
+} from '../shared/case-model'
 import type { Client, ClientInput, ClientNote, DirectoryQuery, DuplicateCandidate, NoteInput } from '../shared/client-model'
 import type {
   AppInfo,
@@ -64,6 +77,60 @@ export interface NoteService {
   list(clientId: string): ClientNote[]
   create(clientId: string, input: NoteInput): NoteMutationResult
   update(clientId: string, noteId: string, input: NoteInput): NoteMutationResult
+}
+
+/** Research case operations for the local web host (CaseRepository in production). No IPC channels: desktop is frozen. */
+export interface CaseService {
+  list(query: CaseQuery): ResearchCase[]
+  get(id: string): ResearchCase | null
+  listEvents(caseId: string): CaseEvent[]
+  create(clientId: string, input: CaseInput): CaseMutationResult
+  update(id: string, input: CaseInput): CaseMutationResult
+  setState(id: string, to: CaseState): CaseMutationResult
+  archive(id: string): CaseMutationResult
+  unarchive(id: string): CaseMutationResult
+}
+
+/** Case research brief operations for the local web host (CaseBriefRepository in production). */
+export interface BriefService {
+  get(caseId: string): CaseBrief | null
+  save(caseId: string, input: CaseBriefInput): CaseBriefMutationResult
+}
+
+/** Case research journal operations for the local web host (CaseJournalRepository in production). */
+export interface JournalService {
+  list(caseId: string): JournalEntry[]
+  create(caseId: string, input: JournalEntryInput): JournalMutationResult
+  update(caseId: string, entryId: string, input: JournalEntryInput): JournalMutationResult
+}
+
+/** Case task operations for the local web host (CaseTaskRepository in production). */
+export interface TaskService {
+  list(caseId: string): CaseTask[]
+  create(caseId: string, input: CaseTaskInput): CaseTaskMutationResult
+  update(caseId: string, taskId: string, input: CaseTaskInput): CaseTaskMutationResult
+  complete(caseId: string, taskId: string): CaseTaskMutationResult
+  reopen(caseId: string, taskId: string): CaseTaskMutationResult
+}
+
+/** Case research hours and the pending timer for the local web host (CaseTimeRepository in production). */
+export interface TimeService {
+  list(caseId: string): TimeEntry[]
+  create(caseId: string, input: TimeEntryInput): TimeEntryMutationResult
+  update(caseId: string, entryId: string, input: TimeEntryInput): TimeEntryMutationResult
+  delete(caseId: string, entryId: string): TimeEntryMutationResult
+  getActiveTimer(): TimerSnapshot | null
+  start(caseId: string): TimerResult
+  pause(version: number): TimerResult
+  resume(version: number): TimerResult
+  heartbeat(version: number): TimerResult
+  stopAndSave(version: number, options: StopOptions): TimerResult
+  discard(version: number): TimerResult
+}
+
+/** Research Studio dashboard summary for the local web host (StudioSummaryRepository in production). */
+export interface StudioService {
+  summary(): StudioSummary
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */
