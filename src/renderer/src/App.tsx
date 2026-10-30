@@ -11,6 +11,7 @@ import { ClientProfileScreen } from './screens/ClientProfileScreen'
 import { ClientsScreen } from './screens/ClientsScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { NotebookScreen } from './notebook/NotebookScreen'
 import { NotebookAdaptersProvider, type NotebookAdapters } from './notebook/NotebookAdapters'
 import { defaultNotebookAdapters } from './notebook/adapters'
 import { AppRuntimeProvider, desktopRuntime, type AppRuntime } from './runtime/AppRuntime'
@@ -47,6 +48,8 @@ export function App({
                     <Route path=":caseId" element={<CaseScreen />} />
                     <Route path=":caseId/edit" element={<CaseFormScreen />} />
                     <Route path=":caseId/brief" element={<CaseBriefScreen />} />
+                    <Route path=":caseId/notebook" element={<NotebookScreen />} />
+                    <Route path=":caseId/notebook/:pageId" element={<NotebookScreen />} />
                   </Route>
                 )}
                 <Route path="settings" element={<SettingsScreen />} />
