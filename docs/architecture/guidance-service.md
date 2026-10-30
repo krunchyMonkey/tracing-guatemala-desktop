@@ -14,7 +14,7 @@ Added in #102. The browser demo has a replayable walkthrough. Guides, anchors an
 | `guidance/fakeGuidance.ts` | `noopGuidanceService` and a recording fake for tests. |
 | `guidance/driverJsProvider.ts` | The **only** file that imports `driver.js` and its CSS. A `StepRenderer` over Driver.js plus `createDriverJsGuidanceService()`. |
 | `demo/demoTour.ts` | The demo's guide catalog (fixed fictional ids from `sampleData.ts`). Lives under `demo/` because it uses demo data. |
-| `components/DemoToolbar.tsx` | Take a tour / Restart tour button beside the Demo Mode banner. |
+| `demo/DemoToolbar.tsx` | Take a tour / Restart tour (and Send feedback) buttons beside the Demo Mode banner. The demo entry hands it to `components/DemoBanner.tsx` through the `DemoTools` slot, so no shared code imports it. |
 
 ## Guide schema
 
@@ -36,6 +36,10 @@ GuideStep { stepId, route, anchorId, title, body }   // title and body are plain
 ## Content Security Policy
 
 The demo's production CSP is unchanged (`script-src 'self'; style-src 'self'; connect-src 'none'`, and the rest). Driver.js applies its styles through the CSSOM, which `style-src 'self'` permits. `tests/demo/tour.spec.ts` runs a whole tour while listening for `securitypolicyviolation` and console errors and requires none. If a future Driver.js version needed `unsafe-inline`, do not relax the policy: pin the previous version or replace the renderer.
+
+## Feedback entry point
+
+The toolbar also holds **Send feedback** (#102). It reads the current tour step id from `GuidanceState` so a comment can name the step it came from; the screen label comes from the route, not from guidance. The private-project bridge is separate from guidance and documented in `docs/demo/lan-preview.md`.
 
 ## Future Pendo migration: what carries over and what does not
 

@@ -2,8 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '../App'
 import type { AppRuntime } from '../runtime/AppRuntime'
+import { DemoToolsProvider } from '../components/DemoTools'
 import { GuidanceProvider } from '../guidance/GuidanceContext'
 import '../styles.css'
+import { DemoToolbar } from './DemoToolbar'
 import { demoGuides } from './demoTour'
 import { createDemoApi, defaultClock } from './demoApi'
 import { createDemoCases } from './demoCases'
@@ -39,7 +41,9 @@ const guidance = createDriverJsGuidanceService({ guides: demoGuides })
 createRoot(container).render(
   <StrictMode>
     <GuidanceProvider service={guidance}>
-      <App runtime={runtime} />
+      <DemoToolsProvider tools={<DemoToolbar />}>
+        <App runtime={runtime} />
+      </DemoToolsProvider>
     </GuidanceProvider>
   </StrictMode>
 )

@@ -24,6 +24,7 @@
     "smoke:packaged": "node --no-warnings scripts/packaged-smoke.mjs",
     "demo:build": "vite build --configLoader runner --config vite.demo.config.ts",
     "demo:lan": "node scripts/demo-lan.mjs",
+    "demo:lan:feedback": "node scripts/demo-lan.mjs --feedback",
     "demo:dev": "vite --configLoader runner --config vite.demo.config.ts",
     "web:dev": "vite --configLoader runner --config vite.web.config.ts",
     "web:build": "vite build --configLoader runner --config vite.web.config.ts && vite build --configLoader runner --config vite.web-host.config.ts",

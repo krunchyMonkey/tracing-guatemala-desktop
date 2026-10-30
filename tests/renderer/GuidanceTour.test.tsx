@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { createDemoApi } from '../../src/renderer/src/demo/demoApi'
+import { AppRuntimeProvider, type AppRuntime } from '../../src/renderer/src/runtime/AppRuntime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DemoBanner } from '../../src/renderer/src/components/DemoBanner'
+import { DemoToolsProvider } from '../../src/renderer/src/components/DemoTools'
+import { DemoToolbar } from '../../src/renderer/src/demo/DemoToolbar'
 import { demoGuides, demoTour } from '../../src/renderer/src/demo/demoTour'
 import { DEMO_TOUR_ID } from '../../src/renderer/src/guidance/guideIds'
 import { createFakeGuidanceService, noopGuidanceService } from '../../src/renderer/src/guidance/fakeGuidance'
@@ -11,7 +15,7 @@ import { guideAnchors } from '../../src/renderer/src/guidance/anchors'
 import { createTourEngine, routePath, type StepControls, type StepRenderer, type StepView } from '../../src/renderer/src/guidance/tourEngine'
 import type { Guide } from '../../src/renderer/src/guidance/types'
 import { waitForAnchor } from '../../src/renderer/src/guidance/waitForAnchor'
-import { demoCaseIds, demoClientIds } from '../../src/renderer/src/demo/sampleData'
+import { buildDemoData, demoCaseIds, demoClientIds } from '../../src/renderer/src/demo/sampleData'
 import { escapeHtml } from '../../src/renderer/src/guidance/driverJsProvider'
 
 // The vendor-neutral guidance seam (#102): catalog, wait helper, engine and toolbar,
@@ -234,17 +238,27 @@ describe('tour engine', () => {
 })
 
 describe('demo toolbar with a substituted service', () => {
+  const runtime: AppRuntime = {
+    mode: 'demo',
+    data: createDemoApi(buildDemoData(), { name: 'Tracing Guatemala browser demo', version: '0.1.0', platform: 'browser' }),
+    backup: null,
+    cases: null
+  }
   const renderBanner = (service?: ReturnType<typeof createFakeGuidanceService>['service']) =>
     render(
-      <MemoryRouter>
-        {service ? (
-          <GuidanceProvider service={service}>
-            <DemoBanner />
-          </GuidanceProvider>
-        ) : (
-          <DemoBanner />
-        )}
-      </MemoryRouter>
+      <AppRuntimeProvider runtime={runtime}>
+        <MemoryRouter>
+          <DemoToolsProvider tools={<DemoToolbar />}>
+            {service ? (
+              <GuidanceProvider service={service}>
+                <DemoBanner />
+              </GuidanceProvider>
+            ) : (
+              <DemoBanner />
+            )}
+          </DemoToolsProvider>
+        </MemoryRouter>
+      </AppRuntimeProvider>
     )
 
   it('shows no tour button without a guidance service', () => {

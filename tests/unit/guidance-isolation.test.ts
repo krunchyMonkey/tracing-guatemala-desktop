@@ -90,7 +90,7 @@ describe('driver.js isolation', () => {
     expect(built.length).toBeGreaterThan(0)
     for (const file of built) {
       const text = readFileSync(file, 'utf8')
-      expect(text, file).not.toMatch(/driver-popover|driver\.js|driver-overlay/)
+      expect(text, file).not.toMatch(/driver-popover|driver\.js|driver-overlay|__feedback|tg-feedback/)
     }
   })
 })
