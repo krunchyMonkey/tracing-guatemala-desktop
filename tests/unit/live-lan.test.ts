@@ -105,6 +105,8 @@ describe('default start', () => {
   it('has no home-network listener', async () => {
     const live = await start(null)
     expect(live.lanOrigin).toBeNull()
+    expect(live.lanDemoUrl).toBeNull()
+    expect(await call(live, await signIn(live), 'getLanStatus')).toEqual({ enabled: false, origin: null })
   })
 })
 
@@ -434,6 +436,7 @@ describe('device enrollment and sessions', () => {
       'listDevices',
       'revokeDevice',
       'revokeAllDevices',
+      'disableLan',
       'noSuchCall'
     ]
     for (const name of hostOnly) {

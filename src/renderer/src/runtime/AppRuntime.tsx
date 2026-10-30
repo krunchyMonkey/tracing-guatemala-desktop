@@ -93,6 +93,8 @@ export interface LanAdminApi {
   listDevices(): Promise<LanDevice[]>
   revokeDevice(id: string): Promise<{ revoked: boolean }>
   revokeAllDevices(): Promise<{ revoked: number }>
+  /** Closes the home-network listener for good (until the host restarts with --lan-host). */
+  disableLan(): Promise<{ disabled: boolean }>
 }
 
 export type AppRuntime =

@@ -138,6 +138,10 @@ function RemoteSection({ signOut }: { signOut?: () => Promise<void> }) {
 /** Host only, and only while the home-network listener is on. The code is shown, never stored. */
 function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
   const [enabled, setEnabled] = useState(false)
+  const [address, setAddress] = useState<string | null>(null)
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
+  const [confirmOff, setConfirmOff] = useState(false)
+  const [turnedOff, setTurnedOff] = useState(false)
   const [devices, setDevices] = useState<LanDevice[]>([])
   const [code, setCode] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -150,6 +154,7 @@ function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
       .then(async (status) => {
         if (cancelled || !status.enabled) return
         setEnabled(true)
+        setAddress(status.origin)
         const list = await lan.listDevices()
         if (!cancelled) setDevices(list)
       })
@@ -161,7 +166,42 @@ function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
     }
   }, [lan])
 
+  if (turnedOff) {
+    return (
+      <section aria-labelledby="devices-heading" className="card">
+        <h2 id="devices-heading">Home-network devices</h2>
+        <Alert tone="info" title="Home-network access is off">
+          Every paired device was signed out and the pairing code was cleared. To turn it on again, restart Tracing Guatemala with <code>--lan-host</code>.
+          Backups can be restored again.
+        </Alert>
+      </section>
+    )
+  }
   if (!enabled) return null
+
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(address ?? '')
+      setCopied('yes')
+    } catch {
+      setCopied('no')
+    }
+  }
+
+  async function turnOff() {
+    setConfirmOff(false)
+    setBusy(true)
+    setFailed(false)
+    try {
+      const result = await lan.disableLan()
+      if (result.disabled) setTurnedOff(true)
+      else setFailed(true)
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -180,9 +220,28 @@ function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
     <section aria-labelledby="devices-heading" className="card">
       <h2 id="devices-heading">Home-network devices</h2>
       <p>
-        Pairing controls who can sign in from the home network. It does <strong>not</strong> encrypt anything: the code, sessions and everything a
-        paired device opens travel over unencrypted HTTP.
+        <strong>Unencrypted HTTP — trusted home network only.</strong> Pairing controls who can sign in from the home network. It does{' '}
+        <strong>not</strong> encrypt anything: the code, sessions and everything a paired device opens travel over unencrypted HTTP.
       </p>
+      {address && (
+        <div>
+          <p>
+            Address to open on the other device: <code data-testid="lan-address">{address}</code>
+          </p>
+          <div className="button-row">
+            <button type="button" className="button button-secondary" onClick={() => void copyAddress()}>
+              Copy address
+            </button>
+          </div>
+          {copied === 'yes' && <p role="status">Address copied.</p>}
+          {copied === 'no' && <p role="status">Couldn’t copy. Select the address above and copy it yourself.</p>}
+        </div>
+      )}
+      <ol>
+        <li>On the other device, on the same home network, open the address above.</li>
+        <li>Choose “Show pairing code” here, then type the code on the other device. It works once.</li>
+        <li>Use fictional data only. To stop, turn off home-network access below.</li>
+      </ol>
       {failed && (
         <Alert tone="error" title="Not done">
           Something went wrong. Please try again.
@@ -243,6 +302,28 @@ function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
           Sign out all devices
         </button>
       </div>
+
+      <h3>Turn off</h3>
+      <p className="muted">Turning it off signs out every device and clears the code. To turn it on again, restart with --lan-host.</p>
+      <div className="button-row">
+        <button type="button" className="button button-secondary" disabled={busy} onClick={() => setConfirmOff(true)}>
+          Turn off home-network access
+        </button>
+      </div>
+      {confirmOff && (
+        <ConfirmDialog
+          title="Turn off home-network access?"
+          confirmLabel="Turn off"
+          tone="caution"
+          onConfirm={() => void turnOff()}
+          onCancel={() => setConfirmOff(false)}
+        >
+          <p>
+            Every paired device will be signed out and the pairing code cleared. Your saved data is not changed. To turn it on again, restart
+            Tracing Guatemala with <code>--lan-host</code>.
+          </p>
+        </ConfirmDialog>
+      )}
     </section>
   )
 }

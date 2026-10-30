@@ -56,6 +56,8 @@ interface LiveApiOptions {
   csrfToken: string
   /** Called when the host no longer knows this browser (it was restarted). */
   onSessionLost: () => void
+  /** Called when the host can't be reached at all (paired devices only, #137). */
+  onUnreachable?: () => void
   fetchImpl?: typeof fetch
   /** Lets the person pick a backup file; resolves null if they cancel. */
   pickFile?: () => Promise<File | null>
@@ -99,13 +101,19 @@ export function createLiveApi(options: LiveApiOptions): {
   const download = options.download ?? downloadUrl
 
   async function post<T>(path: string, body: BodyInit, headers: Record<string, string>): Promise<T> {
-    const response = await fetchImpl(`${API_PREFIX}${path}`, {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { ...headers, [CSRF_HEADER]: options.csrfToken },
-      body
-    })
+    let response: Response
+    try {
+      response = await fetchImpl(`${API_PREFIX}${path}`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { ...headers, [CSRF_HEADER]: options.csrfToken },
+        body
+      })
+    } catch {
+      options.onUnreachable?.()
+      throw new LiveApiError('unreachable')
+    }
     if (response.status === 401) options.onSessionLost()
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { error?: unknown } | null
@@ -189,7 +197,8 @@ export function createLiveApi(options: LiveApiOptions): {
     createPairingCode: () => call('createPairingCode'),
     listDevices: () => call('listDevices'),
     revokeDevice: (id) => call('revokeDevice', id),
-    revokeAllDevices: () => call('revokeAllDevices')
+    revokeAllDevices: () => call('revokeAllDevices'),
+    disableLan: () => call('disableLan')
   }
 
   const signOut = async () => {

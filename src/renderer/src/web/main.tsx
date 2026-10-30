@@ -5,6 +5,7 @@ import type { AppRuntime } from '../runtime/AppRuntime'
 import '../styles.css'
 import { liveModeSwitch, validDemoHref } from './demoLink'
 import { EnrollDevice } from './EnrollDevice'
+import { HostUnreachable } from './HostUnreachable'
 import { LaunchRequired } from './LaunchRequired'
 import { createLiveApi, fetchSession } from './liveApi'
 
@@ -22,15 +23,20 @@ const root = createRoot(container)
 
 const render = (node: ReactNode) => root.render(<StrictMode>{node}</StrictMode>)
 
+// 127.0.0.1 is the launch-link origin on the host's own computer; any other name
+// is a paired home-network device (#137), which must never be told about the private link.
+const onRemotePage = window.location.hostname !== '127.0.0.1'
+
 try {
   const session = await fetchSession()
-  const switcher = liveModeSwitch(session.demoUrl)
-  const demoHref = validDemoHref(session.demoUrl)
+  const switcher = liveModeSwitch(session.demoUrl, window.location)
+  const demoHref = validDemoHref(session.demoUrl, window.location)
   const remote = session.remote === true
   if (session.authenticated) {
     const live = createLiveApi({
       csrfToken: session.csrfToken,
-      onSessionLost: () => render(remote ? <EnrollDevice /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />)
+      onSessionLost: () => render(remote ? <EnrollDevice sessionEnded /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />),
+      ...(remote ? { onUnreachable: () => render(<HostUnreachable />) } : {})
     })
     const runtime: AppRuntime = remote
       ? { mode: 'live', data: live.data, backup: null, backupStatus: null, cases: live.cases, switcher, remote: true, signOut: live.signOut }
@@ -40,5 +46,5 @@ try {
     render(remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)
   }
 } catch {
-  render(<LaunchRequired reason="unreachable" />)
+  render(onRemotePage ? <HostUnreachable /> : <LaunchRequired reason="unreachable" />)
 }

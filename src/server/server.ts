@@ -4,7 +4,8 @@ import type { NetworkInterfaceInfo } from 'node:os'
 import { AppData } from '../main/database/app-data'
 import type { AppInfo } from '../shared/ipc'
 import { acquireDataDirLock, checkLiveDataDir } from './data-dir'
-import { LanHostError, validateLanHost } from './lan'
+import { checkLanDemoResolves, LanHostError, validateLanDemoName, validateLanHost, type LanDemoResolve } from './lan'
+import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
 import { assertLanDataAllowed } from './lan-profile'
 import { createLiveHost, type LiveHost } from './live-host'
 
@@ -31,6 +32,16 @@ export interface StartLiveServerOptions {
   lanHost?: string | null
   /** Test-only: replaces `os.networkInterfaces()` when validating `lanHost`. */
   lanInterfaces?: NodeJS.Dict<NetworkInterfaceInfo[]>
+  /**
+   * Opt-in LAN demo (#137): a DNS name that points at the LAN address. A second demo
+   * mirror is bound to the LAN address on port + 1 and accepts only that name.
+   * Needs `lanHost` and `demoDir`; any problem leaves it off (Live still starts).
+   */
+  lanDemoName?: string | null
+  /** The built demo (`dist-demo/`) the LAN demo serves. */
+  demoDir?: string | null
+  /** Test-only: replaces the DNS lookup of `lanDemoName`. */
+  lanDemoResolve?: LanDemoResolve
   log?: (line: string) => void
   /** Test-only: the clock for device and pairing-code expiry. */
   now?: () => Date
@@ -38,8 +49,14 @@ export interface StartLiveServerOptions {
 
 export interface RunningLiveServer {
   origin: string
-  /** Origin of the home-network listener, or null when it is off (the default). */
+  /** Origin of the home-network listener, or null when it is off (the default) or turned off. */
   lanOrigin: string | null
+  /** Where the LAN demo is served (`http://<name>:<port + 1>/`), or null. */
+  lanDemoUrl: string | null
+  /** Why the requested LAN demo is not served, or null. Safe to print. */
+  lanDemoNote: string | null
+  /** Turns the home-network access off (#137): closes its listeners, revokes every device. Idempotent. */
+  disableLan(): Promise<void>
   port: number
   /** Full launch link, to show only to the person who started the host. */
   launchUrl: string
@@ -47,7 +64,7 @@ export interface RunningLiveServer {
 }
 
 /** Opens the data (taking the folder lock) and returns the host, ready to mount on any HTTP server. */
-export function openLiveHost(options: StartLiveServerOptions & { lan?: { address: string } }): { host: LiveHost; close: () => void } {
+export function openLiveHost(options: StartLiveServerOptions & { lan?: { address: string; demoUrl?: string | null }; onDisableLan?: () => void }): { host: LiveHost; close: () => void } {
   const checked = checkLiveDataDir(options.dataDir)
   if (!checked.ok) throw new Error(checked.error)
   const release = acquireDataDirLock(options.dataDir)
@@ -110,15 +127,71 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
     assertLanDataAllowed(options.dataDir)
   }
 
+  const log = options.log ?? ((line: string) => console.log(line))
+
   // The real port is needed for Host checks, so a free port is found first.
   const server = createServer()
   await listen(server, options.port, LIVE_HOST)
   const port = (server.address() as AddressInfo).port
 
+  // The LAN demo is a convenience: whatever goes wrong, Live still starts without it.
+  let lanDemo: RunningDemoMirror | null = null
+  let lanDemoUrl: string | null = null
+  let lanDemoNote: string | null = null
+  if (lanAddress && options.lanDemoName) {
+    const name = validateLanDemoName(options.lanDemoName)
+    if (!name.ok) lanDemoNote = name.error
+    else if (!options.demoDir) lanDemoNote = 'the demo is not built (run `npm run web:build`).'
+    else {
+      const problem = await checkLanDemoResolves(name.name, lanAddress, options.lanDemoResolve)
+      if (problem) lanDemoNote = problem
+      else {
+        try {
+          const demoPort = port + 1
+          lanDemo = await startDemoMirror({
+            port: demoPort,
+            demoDir: options.demoDir,
+            bindAddress: lanAddress,
+            hosts: (bound) => [`${name.name}:${bound}`],
+            liveUrl: `http://${lanAddress}:${port}/`,
+            log: options.log
+          })
+          if (!lanDemo) lanDemoNote = 'the demo is not built (run `npm run web:build`).'
+          else lanDemoUrl = `http://${name.name}:${lanDemo.port}/`
+        } catch (error) {
+          lanDemoNote =
+            (error as NodeJS.ErrnoException).code === 'EADDRINUSE' ? `port ${port + 1} is in use on ${lanAddress}.` : 'it could not start.'
+        }
+      }
+    }
+  }
+
+  let lanServer: Server | null = null
+  let lanOrigin: string | null = null
+  let lanClosed: Promise<void> = Promise.resolve()
+  /** Closes the home-network sockets (listener and demo). Runs at most once. */
+  const closeLanSockets = (): Promise<void> => {
+    const closing = [lanServer ? closeServer(lanServer) : Promise.resolve(), lanDemo ? lanDemo.close() : Promise.resolve()]
+    lanServer = null
+    lanOrigin = null
+    lanDemo = null
+    lanDemoUrl = null
+    return Promise.all(closing).then(() => undefined)
+  }
+
   let opened: ReturnType<typeof openLiveHost>
   try {
-    opened = openLiveHost({ ...options, port, ...(lanAddress ? { lan: { address: lanAddress } } : {}) })
+    opened = openLiveHost({
+      ...options,
+      port,
+      ...(lanAddress ? { lan: { address: lanAddress, demoUrl: lanDemoUrl } } : {}),
+      onDisableLan: () => {
+        lanClosed = closeLanSockets()
+        log('Home-network access was turned off. Paired devices were signed out. Restart with --lan-host to turn it on again.')
+      }
+    })
   } catch (error) {
+    await closeLanSockets()
     await closeServer(server)
     throw error
   }
@@ -129,8 +202,6 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
   })
   limits(server)
 
-  let lanServer: Server | null = null
-  let lanOrigin: string | null = null
   if (lanAddress) {
     const lan = createServer()
     try {
@@ -149,6 +220,7 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
       lanOrigin = `http://${lanAddress}:${port}`
     } catch (error) {
       await closeServer(lan)
+      await closeLanSockets()
       await closeServer(server)
       opened.close()
       throw error
@@ -158,11 +230,21 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
   const origin = `http://${LIVE_HOST}:${port}`
   return {
     origin,
-    lanOrigin,
+    get lanOrigin() {
+      return lanOrigin
+    },
+    get lanDemoUrl() {
+      return lanDemoUrl
+    },
+    lanDemoNote,
     port,
     launchUrl: `${origin}${opened.host.launchPath}`,
+    disableLan: async () => {
+      opened.host.disableLan()
+      await lanClosed
+    },
     close: async () => {
-      await Promise.all([closeServer(server), lanServer ? closeServer(lanServer) : Promise.resolve()])
+      await Promise.all([closeServer(server), closeLanSockets(), lanClosed])
       opened.close()
     }
   }

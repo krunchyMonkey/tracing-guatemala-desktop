@@ -89,7 +89,8 @@ const callable = {
   createPairingCode: liveContracts.createPairingCode,
   listDevices: liveContracts.listDevices,
   revokeDevice: liveContracts.revokeDevice,
-  revokeAllDevices: liveContracts.revokeAllDevices
+  revokeAllDevices: liveContracts.revokeAllDevices,
+  disableLan: liveContracts.disableLan
 } as const
 
 export type CallName = keyof typeof callable
@@ -104,7 +105,8 @@ const HOST_ONLY_CALLS: ReadonlySet<string> = new Set([
   'createPairingCode',
   'listDevices',
   'revokeDevice',
-  'revokeAllDevices'
+  'revokeAllDevices',
+  'disableLan'
 ])
 /** What a paired home-network device may call: everything except the host-only calls. */
 export const REMOTE_CALL_NAMES: readonly CallName[] = CALL_NAMES.filter((name) => !HOST_ONLY_CALLS.has(name))
@@ -152,8 +154,13 @@ export interface LiveHostOptions {
    * Reported by `GET /api/v1/session` so the page can offer a link; not a secret.
    */
   demoUrl?: string | null
-  /** Opt-in home-network listener (#135): the validated private address it will be bound to. */
-  lan?: { address: string }
+  /**
+   * Opt-in home-network listener (#135): the validated private address it will be bound to.
+   * `demoUrl` (#137) is where the LAN demo is served (a different host name), or null.
+   */
+  lan?: { address: string; demoUrl?: string | null }
+  /** Called once when the host turns the home-network listener off (#137); closes the sockets. */
+  onDisableLan?: () => void
   now?: () => Date
   log?: (line: string) => void
 }
@@ -165,6 +172,8 @@ export interface LiveHost {
   handleLan?: (req: IncomingMessage, res: ServerResponse) => boolean
   /** Path of the secret launch link, for printing to the person who started the host. */
   launchPath: string
+  /** Turns the home-network side off for good (#137): revokes every device and clears the code. Idempotent. */
+  disableLan(): boolean
 }
 
 const securityHeaders = {
@@ -231,9 +240,20 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const backup = createWebBackupService(options.dataDir, data, options.now)
   const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
-  const lan: ListenerPolicy | null = options.lan
+  let lan: ListenerPolicy | null = options.lan
     ? { kind: 'lan', hosts: lanAllowedHosts(options.lan.address, port), origin: `http://${options.lan.address}:${port}` }
     : null
+  const lanDemoUrl = options.lan?.demoUrl ?? null
+
+  /** One-way: after this the host serves loopback only until it is restarted with --lan-host. */
+  function disableLan(): boolean {
+    if (!lan) return false
+    lan = null
+    devices.revokeAll()
+    devices.clearCode()
+    options.onDisableLan?.()
+    return true
+  }
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -288,7 +308,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     },
     listDevices: () => (lan ? devices.listDevices() : []),
     revokeDevice: ([id]) => ({ revoked: devices.revokeDevice(id) }),
-    revokeAllDevices: () => ({ revoked: devices.revokeAll() })
+    revokeAllDevices: () => ({ revoked: devices.revokeAll() }),
+    disableLan: () => ({ disabled: disableLan() })
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
@@ -532,8 +553,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
         res,
         200,
         found
-          ? { authenticated: true, csrfToken: found.session.csrfToken, demoUrl: null, remote: true, device: { name: found.device.name } }
-          : { authenticated: false, demoUrl: null, remote: true }
+          ? { authenticated: true, csrfToken: found.session.csrfToken, demoUrl: lanDemoUrl, remote: true, device: { name: found.device.name } }
+          : { authenticated: false, demoUrl: lanDemoUrl, remote: true }
       )
       return
     }
@@ -619,6 +640,14 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       return true
     },
 
-    handleLan: lan ? (req, res) => handleLanRequest(lan, req, res) : undefined
+    disableLan,
+
+    handleLan: options.lan
+      ? (req, res) => {
+          // Turned off at run time: the socket is closed too, but never answer from here.
+          if (!lan) return false
+          return handleLanRequest(lan, req, res)
+        }
+      : undefined
   }
 }

@@ -27,15 +27,19 @@ export function ModeSwitcher() {
   if (runtime.mode === 'live') {
     return (
       <section className="mode-switcher mode-switcher-live" aria-label="Workspace mode">
-        <p className="mode-badge">Live · saved on this computer</p>
-        <Switch switcher={runtime.switcher} label="Open the fictional demo" unavailable="Demo not available" />
+        <p className="mode-badge">{runtime.remote ? 'Live · saved on the researcher’s computer' : 'Live · saved on this computer'}</p>
+        <Switch
+          switcher={runtime.switcher}
+          label="Open the fictional demo"
+          unavailable={runtime.remote ? 'Demo not available from this device' : 'Demo not available'}
+        />
       </section>
     )
   }
   const { switcher } = runtime
   return (
     <section className="mode-switcher mode-switcher-demo" aria-label="Workspace mode">
-      <p className="mode-badge">Demo · nothing is saved</p>
+      <p className="mode-badge">Demo · fictional, resets on refresh</p>
       <Switch
         switcher={switcher}
         label="Back to Live (your real data)"

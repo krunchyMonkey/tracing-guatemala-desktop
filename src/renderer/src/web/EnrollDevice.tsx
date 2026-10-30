@@ -15,12 +15,17 @@ const messages: Record<string, string> = {
   'invalid-request': 'That device name can’t be used. Use up to 40 letters or numbers.'
 }
 
+export const SESSION_ENDED_MESSAGE = 'Your session ended. Ask for a new pairing code on the researcher’s computer.'
+
 export function EnrollDevice({
   enroll = enrollDevice,
-  onDone = () => window.location.reload()
+  onDone = () => window.location.reload(),
+  sessionEnded = false
 }: {
   enroll?: (code: string, deviceName: string) => Promise<void>
   onDone?: () => void
+  /** The session was revoked or expired while in use (#137). */
+  sessionEnded?: boolean
 }) {
   const [code, setCode] = useState('')
   const [deviceName, setDeviceName] = useState('')
@@ -45,6 +50,11 @@ export function EnrollDevice({
     <main className="launch-required" aria-labelledby="enroll-heading">
       <section className="card">
         <h1 id="enroll-heading">Pair this device</h1>
+        {sessionEnded && (
+          <Alert tone="warning" title="Signed out">
+            {SESSION_ENDED_MESSAGE}
+          </Alert>
+        )}
         <p>Enter the pairing code shown in Settings on the researcher’s computer.</p>
         <Alert tone="warning" title="Unencrypted">
           Unencrypted HTTP — trusted home network only. The pairing code, your session and everything you open travel unencrypted.
