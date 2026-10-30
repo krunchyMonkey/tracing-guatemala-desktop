@@ -22,6 +22,7 @@ import {
 } from '../cases/model'
 import { useCaseApi } from '../cases/useCaseApi'
 import { useLoad } from '../cases/useLoad'
+import { guideAnchor } from '../guidance/anchors'
 
 // Case overview (#16): the case's details, its state controls, next steps (#19), research brief
 // (#17), research journal (#18), history, and archive. Archived cases and cases of archived clients are read-only.
@@ -173,7 +174,7 @@ function CaseOverview({ caseId }: { caseId: string }) {
         </div>
       )}
 
-      <header className="case-header">
+      <header className="case-header" {...guideAnchor('case-header')}>
         <div className="profile-title">
           <h1 id="case-heading" ref={headingRef} tabIndex={-1}>
             {researchCase.title}

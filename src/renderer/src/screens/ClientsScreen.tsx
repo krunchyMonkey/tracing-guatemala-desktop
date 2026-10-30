@@ -11,6 +11,7 @@ import {
   type SortOrder,
   type StatusFilter
 } from '../clients/model'
+import { guideAnchor } from '../guidance/anchors'
 
 // Client directory (#3 baseline). Search, filters and sort run in the main
 // process (clients:list, #7); the filters live in the URL.
@@ -124,7 +125,7 @@ export function ClientsScreen() {
               : `${activeCount} active · ${clients.length - activeCount} archived`}
           </p>
         </div>
-        <Link className="button button-primary" to="/clients/new">
+        <Link className="button button-primary" to="/clients/new" {...guideAnchor('clients-add')}>
           <span aria-hidden="true">+</span> Add client
         </Link>
       </header>
@@ -143,7 +144,7 @@ export function ClientsScreen() {
         </div>
       ) : (
         <>
-          <div className="toolbar" role="search">
+          <div className="toolbar" role="search" {...guideAnchor('clients-search')}>
             <div className="field search-field">
               <label htmlFor="client-search">Search clients</label>
               <input

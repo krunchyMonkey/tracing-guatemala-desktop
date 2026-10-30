@@ -45,6 +45,22 @@ The server only listens on one private address (10.x.x.x, 172.16–31.x.x or 192
 - **macOS:** System Settings → Wi-Fi → Details → **IP address**, or `ipconfig getifaddr en0`.
 - **Linux:** `hostname -I` or `ip -4 addr`.
 
+## Guided tour
+
+Every screen has a **Take a tour** button beside the Demo Mode banner (**Restart tour** once you have started or finished it). The tour never starts by itself, and it never creates, edits, saves, archives, submits or exports anything.
+
+1. Welcome on the Research Studio home.
+2. Clients: search and filters.
+3. Add client (explained, not opened).
+4. A fictional client profile (Lucía Fernández).
+5. Notes and contact history (explained).
+6. Archive and restore (explained).
+7. That client's research case.
+
+Use **Next** and **Back** (or the arrow keys), **Finish**, or **Escape** / the close button to leave at any time. Focus returns to the tour button. Reduced-motion settings turn the animation off. Completion is remembered only in that browser tab. If you use the browser's own Back button during the tour, the tour ends.
+
+The tour's code and styles are bundled with the demo (no outside requests) and the page's Content Security Policy is unchanged. How it is built: [docs/architecture/guidance-service.md](../architecture/guidance-service.md).
+
 ## Windows firewall
 
 The first time `demo:lan` runs, Windows may ask whether Node.js may communicate on networks.
@@ -111,4 +127,4 @@ All names, contact details and notes are invented. Email addresses use the reser
 - Entry: `src/renderer/demo/index.html` → `src/renderer/src/demo/main.tsx`; build config `vite.demo.config.ts`; server `scripts/demo-lan.mjs` + `scripts/demo-server.mjs`.
 - The shared UI reads data through `useAppRuntime()` (`src/renderer/src/runtime/AppRuntime.tsx`). The desktop runtime forwards to the preload bridge; the demo runtime uses `createDemoApi()` with the same shared validation, search and duplicate rules, and has no backup API. ESLint stops non-demo renderer code from importing `demo/` or reading `window.tracingGuatemala` directly, and a Playwright test checks that the desktop bundle contains no demo data.
 - `crypto.randomUUID()` doesn't exist on non-secure origins such as `http://192.168.x.x`; the demo builds v4 UUIDs from `crypto.getRandomValues()` instead (never `Math.random()`).
-- Tests: `tests/renderer/DemoMode.test.tsx`, `tests/unit/demo-server.test.ts`, and the `browser-demo` Playwright project (`tests/demo/`), which runs `demo:lan` against a private LAN address of the test machine when one exists. On Windows it uses the installed Edge; elsewhere run `npx playwright install chromium` once. Refresh screenshots with `npm run demo:build && CAPTURE_SCREENSHOTS=1 npx playwright test --project browser-demo` (writes `docs/screenshots/issue-100/`).
+- Tests: `tests/renderer/DemoMode.test.tsx`, `tests/renderer/GuidanceTour.test.tsx`, `tests/unit/guidance-isolation.test.ts`, `tests/demo/tour.spec.ts`, `tests/unit/demo-server.test.ts`, and the `browser-demo` Playwright project (`tests/demo/`), which runs `demo:lan` against a private LAN address of the test machine when one exists. On Windows it uses the installed Edge; elsewhere run `npx playwright install chromium` once. Refresh screenshots with `npm run demo:build && CAPTURE_SCREENSHOTS=1 npx playwright test --project browser-demo` (writes `docs/screenshots/issue-100/`).

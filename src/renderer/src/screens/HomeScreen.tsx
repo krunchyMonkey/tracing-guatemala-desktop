@@ -14,6 +14,7 @@ import {
   type StudioSummary,
   type StudioTask
 } from '../../../shared/studio-summary'
+import { guideAnchor } from '../guidance/anchors'
 
 // Research Studio (#116): the Home dashboard. One aggregate read (getStudioSummary)
 // feeds the welcome header, the Continue researching action, the metric tiles and
@@ -66,7 +67,7 @@ function Studio({ api, demo }: { api: CaseApi; demo: boolean }) {
   return (
     <section aria-labelledby="home-heading" className="studio">
       {!demo && <BackupReminder />}
-      <header className="studio-header">
+      <header className="studio-header" {...guideAnchor('home-welcome')}>
         <div className="studio-textile" aria-hidden="true" />
         <p className="studio-eyebrow">Research Studio</p>
         <h1 id="home-heading">Welcome</h1>

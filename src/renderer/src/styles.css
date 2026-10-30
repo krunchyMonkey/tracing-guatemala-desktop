@@ -2036,3 +2036,22 @@ h1[tabindex='-1']:focus {
     white-space: normal;
   }
 }
+
+/* ---------- demo toolbar (#102) ---------- */
+
+.demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.demo-action {
+  min-height: 2.25rem;
+  padding-block: 0.3rem;
+}
+
+.demo-notice {
+  font-size: 0.9rem;
+}

@@ -45,7 +45,7 @@ npm run demo:build
 npm run demo:lan     # prints http://<LAN-IP>:4173/#/clients; Ctrl+C stops it
 ```
 
-See [docs/demo/lan-preview.md](docs/demo/lan-preview.md) for address selection, Windows firewall settings, limits and the second-device check.
+The demo has a **Take a tour** button (a short Driver.js walkthrough that never changes anything). See [docs/demo/lan-preview.md](docs/demo/lan-preview.md) for the tour, address selection, Windows firewall settings, limits and the second-device check.
 
 See [docs/privacy-and-backup.md](docs/privacy-and-backup.md) for where data is stored and how backups work.
 

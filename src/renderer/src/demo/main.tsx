@@ -2,7 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '../App'
 import type { AppRuntime } from '../runtime/AppRuntime'
+import { GuidanceProvider } from '../guidance/GuidanceContext'
 import '../styles.css'
+import { demoGuides } from './demoTour'
 import { createDemoApi, defaultClock } from './demoApi'
 import { createDemoCases } from './demoCases'
 import { buildDemoCases, buildDemoData } from './sampleData'
@@ -29,8 +31,15 @@ const runtime: AppRuntime = {
 const container = document.getElementById('root')
 if (!container) throw new Error('Missing #root element')
 
+// Driver.js is a separate chunk, loaded only here: the Live web app and the desktop
+// app never import this entry, so they never contain it (#102).
+const { createDriverJsGuidanceService } = await import('../guidance/driverJsProvider')
+const guidance = createDriverJsGuidanceService({ guides: demoGuides })
+
 createRoot(container).render(
   <StrictMode>
-    <App runtime={runtime} />
+    <GuidanceProvider service={guidance}>
+      <App runtime={runtime} />
+    </GuidanceProvider>
   </StrictMode>
 )
