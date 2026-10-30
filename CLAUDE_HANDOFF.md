@@ -47,6 +47,18 @@ All Phase 2 tickets are in Milestone 2. **SQLite remains the local database.** E
 
 **Priority when time is short:** #110 + a tested #14→#15→#16 case slice; #114/#117 are required before claiming trustworthy Live Mode. Demo visuals may be delivered separately. One issue per PR, explicit stack dependencies, no auto-merges.
 
+## Claude Code model routing and sequential execution (Phase 2 owner direction, 2026-10-29)
+
+Each Phase 2 GitHub issue has a **Claude execution model profile** specifying preferred session model, effort, work split, review/escalation and fallback. Read the specific issue body before working; the issue profile is advisory until a human/controller explicitly sets the Claude Code session model using `--model` and `--effort`.
+
+**Policy:** one issue in flight per worker, sequential order respecting dependencies. Always inspect GitHub state and existing branches/worktrees first; do not redo an already-open PR. When an earlier PR is still unmerged, base later dependent work on that branch as an **explicitly disclosed stacked PR**, not a misleading independent PR off `main`. A PR is a deliverable, **not approval to merge**. Failed tests or material privacy/security blockers stop dependent work; non-blocked independent issue work may continue. Do not assume researcher acceptance at #21.
+
+**Default:** `sonnet --effort medium` for most features; `haiku --effort medium` for deterministic fixture generation or simple sidebar polish, with a Sonnet review; `sonnet --effort high` for persistence/export/timer/privacy-heavy implementation; `opusplan --effort high` for #110/#114 architecture and threat modeling. `opusplan` uses Opus **in Plan Mode** and Sonnet for implementation; to guarantee an Opus planning pass, explicitly enter Plan Mode or run a separate Opus planning session before the Sonnet implementation. Do not use expensive Opus as a default for every edit.
+
+**Escalate only when needed:** use the issue's review model for irreversible schema changes, unsafe network access, data-loss, cross-client leakage, complex concurrency or unresolvable test failures. If models are unavailable, record the substitution; never skip mandatory security checks to save tokens. Static types, automated tests and explicit review take precedence over a larger model as a substitute for validation.
+
+**Enforcement:** when starting a new issue in Claude Code, use an explicit session such as `claude --model sonnet --effort medium` (or `claude -p --model sonnet --effort medium "Work on #16 only ..."`). For automated print-mode execution, `--max-budget-usd` can set a **best-effort estimated API spend cap**, not a guaranteed invoice cap; usage/cap support varies with authentication/provider. Avoid parallel Claude issue workers, automatic merging, unsupported credentials and claims that a model profile in GitHub is itself enforced. 
+
 ## Git/worktree and PR workflow
 
 - Find existing local checkout and inspect `git worktree list --porcelain`; **reuse** issue-specific worktrees. Only clone if none usable. Never reset/clean/delete/overwrite existing changes.
