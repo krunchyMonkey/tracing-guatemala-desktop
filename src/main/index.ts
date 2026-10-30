@@ -2,9 +2,10 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session } from 'electron'
 import { registerAppProtocol } from './app-protocol'
 import { BACKUP_EXTENSION, createBackupService, type BackupDialogs } from './backup'
+import { createDataServices } from './data-services'
 import { AppData } from './database/app-data'
 import { DatabaseTooNewError } from './database/migrations'
-import { registerIpcHandlers, type ClientService, type NoteService } from './ipc'
+import { registerIpcHandlers } from './ipc'
 import { buildApplicationMenu } from './menu'
 import { APP_SCHEME, resolveRendererTarget } from './renderer-target'
 import { hardenSession, hardenWebContents, secureWebPreferences } from './security'
@@ -82,21 +83,7 @@ void app.whenReady().then(() => {
     if (!data) throw new Error('Data is closed')
     return data
   }
-  // Delegate on every call: a restore replaces the connection and repositories.
-  const clients: ClientService = {
-    list: (query) => current().clients.list(query),
-    get: (id) => current().clients.get(id),
-    create: (input) => current().clients.create(input),
-    update: (id, input) => current().clients.update(id, input),
-    archive: (id) => current().clients.archive(id),
-    restore: (id) => current().clients.restore(id),
-    findDuplicates: (input, excludeId) => current().clients.findDuplicates(input, excludeId)
-  }
-  const notes: NoteService = {
-    list: (clientId) => current().notes.list(clientId),
-    create: (clientId, input) => current().notes.create(clientId, input),
-    update: (clientId, noteId, input) => current().notes.update(clientId, noteId, input)
-  }
+  const { clients, notes } = createDataServices(current)
 
   hardenSession(session.defaultSession, target)
   if (target.mode === 'production') {

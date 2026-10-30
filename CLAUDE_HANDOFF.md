@@ -45,3 +45,9 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 
 ## Definition of complete
 The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
+
+## #110 web-first runtime: implemented (PR pending review)
+- `npm run web:dev` (127.0.0.1:5175, HMR + API, `.web-dev-data/`), `npm run web:build` (`dist-web/`), `npm run web:local` (127.0.0.1:4180, real data in its own profile folder).
+- Runtime `mode: 'live'` with `src/renderer/src/web/liveApi.ts`; the host is in `src/server/`. Contracts are shared via `src/main/contracts.ts`, services via `src/main/data-services.ts`.
+- Security: loopback only, Host check, launch link → HttpOnly SameSite=Strict cookie, Origin + CSRF header on writes, size and media-type limits, CSP `connect-src 'self'`. See `docs/architecture/web-first-runtime.md`.
+- New Phase 2 data calls: add the zod contract to `src/main/contracts.ts`, a name to `callable` in `src/server/live-host.ts`, a method to `AppDataApi`, `liveApi.ts` and `demoApi.ts`, and tests in `tests/unit/live-host.test.ts` / `tests/web/`.
