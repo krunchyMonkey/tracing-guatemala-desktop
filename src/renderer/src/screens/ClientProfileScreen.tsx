@@ -21,6 +21,8 @@ import {
   type NoteInput,
   type NoteIssue
 } from '../clients/model'
+import { ClientCases } from '../cases/ClientCases'
+import { useAppRuntime } from '../runtime/AppRuntime'
 import { useClientNotes, type NoteSaveResult } from '../clients/useClientNotes'
 
 // Client profile (#3 baseline). Reads the saved client when opened (#8);
@@ -32,6 +34,7 @@ type HistoryFilter = 'all' | 'note' | 'contact'
 export function ClientProfileScreen() {
   const { id } = useParams()
   const store = useClientStore()
+  const { cases } = useAppRuntime()
   const location = useLocation()
   const flash = (location.state as { flash?: string } | null)?.flash
   const [pending, setPending] = useState<'archive' | 'restore' | null>(null)
@@ -137,13 +140,17 @@ export function ClientProfileScreen() {
         <DetailsCard client={client} />
       </div>
 
-      <section className="card placeholder-card" aria-labelledby="orders-heading">
-        <h2 id="orders-heading">Orders &amp; research cases</h2>
-        <p className="muted">
-          Planned for a later phase. For now, record orders and custom offers as notes below, for example “Custom
-          offer sent: Premium package, adjusted price”.
-        </p>
-      </section>
+      {cases ? (
+        <ClientCases client={client} api={cases} />
+      ) : (
+        <section className="card placeholder-card" aria-labelledby="orders-heading">
+          <h2 id="orders-heading">Orders &amp; research cases</h2>
+          <p className="muted">
+            Planned for a later phase. For now, record orders and custom offers as notes below, for example “Custom
+            offer sent: Premium package, adjusted price”.
+          </p>
+        </section>
+      )}
 
       {/* Archive and restore add system entries, so the history re-reads when the client changes. */}
       <History clientId={client.id} version={client.updatedAt} readOnly={isArchived} />

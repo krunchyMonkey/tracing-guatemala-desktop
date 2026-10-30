@@ -2,6 +2,9 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router'
 import { ClientStoreProvider } from './clients/ClientStore'
 import { ClientsLoaded } from './clients/components'
 import { AppLayout } from './components/AppLayout'
+import { CaseFormScreen } from './screens/CaseFormScreen'
+import { CaseScreen } from './screens/CaseScreen'
+import { CasesScreen } from './screens/CasesScreen'
 import { ClientFormScreen } from './screens/ClientFormScreen'
 import { ClientProfileScreen } from './screens/ClientProfileScreen'
 import { ClientsScreen } from './screens/ClientsScreen'
@@ -26,6 +29,14 @@ export function App({ runtime = desktopRuntime }: { runtime?: AppRuntime }) {
                 <Route path=":id" element={<ClientProfileScreen />} />
                 <Route path=":id/edit" element={<ClientFormScreen />} />
               </Route>
+              {runtime.cases && (
+                <Route path="cases" element={<ClientsLoaded />}>
+                  <Route index element={<CasesScreen />} />
+                  <Route path="new" element={<CaseFormScreen />} />
+                  <Route path=":caseId" element={<CaseScreen />} />
+                  <Route path=":caseId/edit" element={<CaseFormScreen />} />
+                </Route>
+              )}
               <Route path="settings" element={<SettingsScreen />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

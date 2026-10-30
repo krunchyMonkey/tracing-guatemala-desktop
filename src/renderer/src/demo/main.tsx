@@ -3,21 +3,25 @@ import { createRoot } from 'react-dom/client'
 import { App } from '../App'
 import type { AppRuntime } from '../runtime/AppRuntime'
 import '../styles.css'
-import { createDemoApi } from './demoApi'
-import { buildDemoData } from './sampleData'
+import { createDemoApi, defaultClock } from './demoApi'
+import { createDemoCases } from './demoCases'
+import { buildDemoCases, buildDemoData } from './sampleData'
 
 // Entry point of the browser demo (#100, vite.demo.config.ts). Same UI as the
 // desktop app; data lives in this page's memory, so a refresh resets it.
 
+const data = createDemoApi(buildDemoData(), {
+  name: 'Tracing Guatemala browser demo',
+  version: __APP_VERSION__,
+  platform: 'browser'
+})
+
 const runtime: AppRuntime = {
   mode: 'demo',
-  data: createDemoApi(buildDemoData(), {
-    name: 'Tracing Guatemala browser demo',
-    version: __APP_VERSION__,
-    platform: 'browser'
-  }),
+  data,
   backup: null,
-  cases: null
+  // Cases read client status through the same demo clients, so archiving a client locks its cases.
+  cases: createDemoCases(buildDemoCases(), data.getClient, defaultClock)
 }
 
 const container = document.getElementById('root')

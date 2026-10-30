@@ -1,4 +1,6 @@
+import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
+import type { DemoCaseData } from './demoCases'
 import type { DemoData } from './demoApi'
 
 // Entirely FICTIONAL starter data for the browser demo. Any resemblance to real
@@ -192,4 +194,167 @@ export function buildDemoData(now: Date = new Date()): DemoData {
   ]
 
   return { clients, notes }
+}
+
+/**
+ * Fictional research cases. Due dates are relative to today, so one is always
+ * overdue and another is due soon. Ids are fixed (#/cases/<id>) for docs and tests.
+ */
+export const demoCaseIds = {
+  paternal: 'de300000-0000-4000-8000-200000000001',
+  maternal: 'de300000-0000-4000-8000-200000000002',
+  baptism: 'de300000-0000-4000-8000-200000000003',
+  surname: 'de300000-0000-4000-8000-200000000004',
+  secondBranch: 'de300000-0000-4000-8000-200000000005',
+  reunion: 'de300000-0000-4000-8000-200000000006',
+  spelling: 'de300000-0000-4000-8000-200000000007'
+} as const
+
+export function buildDemoCases(now: Date = new Date()): DemoCaseData {
+  const at = (daysAgo: number, hour = 15) => {
+    const day = new Date(now.getTime() - daysAgo * DAY)
+    day.setUTCHours(hour, 0, 0, 0)
+    return day.toISOString()
+  }
+  const due = (daysFromToday: number) => localDateString(new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysFromToday))
+
+  const ids = demoClientIds
+  const caseIds = demoCaseIds
+  let eventNumber = 0
+  const events: CaseEvent[] = []
+  const history = (caseId: string, steps: [CaseState, CaseEvent['kind'], number][]) => {
+    let from: CaseState | null = null
+    for (const [to, kind, daysAgo] of steps) {
+      eventNumber += 1
+      events.push({
+        id: `de300000-0000-4000-8000-3000000000${String(eventNumber).padStart(2, '0')}`,
+        caseId,
+        kind,
+        fromState: from,
+        toState: to,
+        occurredAt: at(daysAgo)
+      })
+      from = to
+    }
+  }
+
+  const make = (
+    partial: Pick<ResearchCase, 'id' | 'clientId' | 'title' | 'state'> & Partial<ResearchCase>,
+    createdDaysAgo: number,
+    updatedDaysAgo: number
+  ): ResearchCase => ({
+    goal: null,
+    orderReference: null,
+    dueDate: null,
+    stateChangedAt: at(updatedDaysAgo),
+    createdAt: at(createdDaysAgo),
+    updatedAt: at(updatedDaysAgo),
+    archivedAt: null,
+    ...partial
+  })
+
+  const cases: ResearchCase[] = [
+    make(
+      {
+        id: caseIds.paternal,
+        clientId: ids.lucia,
+        title: 'Paternal line — Quetzaltenango, 1880s',
+        state: 'active',
+        goal: 'I would like to know where my great-grandfather was born and the names of his parents.\nAny photographs would be a wonderful bonus.',
+        orderReference: 'FO-DEMO-0042',
+        dueDate: due(6)
+      },
+      40,
+      3
+    ),
+    make(
+      {
+        id: caseIds.maternal,
+        clientId: ids.lucia,
+        title: 'Maternal grandparents — Totonicapán',
+        state: 'waiting',
+        goal: 'Confirm the marriage year and the grandmother’s maiden name.',
+        orderReference: 'FO-DEMO-0039',
+        dueDate: due(-4)
+      },
+      75,
+      9
+    ),
+    make(
+      {
+        id: caseIds.baptism,
+        clientId: ids.lucia,
+        title: 'Baptism search — San Pedro (fictional parish)',
+        state: 'closed',
+        orderReference: 'FO-DEMO-0021',
+        dueDate: due(-60)
+      },
+      200,
+      90
+    ),
+    make(
+      {
+        id: caseIds.surname,
+        clientId: ids.daniel,
+        title: 'Surname origin — one family, one town',
+        state: 'intake',
+        goal: 'Which town did the family come from? We only know the surname and the decade.'
+      },
+      6,
+      6
+    ),
+    make(
+      {
+        id: caseIds.secondBranch,
+        clientId: ids.ethan,
+        title: 'Second branch report',
+        state: 'delivered',
+        orderReference: 'FO-DEMO-0044',
+        dueDate: due(-2)
+      },
+      45,
+      1
+    ),
+    make(
+      {
+        id: caseIds.reunion,
+        clientId: ids.tomas,
+        title: 'Short family history for a reunion',
+        state: 'closed',
+        archivedAt: at(30),
+        dueDate: due(-120)
+      },
+      300,
+      30
+    ),
+    make(
+      {
+        id: caseIds.spelling,
+        clientId: ids.rosa,
+        title: 'Surname spelling variations',
+        state: 'closed',
+        dueDate: due(-150)
+      },
+      160,
+      100
+    )
+  ]
+
+  history(caseIds.paternal, [['intake', 'created', 40], ['active', 'state', 30]])
+  history(caseIds.maternal, [['intake', 'created', 75], ['active', 'state', 70], ['waiting', 'state', 9]])
+  history(caseIds.baptism, [['intake', 'created', 200], ['active', 'state', 195], ['delivered', 'state', 120], ['closed', 'state', 90]])
+  history(caseIds.surname, [['intake', 'created', 6]])
+  history(caseIds.secondBranch, [['intake', 'created', 45], ['active', 'state', 40], ['delivered', 'state', 1]])
+  history(caseIds.reunion, [['intake', 'created', 300], ['active', 'state', 290], ['delivered', 'state', 260], ['closed', 'state', 250]])
+  history(caseIds.spelling, [['intake', 'created', 160], ['active', 'state', 150], ['closed', 'state', 100]])
+  events.push({
+    id: 'de300000-0000-4000-8000-300000000099',
+    caseId: caseIds.reunion,
+    kind: 'archived',
+    fromState: null,
+    toState: null,
+    occurredAt: at(30)
+  })
+
+  return { cases, events }
 }
