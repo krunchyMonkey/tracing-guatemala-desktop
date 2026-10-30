@@ -4,9 +4,11 @@ import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDateTime } from '../clients/components'
 import { useAppRuntime, type BackupApi } from '../runtime/AppRuntime'
 
-// Settings & Backup (#11). Backups are made and restored by the main process
-// through native file dialogs; this screen never sees file paths. The browser
-// demo (#100) has no backups and says so instead of offering the controls.
+// Settings & Backup (#11). On the desktop, backups are made and restored by the
+// main process through native file dialogs; in the Live web app (#110) the host
+// keeps a copy and the browser downloads one, and a restore is uploaded. This
+// screen never sees file paths. The browser demo (#100) has no backups and says
+// so instead of offering the controls.
 
 type Ready = Extract<BackupChoice, { ok: true }>
 
@@ -52,7 +54,7 @@ export function SettingsScreen() {
               data folder. Nothing is sent over the internet, and nothing is uploaded to the cloud.
             </p>
           </section>
-          <BackupSection backup={runtime.backup} />
+          <BackupSection backup={runtime.backup} web={runtime.mode === 'live'} />
         </>
       ) : (
         <>
@@ -88,7 +90,7 @@ export function SettingsScreen() {
   )
 }
 
-function BackupSection({ backup }: { backup: BackupApi }) {
+function BackupSection({ backup, web }: { backup: BackupApi; web: boolean }) {
   const { reload } = useClientStore()
   const [busy, setBusy] = useState<'backup' | 'choose' | 'restore' | null>(null)
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
@@ -114,7 +116,9 @@ function BackupSection({ backup }: { backup: BackupApi }) {
       result.ok
         ? {
             tone: 'success',
-            text: `Backup saved as “${result.fileName}”, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. Keep it somewhere private.`
+            text: web
+              ? `Backup “${result.fileName}” made, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. A copy is kept in the app’s backups folder and your browser is downloading another. Keep it somewhere private.`
+              : `Backup saved as “${result.fileName}”, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. Keep it somewhere private.`
           }
         : { tone: 'error', text: 'The backup couldn’t be saved. Nothing was changed. Try another folder or drive.' }
     )

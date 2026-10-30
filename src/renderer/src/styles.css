@@ -1154,3 +1154,15 @@ h1[tabindex='-1']:focus {
     display: none;
   }
 }
+
+/* Live web app without a session (#110): one calm card in the middle of the page. */
+.launch-required {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.launch-required .card {
+  max-width: 34rem;
+}

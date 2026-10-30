@@ -30,9 +30,18 @@ export function resolveRendererFile(rootDir: string, requestUrl: string): string
   }
   if (url.protocol !== `${APP_SCHEME}:` || url.host !== APP_HOST) return null
 
+  return resolveStaticPath(rootDir, url.pathname)
+}
+
+/**
+ * Map a URL path (still percent-encoded) onto a file inside `rootDir`; `/` is
+ * index.html. Returns null for paths that escape the root. Also used by the
+ * local web host (#110) to serve the built web client.
+ */
+export function resolveStaticPath(rootDir: string, urlPathname: string): string | null {
   let pathname: string
   try {
-    pathname = decodeURIComponent(url.pathname)
+    pathname = decodeURIComponent(urlPathname)
   } catch {
     return null
   }

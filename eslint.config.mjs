@@ -26,11 +26,11 @@ const rendererForbiddenImports = [
 ]
 
 export default defineConfig(
-  { ignores: ['out/**', 'dist-demo/**', 'release/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**'] },
+  { ignores: ['out/**', 'dist-demo/**', 'dist-web/**', '.web-dev-data/**', 'release/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**'] },
   js.configs.recommended,
   tseslint.configs.recommended,
   {
-    files: ['src/main/**', 'src/preload/**', 'tests/unit/**', 'tests/e2e/**', 'tests/demo/**', 'scripts/**', '*.config.*'],
+    files: ['src/main/**', 'src/preload/**', 'src/server/**', 'tests/unit/**', 'tests/e2e/**', 'tests/demo/**', 'tests/web/**', 'scripts/**', '*.config.*'],
     languageOptions: { globals: globals.node }
   },
   {
@@ -71,9 +71,10 @@ export default defineConfig(
     rules: { 'no-restricted-properties': 'off' }
   },
   {
-    // The demo's fictional data and entry point must never reach the desktop bundle.
+    // The demo's fictional data and entry point must never reach the desktop or
+    // Live bundles, and the Live API client must never reach the demo (#110).
     files: ['src/renderer/src/**/*.{ts,tsx}'],
-    ignores: ['src/renderer/src/demo/**'],
+    ignores: ['src/renderer/src/demo/**', 'src/renderer/src/web/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -83,7 +84,42 @@ export default defineConfig(
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
             },
-            { group: ['**/demo/**', './demo', '../demo'], message: 'Only the browser demo entry may import demo code.' }
+            { group: ['**/demo/**', './demo', '../demo'], message: 'Only the browser demo entry may import demo code.' },
+            { group: ['**/web/**', './web', '../web'], message: 'Only the Live web entry may import Live web code.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['src/renderer/src/demo/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: rendererForbiddenImports,
+              message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
+            },
+            { group: ['**/web/**', './web', '../web'], message: 'The fictional demo must never reach the Live web host.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['src/renderer/src/web/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: rendererForbiddenImports,
+              message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
+            },
+            { group: ['**/demo/**', './demo', '../demo'], message: 'Fictional demo data must never reach the Live web app.' }
           ]
         }
       ]

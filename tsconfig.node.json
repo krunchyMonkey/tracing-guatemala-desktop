@@ -17,10 +17,13 @@
   "include": [
     "electron.vite.config.ts",
     "vite.demo.config.ts",
+    "vite.web.config.ts",
+    "vite.web-host.config.ts",
     "vitest.config.mts",
     "playwright.config.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
+    "src/server/**/*.ts",
     "src/shared/**/*.ts",
     "tests/unit/**/*.ts",
     "scripts/**/*.d.mts"
