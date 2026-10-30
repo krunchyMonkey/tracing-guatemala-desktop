@@ -19,6 +19,7 @@ function setup() {
   const cases = createDemoCases(buildDemoCases(), data.getClient, defaultClock)
   const runtime: AppRuntime = {
     mode: 'live',
+    switcher: { kind: 'unavailable', reason: 'not-available' },
     data,
     backup: { createBackup: vi.fn(), chooseBackupToRestore: vi.fn(), restoreBackup: vi.fn() } as never,
     cases

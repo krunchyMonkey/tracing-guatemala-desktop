@@ -19,6 +19,8 @@ export interface StartLiveServerOptions {
   port: number
   staticDir: string | null
   appInfo: AppInfo
+  /** Address of the fictional demo mirror (#114), reported to the page; null when there is none. */
+  demoUrl?: string | null
   log?: (line: string) => void
 }
 

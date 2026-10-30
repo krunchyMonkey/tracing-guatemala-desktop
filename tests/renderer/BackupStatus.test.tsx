@@ -32,7 +32,7 @@ function live(statuses: BackupStatus[] | Error = [none]) {
     if (statuses instanceof Error) throw statuses
     return queue.length > 1 ? queue.shift()! : queue[0]!
   })
-  const runtime: AppRuntime = { mode: 'live', data: fake.api, backup: fake.api, cases: { getStudioSummary: async () => emptySummary() } as never, backupStatus }
+  const runtime: AppRuntime = { mode: 'live', data: fake.api, backup: fake.api, cases: { getStudioSummary: async () => emptySummary() } as never, backupStatus, switcher: { kind: 'unavailable', reason: 'not-available' } }
   return { fake, backupStatus, runtime }
 }
 
@@ -172,6 +172,7 @@ describe('other runtimes', () => {
     const backupStatus = vi.fn(async () => none)
     const runtime: AppRuntime = {
       mode: 'demo',
+      switcher: { kind: 'unavailable', reason: 'not-available' },
       data: createDemoApi(buildDemoData(), { name: 'Tracing Guatemala browser demo', version: '0.1.0', platform: 'browser' }),
       backup: null,
       cases: null,

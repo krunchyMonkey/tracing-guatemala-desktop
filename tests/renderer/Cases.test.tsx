@@ -18,7 +18,7 @@ const UNKNOWN_ID = '99999999-9999-4999-8999-999999999999'
 function setup() {
   const data = createDemoApi(buildDemoData(), appInfo)
   const cases = createDemoCases(buildDemoCases(), data.getClient, defaultClock)
-  const runtime: AppRuntime = { mode: 'live', data, backup: { createBackup: vi.fn(), chooseBackupToRestore: vi.fn(), restoreBackup: vi.fn() } as never, cases }
+  const runtime: AppRuntime = { mode: 'live', data, backup: { createBackup: vi.fn(), chooseBackupToRestore: vi.fn(), restoreBackup: vi.fn() } as never, cases, switcher: { kind: 'unavailable', reason: 'not-available' } }
   return { data, cases, runtime }
 }
 

@@ -19,10 +19,10 @@ const CASE_ID = 'cccccccc-0000-4000-8000-000000000001'
 function runtimeWith(mode: 'live' | 'demo', getStudioSummary: () => Promise<StudioSummary>): AppRuntime {
   const cases = { getStudioSummary } as unknown as CaseApi
   if (mode === 'demo') {
-    return { mode, data: createDemoApi(buildDemoData(), appInfo), backup: null, cases }
+    return { mode, data: createDemoApi(buildDemoData(), appInfo), backup: null, cases, switcher: { kind: 'unavailable', reason: 'not-available' } }
   }
   const fake = createFakeApi()
-  return { mode, data: fake.api, backup: fake.api, cases }
+  return { mode, data: fake.api, backup: fake.api, cases, switcher: { kind: 'unavailable', reason: 'not-available' } }
 }
 
 function openHome(runtime?: AppRuntime) {
@@ -82,7 +82,7 @@ describe('metrics', () => {
       data.listClients({ text: '', status: 'all', sources: [], sort: 'name' })
     )
     const expected = await cases.getStudioSummary()
-    openHome({ mode: 'demo', data, backup: null, cases })
+    openHome({ mode: 'demo', data, backup: null, cases, switcher: { kind: 'unavailable', reason: 'not-available' } })
     const glance = await screen.findByRole('region', { name: 'At a glance' })
     expect(within(glance).getByText('Open cases').closest('li')!.textContent).toContain(String(expected.counts.openCases))
     expect(within(glance).getByText('Overdue tasks').closest('li')!.textContent).toContain(String(expected.counts.overdueTasks))
@@ -152,7 +152,7 @@ describe('other runtimes', () => {
   })
 
   it('keeps the simple demo welcome when the demo has no case support', async () => {
-    openHome({ mode: 'demo', data: createDemoApi(buildDemoData(), appInfo), backup: null, cases: null })
+    openHome({ mode: 'demo', data: createDemoApi(buildDemoData(), appInfo), backup: null, cases: null, switcher: { kind: 'unavailable', reason: 'not-available' } })
     expect(await screen.findByText(/filled with fictional clients/)).toBeTruthy()
     expect(screen.queryByText(LABEL)).toBeNull()
   })

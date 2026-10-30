@@ -19,6 +19,15 @@ export type AppDataApi = Omit<TracingGuatemalaApi, 'createBackup' | 'chooseBacku
 export type BackupApi = Pick<TracingGuatemalaApi, 'createBackup' | 'chooseBackupToRestore' | 'restoreBackup'>
 
 /**
+ * How the person gets to the other mode (#114). Demo and Live are separate
+ * origins, so switching is only ever a plain link, decided by each entry point
+ * without any shared state; never a switch inside one page.
+ */
+export type ModeSwitch =
+  | { kind: 'link'; href: string }
+  | { kind: 'unavailable'; reason: 'not-on-host' | 'not-running' | 'not-available' }
+
+/**
  * Research case calls (case-model/v1 §8). The desktop app is frozen and has none
  * (`cases: null`), the demo gets an in-memory adapter with #16.
  */
@@ -70,9 +79,9 @@ export interface CaseApi {
 export type BackupStatusApi = () => Promise<BackupStatus>
 
 export type AppRuntime =
-  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null; backupStatus?: null }
-  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi; backupStatus?: BackupStatusApi | null }
-  | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null; backupStatus?: null }
+  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null; backupStatus?: null; switcher: ModeSwitch }
+  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi; backupStatus?: BackupStatusApi | null; switcher: ModeSwitch }
+  | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null; backupStatus?: null; switcher: ModeSwitch }
 
 /**
  * The Electron runtime. Getters read the preload bridge at call time, so the
@@ -86,7 +95,9 @@ export const desktopRuntime: AppRuntime = {
   get backup() {
     return window.tracingGuatemala
   },
-  cases: null
+  cases: null,
+  // The desktop app has no second mode to switch to.
+  switcher: { kind: 'unavailable', reason: 'not-available' }
 }
 
 const AppRuntimeContext = createContext<AppRuntime>(desktopRuntime)

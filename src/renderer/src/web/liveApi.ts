@@ -9,7 +9,8 @@ import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi } from '../runtime
 export const API_PREFIX = '/api/v1'
 const CSRF_HEADER = 'X-TG-CSRF'
 
-export type SessionState = { authenticated: true; csrfToken: string } | { authenticated: false }
+/** `demoUrl` is the host's fictional-demo address (#114); untrusted until web/demoLink.ts checks it. */
+export type SessionState = { authenticated: true; csrfToken: string; demoUrl?: unknown } | { authenticated: false; demoUrl?: unknown }
 
 /** Thrown for any failed call; carries only the host's error code. */
 export class LiveApiError extends Error {

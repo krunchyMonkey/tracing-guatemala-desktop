@@ -9,6 +9,7 @@ import { DemoToolbar } from './DemoToolbar'
 import { demoGuides } from './demoTour'
 import { createDemoApi, defaultClock } from './demoApi'
 import { createDemoCases } from './demoCases'
+import { demoModeSwitch } from './modeLink'
 import { buildDemoCases, buildDemoData } from './sampleData'
 
 // Entry point of the browser demo (#100, vite.demo.config.ts). Same UI as the
@@ -27,7 +28,9 @@ const runtime: AppRuntime = {
   // Cases read client status through the same demo clients, so archiving a client locks its cases.
   cases: createDemoCases(buildDemoCases(), data.getClient, defaultClock, () =>
     data.listClients({ text: '', status: 'all', sources: [], sort: 'name' })
-  )
+  ),
+  // Decided from this page's own address only; the demo makes no network calls (#114).
+  switcher: demoModeSwitch(window.location)
 }
 
 const container = document.getElementById('root')

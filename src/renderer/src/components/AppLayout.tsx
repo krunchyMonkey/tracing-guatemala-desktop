@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router'
 import { useAppRuntime } from '../runtime/AppRuntime'
 import { TimerProvider } from '../cases/TimerContext'
 import { DemoBanner } from './DemoBanner'
+import { ModeSwitcher } from './ModeSwitcher'
 import { TimerPill } from './TimerPill'
 
 const navItems = [
@@ -29,6 +30,7 @@ export function AppLayout() {
           Tracing Guatemala
           <span className="brand-tagline">Research workspace</span>
         </p>
+        <ModeSwitcher />
         <nav aria-label="Main">
           <ul>
             {items.map((item) => (
@@ -41,7 +43,6 @@ export function AppLayout() {
           </ul>
         </nav>
         <TimerPill />
-        {runtime.mode === 'live' && <p className="live-status">Live · saved on this computer</p>}
       </aside>
       <main id="main-content" className="content" tabIndex={-1}>
         <Outlet />

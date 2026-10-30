@@ -32,6 +32,8 @@ npm run live         # builds if needed, starts the app and opens your browser; 
 npm run web:local    # same host without opening the browser; prints the private sign-in link
 ```
 
+It also serves the fictional demo on this computer at `http://localhost:4181/` (Live port + 1; `--no-demo` turns it off). The sidebar always shows which mode you are in, with a link to the other one at a separate address, so demo changes never touch Live data and Live data never appears in the demo.
+
 On Windows double-click `Start Tracing Guatemala.cmd`; on macOS or Linux run `./start-tracing-guatemala.sh`. `npm run smoke:live` rehearses backup and restore against the built app. Launching, stopping, backups, recovery and the real-use release checklist are in [docs/operations/live-readiness.md](docs/operations/live-readiness.md).
 
 To bring desktop data across, make a backup in the desktop app and restore it in the web app's **Settings & Backup**. See [docs/architecture/web-first-runtime.md](docs/architecture/web-first-runtime.md) for data folders, the security model, the API and known limitations.

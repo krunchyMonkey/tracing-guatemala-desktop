@@ -505,17 +505,16 @@ try {
     assertSame((await call(signed, 'listClients', everyone)).length, before, 'a refused request still wrote data')
   })
 
-  await step('security: a non-loopback Host header (LAN IP, other name, wrong port) is refused; localhost:<port> is the one allowed alias', async () => {
-    for (const hostHeader of [`192.168.1.20:${port}`, `evil.example:${port}`, `127.0.0.1:${port + 1}`, `localhost:${port + 1}`, '192.168.1.20']) {
+  await step('security: a non-loopback Host header (LAN IP, other name, wrong port) is refused; so is localhost:<port>', async () => {
+    // Only 127.0.0.1:<port> is answered (src/server/access.ts allowedHosts). Not `localhost`: that
+    // name is the fictional demo mirror's site (#114), and cookies are not scoped by port.
+    for (const hostHeader of [`192.168.1.20:${port}`, `evil.example:${port}`, `127.0.0.1:${port + 1}`, `localhost:${port}`, `localhost:${port + 1}`, '192.168.1.20']) {
       const reply = await raw(host, 'GET', '/api/v1/session', { Host: hostHeader, Cookie: signed.cookie })
       assert(reply.status === 421, `Host ${hostHeader} answered ${reply.status}, expected 421`)
       const headers = { Host: hostHeader, Origin: `http://${hostHeader}`, Cookie: signed.cookie, 'X-TG-CSRF': signed.csrf, 'Content-Type': 'application/json' }
       const write = await raw(host, 'POST', '/api/v1/call/listClients', headers, JSON.stringify({ args: [everyone] }))
       assert(write.status === 421, `API call with Host ${hostHeader} answered ${write.status}, expected 421`)
     }
-    // By design (src/server/access.ts allowedHosts): localhost:<port> is a loopback alias and is answered.
-    const alias = await raw(host, 'GET', '/api/v1/session', { Host: `localhost:${port}`, Cookie: signed.cookie })
-    assert(alias.status === 200, `localhost:${port} answered ${alias.status}, expected 200 (loopback alias)`)
   })
 
   await step('security: a missing or wrong CSRF token, or no session, is refused', async () => {

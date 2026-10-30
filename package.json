@@ -27,7 +27,7 @@
     "demo:lan:feedback": "node scripts/demo-lan.mjs --feedback",
     "demo:dev": "vite --configLoader runner --config vite.demo.config.ts",
     "web:dev": "vite --configLoader runner --config vite.web.config.ts",
-    "web:build": "vite build --configLoader runner --config vite.web.config.ts && vite build --configLoader runner --config vite.web-host.config.ts",
+    "web:build": "npm run demo:build && vite build --configLoader runner --config vite.web.config.ts && vite build --configLoader runner --config vite.web-host.config.ts",
     "live": "node scripts/live.mjs",
     "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke.mjs",
     "pilot:rehearsal": "node --disable-warning=ExperimentalWarning scripts/pilot-rehearsal.mjs",

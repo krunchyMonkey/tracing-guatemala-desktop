@@ -240,6 +240,7 @@ describe('tour engine', () => {
 describe('demo toolbar with a substituted service', () => {
   const runtime: AppRuntime = {
     mode: 'demo',
+    switcher: { kind: 'unavailable', reason: 'not-available' },
     data: createDemoApi(buildDemoData(), { name: 'Tracing Guatemala browser demo', version: '0.1.0', platform: 'browser' }),
     backup: null,
     cases: null

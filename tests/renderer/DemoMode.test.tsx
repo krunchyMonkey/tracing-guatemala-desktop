@@ -27,7 +27,13 @@ const newClient: ClientInput = {
 
 const note: NoteInput = { kind: 'note', occurredAt: new Date().toISOString(), channel: null, direction: null, body: 'Hi' }
 
-const demoRuntime = (): AppRuntime => ({ mode: 'demo', data: createDemoApi(buildDemoData(), appInfo), backup: null, cases: null })
+const demoRuntime = (): AppRuntime => ({
+  mode: 'demo',
+  data: createDemoApi(buildDemoData(), appInfo),
+  backup: null,
+  cases: null,
+  switcher: { kind: 'unavailable', reason: 'not-available' }
+})
 
 describe('randomUuid', () => {
   it('uses crypto.randomUUID where the browser provides it', () => {
