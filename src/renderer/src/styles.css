@@ -1471,3 +1471,102 @@ h1[tabindex='-1']:focus {
 .journal-activity {
   overflow-wrap: anywhere;
 }
+
+/* ---------- case tasks (#19) ---------- */
+
+.tasks-intro {
+  margin: 0 0 0.75rem;
+}
+
+.tasks-readonly,
+.tasks-empty {
+  margin: 0 0 0.75rem;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.task-item:has(> .task-form) {
+  display: block;
+}
+
+.task-main {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.task-title,
+.task-description {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-title {
+  font-weight: 600;
+}
+
+.task-completed .task-title {
+  text-decoration: line-through;
+  font-weight: 500;
+}
+
+.task-description {
+  margin-top: 0.25rem;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+}
+
+.task-flag {
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.task-flag-overdue {
+  background: var(--color-error-soft);
+  color: var(--color-error);
+  border-color: #efc2bc;
+}
+
+.task-flag-today,
+.task-flag-soon {
+  background: var(--color-surface-tint);
+  font-weight: 700;
+}
+
+.task-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.task-completed {
+  margin-top: 0.75rem;
+}
+
+.task-completed summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.4rem 0;
+}

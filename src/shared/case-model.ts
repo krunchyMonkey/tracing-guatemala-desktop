@@ -98,6 +98,23 @@ function daysInMonth(year: number, month: number): number {
   return [4, 6, 9, 11].includes(month) ? 30 : 31
 }
 
+/** Shape and real-calendar check for a YYYY-MM-DD date; null when valid. Shared with case tasks. */
+export function checkDateOnly(value: string): 'invalid-format' | 'invalid-date' | null {
+  const parts = DUE_DATE_SHAPE.exec(value)
+  if (!parts) return 'invalid-format'
+  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])] as [number, number, number]
+  return month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) ? 'invalid-date' : null
+}
+
+/** Whole days from one YYYY-MM-DD date to another (to minus from), by calendar math with no time zone. */
+export function daysBetween(from: string, to: string): number {
+  const days = (value: string) => {
+    const [y, m, d] = value.split('-').map(Number) as [number, number, number]
+    return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000)
+  }
+  return days(to) - days(from)
+}
+
 /** Normalize and validate a case draft. `input` is null whenever there is an issue. */
 export function checkCase(raw: CaseInput): CaseCheck {
   const issues: CaseIssue[] = []
@@ -119,12 +136,8 @@ export function checkCase(raw: CaseInput): CaseCheck {
   else if (orderReference !== null && CONTROL_CHARS.test(orderReference)) issue('orderReference', 'invalid-characters')
 
   if (dueDate !== null) {
-    const parts = DUE_DATE_SHAPE.exec(dueDate)
-    if (!parts) issue('dueDate', 'invalid-format')
-    else {
-      const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])] as [number, number, number]
-      if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) issue('dueDate', 'invalid-date')
-    }
+    const problem = checkDateOnly(dueDate)
+    if (problem) issue('dueDate', problem)
   }
 
   return { issues, input: issues.length > 0 ? null : { title, goal, orderReference, dueDate } }

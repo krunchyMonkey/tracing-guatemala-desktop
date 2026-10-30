@@ -359,3 +359,37 @@ test('shows a seeded fictional research journal, lets an entry be added, and a r
   await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
   await expect(journal.getByText('No journal entries yet.')).toBeVisible()
 })
+
+test('shows seeded fictional next steps including an overdue one, lets one be completed, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const steps = page.getByRole('region', { name: 'Next steps' })
+  const open = steps.getByRole('list', { name: 'Open next steps' }).getByRole('listitem')
+  await expect(open).toHaveCount(5)
+  await expect(open.first()).toContainText('Ask the client for the photograph and letters')
+  await expect(open.first()).toContainText('Overdue by 2 days')
+  await expect(open.nth(1)).toContainText('Due today')
+  await expect(open.nth(2)).toContainText('Due in 2 days')
+  await expect(open.nth(4)).toContainText('No deadline')
+  await expect(steps.getByText('Completed (1)')).toBeVisible()
+
+  // Another case has its own steps.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(open).toHaveCount(2)
+  await expect(steps).not.toContainText('photograph')
+
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await open.first().getByRole('button', { name: /^Mark done:/ }).click()
+  await expect(open).toHaveCount(4)
+  await expect(steps.getByText('Completed (2)')).toBeVisible()
+  await expect(steps.getByText('Overdue by 2 days')).toHaveCount(0)
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(open).toHaveCount(5)
+  await expect(steps.getByText('Completed (1)')).toBeVisible()
+  await expect(open.first()).toContainText('Overdue by 2 days')
+
+  // A case without seeded steps shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(steps.getByText('No next steps yet.')).toBeVisible()
+})

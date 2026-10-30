@@ -4,6 +4,7 @@ import {
   type JournalEntry,
   type JournalMutationResult
 } from '../../../shared/case-journal'
+import { checkCaseTask, compareTasks, type CaseTask, type CaseTaskMutationResult } from '../../../shared/case-tasks'
 import { checkCaseBrief, emptyBrief, type CaseBrief, type CaseBriefMutationResult } from '../../../shared/case-brief'
 import {
   canTransition,
@@ -27,6 +28,8 @@ import type { DemoClock } from './demoApi'
 // archived, then validation; a save also moves the case's updated time.
 // The research journal (#18) uses the same order of checks: case not found,
 // case/client archived, entry belongs to the case, then validation.
+// Case tasks (#19) use that order too, plus: complete/reopen of a task already in
+// that status is refused (wrong-status) with no change.
 // Cases read client status through the demo's own client data, so archiving a
 // client in the demo makes its cases read-only like everywhere else.
 
@@ -35,6 +38,7 @@ export interface DemoCaseData {
   events: CaseEvent[]
   briefs: CaseBrief[]
   journal: JournalEntry[]
+  tasks: CaseTask[]
 }
 
 export function createDemoCases(
@@ -46,6 +50,7 @@ export function createDemoCases(
   let events = structuredClone(initial.events)
   let briefs = structuredClone(initial.briefs)
   let journal = structuredClone(initial.journal)
+  let tasks = structuredClone(initial.tasks)
 
   const reply = async <T>(work: () => T): Promise<T> => structuredClone(work())
 
@@ -183,6 +188,53 @@ export function createDemoCases(
       journal = journal.map((e) => (e.id === entryId ? entry : e))
       store({ ...existing, updatedAt: at })
       return structuredClone({ ok: true as const, entry })
-    }
+    },
+
+    listCaseTasks: (caseId) => reply(() => tasks.filter((t) => t.caseId === caseId).sort(compareTasks)),
+
+    async createCaseTask(caseId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as CaseTaskMutationResult
+      const { input, issues } = checkCaseTask(raw)
+      if (!input) return { ok: false, reason: 'invalid', issues }
+
+      const at = clock.now().toISOString()
+      const task: CaseTask = { ...input, id: clock.newId(), caseId, status: 'pending', completedAt: null, createdAt: at, updatedAt: at }
+      tasks = [...tasks, task]
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, task })
+    },
+
+    async updateCaseTask(caseId, taskId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as CaseTaskMutationResult
+      const current = tasks.find((t) => t.id === taskId && t.caseId === caseId)
+      if (!current) return { ok: false, reason: 'not-found' }
+      const { input, issues } = checkCaseTask(raw)
+      if (!input) return { ok: false, reason: 'invalid', issues }
+
+      const at = clock.now().toISOString()
+      const task: CaseTask = { ...current, ...input, updatedAt: at }
+      tasks = tasks.map((t) => (t.id === taskId ? task : t))
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, task })
+    },
+
+    completeCaseTask: (caseId, taskId) => setTaskStatus(caseId, taskId, 'completed'),
+    reopenCaseTask: (caseId, taskId) => setTaskStatus(caseId, taskId, 'pending')
+  }
+
+  async function setTaskStatus(caseId: string, taskId: string, status: CaseTask['status']): Promise<CaseTaskMutationResult> {
+    const existing = await writable(caseId)
+    if (isRefusal(existing)) return existing as CaseTaskMutationResult
+    const current = tasks.find((t) => t.id === taskId && t.caseId === caseId)
+    if (!current) return { ok: false, reason: 'not-found' }
+    if (current.status === status) return { ok: false, reason: 'wrong-status' }
+
+    const at = clock.now().toISOString()
+    const task: CaseTask = { ...current, status, completedAt: status === 'completed' ? at : null, updatedAt: at }
+    tasks = tasks.map((t) => (t.id === taskId ? task : t))
+    store({ ...existing, updatedAt: at })
+    return structuredClone({ ok: true as const, task })
   }
 }

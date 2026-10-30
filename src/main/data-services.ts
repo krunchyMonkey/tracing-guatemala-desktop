@@ -1,12 +1,12 @@
 import type { AppData } from './database/app-data'
-import type { BriefService, CaseService, JournalService, ClientService, NoteService } from './ipc'
+import type { BriefService, CaseService, JournalService, TaskService, ClientService, NoteService } from './ipc'
 
 /**
  * Client, note, case and brief services over the live AppData, shared by the Electron main
  * process and the local web host (#110). They look up the repositories on
  * every call, because a restore replaces the connection and repositories.
  */
-export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService; briefs: BriefService; journal: JournalService } {
+export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService; briefs: BriefService; journal: JournalService; tasks: TaskService } {
   return {
     clients: {
       list: (query) => current().clients.list(query),
@@ -40,6 +40,13 @@ export function createDataServices(current: () => AppData): { clients: ClientSer
       list: (caseId) => current().journal.list(caseId),
       create: (caseId, input) => current().journal.create(caseId, input),
       update: (caseId, entryId, input) => current().journal.update(caseId, entryId, input)
+    },
+    tasks: {
+      list: (caseId) => current().tasks.list(caseId),
+      create: (caseId, input) => current().tasks.create(caseId, input),
+      update: (caseId, taskId, input) => current().tasks.update(caseId, taskId, input),
+      complete: (caseId, taskId) => current().tasks.complete(caseId, taskId),
+      reopen: (caseId, taskId) => current().tasks.reopen(caseId, taskId)
     }
   }
 }

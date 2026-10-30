@@ -90,7 +90,12 @@ describe('case calls', () => {
         'saveCaseBrief',
         'listJournalEntries',
         'createJournalEntry',
-        'updateJournalEntry'
+        'updateJournalEntry',
+        'listCaseTasks',
+        'createCaseTask',
+        'updateCaseTask',
+        'completeCaseTask',
+        'reopenCaseTask'
       ])
     )
   })
