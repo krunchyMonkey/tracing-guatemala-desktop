@@ -16,23 +16,48 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 
 ## Current reality
 - Core Phase 1 #1–#11 and LAN preview #100 merged (PR #108, commit `b17881c`).
-- **#102** (Driver.js guided walkthrough + private Project draft feedback) remains OPEN and is the last planned Phase 1 web-demo feature. Implement/test with fictional data. If private Project ID/credential unavailable, ship opt-in feedback disabled with mock tests and explicit owner setup. Do not invent a private Project or post user feedback to the public repo.
+- **#102** (Driver.js guided walkthrough + private Project draft feedback) moved from Phase 1 to **Phase 2, Milestone 2** as optional, parallel demo-experience work. It does NOT block #110. Implement/test with fictional data. If private Project ID/credential unavailable, ship opt-in feedback disabled with mock tests and explicit owner setup. Do not invent a private Project or post user feedback to the public repo.
 - **#12** remains OPEN/**deferred** because desktop acceptance hasn't happened. This is not an engineering blocker for web-first Phase 2.
 - **#110** is the new Phase 2 P0 **web-first persistent local runtime foundation**.
-- Phase 2 groomed: **#13–#21 plus #109**. Each issue defines tests, scope and dependencies. All substantive design defaults are provisional, with actual researcher review in the **WEB-first pilot #21**.
+- **Phase 2 groomed: 17 open tickets** (#13–#21, #102, #109, #110, #112, #114–#117). Includes safe Demo/Live entry, fictional 48-client preview, Research Studio dashboard, launch/backup readiness and future-phase locked navigation. All substantive workflow defaults remain provisional; actual researcher review stays at **#21**.
 
-## Suggested coding sequence for tonight
+## Claude-ready Phase 2 execution queue (updated 2026-10-29)
 
-1. **#102** — final Phase 1 web-demo tour + optional private Project feedback. One focused PR with browser E2E/CSP/security checks. No public feedback issues, no default external connections.
-2. **#110** — web-first persistent *localhost* runtime (P0). One PR with `web:dev`, `web:build`, `web:local` or documented equivalents, typed React adapters, Phase 1 persisted client/note parity, local SQLite/backup safety and browser API security tests.
-3. **#13** — short owner-authorized *provisional* research case lifecycle/intake design; **#14** — one-to-many case schema/data/typed API design. These two may be drafted separately while #110 is in flight; do not fabricate researcher approval.
-4. **#15** — case storage, migration and web API; **#16** — browser case directory/detail/forms and fictional-demo parity.
-5. **#17**, **#18**, **#19** — case research brief, journal, tasks/optional deadlines; can run as independent PRs only when #15/#16's case contract is stable.
-6. **#109** — actual research hours per case (timer + manual sessions) after case overview; prefer after journal.
-7. **#20** — web-browser user-triggered Markdown/text summary download plus strict client/case isolation.
-8. **#21** — integrated WEB researcher pilot kit and test evidence. **Do not close** until the actual researcher completes her review and gives a decision.
+All Phase 2 tickets are in Milestone 2. **SQLite remains the local database.** Engineering can start without new approval gates; the researcher alone supplies actual pilot acceptance at #21.
 
-**Priority if the night is short:** make #102 and #110 solid and open a first complete #13/#14/#15 vertical slice rather than dozens of incomplete PRs. No developer may assert PRs are merged or tests passed without verifying it.
+### Track A — Safe Live data (release prerequisites)
+1. **#110 — P0**: typed local web API/SQLite runtime, client + note parity, Host/Origin/CSRF/session protections, backups and migration safety. **Start this first; #102 is not a prerequisite.**
+2. **#13/#14 — P0 design**: provisional lifecycle/intake and portable case schema; may proceed in parallel with #110. Avoid new researcher meetings as coding gates.
+3. **#15 — P0**: case migration, repository, typed local API, lifecycle; requires #110 and #14.
+4. **#16 — P0**: working case list/detail/dossier UI and small fictional demo adapter; requires #15.
+5. **#17/#18/#19 — P0**: research brief, case journal and tasks; depend on #15/#16, and can be separately stacked once contracts stabilize.
+6. **#20 — P0**: scoped user-triggered Markdown/text case export; depends on #17–#19; do not block on #109.
+7. **#114 — P0**: safe Demo/Live navigation between independently isolated runtimes; depends on #110. LAN demo never exposes private SQLite or a functional Live endpoint.
+8. **#117 — P0**: supported local start/stop, backup recovery, unencrypted-copy warnings and real-use operational checklist; depends on #110 and validates #15/#16 case roundtrip.
+9. **#21 — P0 final gate**: integrate and verify the actual local persistence workflow with researcher; **NEVER use `Closes #21` in a preparatory PR or close without real approval.**
+
+### Track B — Demo and showcase (parallel where safe)
+- **#112 — P1, PR #113 open**: locked future-phase navigation; no active route for incomplete features.
+- **#102 — P1, Phase 2**: Driver.js fictional-demo guide and opt-in verified-private GitHub Project feedback; does NOT block #110.
+- **#115 — P1**: deterministic 48-client fictional portfolio, first client-only then cases/journal/tasks as their contracts become available; preserve demo reset.
+- **#116 — P1**: elegant Studio home dashboard with real metrics from APIs (never hardcoded in Live), derived fictional demo metrics, and accessibility; depends on #110, #15/#16, and #19 for due-task indicators.
+- **#109 — P1**: case-scoped timer/manual research hours after case overview, preferably after #18. Does not block #20/initial persistence release.
+
+**Existing doc PR #111** aligns the roadmap; **UI PR #113** is still open, unmerged and unverified for final test status. Check current GitHub state on every development session.
+
+**Priority when time is short:** #110 + a tested #14→#15→#16 case slice; #114/#117 are required before claiming trustworthy Live Mode. Demo visuals may be delivered separately. One issue per PR, explicit stack dependencies, no auto-merges.
+
+## Claude Code model routing and sequential execution (Phase 2 owner direction, 2026-10-29)
+
+Each Phase 2 GitHub issue has a **Claude execution model profile** specifying preferred session model, effort, work split, review/escalation and fallback. Read the specific issue body before working; the issue profile is advisory until a human/controller explicitly sets the Claude Code session model using `--model` and `--effort`.
+
+**Policy:** one issue in flight per worker, sequential order respecting dependencies. Always inspect GitHub state and existing branches/worktrees first; do not redo an already-open PR. When an earlier PR is still unmerged, base later dependent work on that branch as an **explicitly disclosed stacked PR**, not a misleading independent PR off `main`. A PR is a deliverable, **not approval to merge**. Failed tests or material privacy/security blockers stop dependent work; non-blocked independent issue work may continue. Do not assume researcher acceptance at #21.
+
+**Default:** `sonnet --effort medium` for most features; `haiku --effort medium` for deterministic fixture generation or simple sidebar polish, with a Sonnet review; `sonnet --effort high` for persistence/export/timer/privacy-heavy implementation; `opusplan --effort high` for #110/#114 architecture and threat modeling. `opusplan` uses Opus **in Plan Mode** and Sonnet for implementation; to guarantee an Opus planning pass, explicitly enter Plan Mode or run a separate Opus planning session before the Sonnet implementation. Do not use expensive Opus as a default for every edit.
+
+**Escalate only when needed:** use the issue's review model for irreversible schema changes, unsafe network access, data-loss, cross-client leakage, complex concurrency or unresolvable test failures. If models are unavailable, record the substitution; never skip mandatory security checks to save tokens. Static types, automated tests and explicit review take precedence over a larger model as a substitute for validation.
+
+**Enforcement:** when starting a new issue in Claude Code, use an explicit session such as `claude --model sonnet --effort medium` (or `claude -p --model sonnet --effort medium "Work on #16 only ..."`). For automated print-mode execution, `--max-budget-usd` can set a **best-effort estimated API spend cap**, not a guaranteed invoice cap; usage/cap support varies with authentication/provider. Avoid parallel Claude issue workers, automatic merging, unsupported credentials and claims that a model profile in GitHub is itself enforced. 
 
 ## Git/worktree and PR workflow
 
@@ -44,4 +69,4 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 - Every PR: summary, issue/dependencies, scope, screenshots for UI, exact test results/unrun checks, security/privacy impact, manual steps and known limitations. No real names, research records, credentials or screenshots in PUBLIC GitHub.
 
 ## Definition of complete
-The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
+Phase 1 core engineering is merged; **#102 is now a Phase 2 showcase ticket**, not a Phase 1 gate. The installed desktop **pilot #12 remains deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; **safe for Live use** additionally requires #110, #114, #117 and verified backup/restore/isolation; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
