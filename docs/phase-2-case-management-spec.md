@@ -38,14 +38,14 @@ Unresolved and **not researcher-approved**: actual case state vocabulary, requir
 - **Two web runtimes:** extend `useAppRuntime()` with typed case/journal/task/hour contracts for (1) local persistent API mode and (2) fictional in-memory LAN-demo mode. Never bundle actual client data, SQLite DB, backups or feedback credentials into `dist-demo/`. Demo refresh resets the data. Export and timer persistence differences must be explained honestly.
 - **Public GitHub repo:** no real client/case names, genealogy materials, purchased packages, contact details or real research hours in source, fixtures, screenshot evidence, logs, comments or PRs. Fictional examples only.
 - **Tests:** `npm run check` where practical, typed contract/unit, SQLite migrations on v2 data, persistence/restart, cross-client isolation, backup/restore, local HTTP API security and browser E2E in persistent mode plus fictional-demo parity. Electron packaging/security tests are regression information, **not a Phase 2 feature gate**. Report actual results; never invent pass claims.
-- **Phase 1 coexistence:** #102 is independent demo guided-tour/private Project feedback work. If feature branches touch the same UI, coordinate by rebasing after merge or use explicit stacked PR bases; preserve local worktrees. Do not broaden Phase 2 with Project APIs or Pendo.
+- **Phase 2 demo showcase:** #102 moved from Phase 1 to **Phase 2, Milestone 2** and is independent Driver.js guided-tour/private Project feedback work. It is not a prerequisite for #110 or Live Mode readiness. If feature branches touch the same UI, coordinate by rebasing after merge or use explicit stacked PR bases; preserve local worktrees. Do not broaden #102 with Pendo or Live-data Project APIs.
 
 ## Nightly implementation order and dependencies
 
 | Order | Issue | Deliverable | Prerequisite |
 | --- | --- | --- | --- |
-| 0 | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) | Final Phase 1 tour and opt-in **private** Project draft feedback (separate worktree) | Merged #100; no real private credentials required to build/test disabled mode |
-| 0.5 | [#110](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) | P0 **web-first persistent local runtime**; React/browser primary | #102 preferred before editing shared preview server; may be independent if no overlap |
+| Parallel | [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) | Phase 2 guided fictional-demo tour and opt-in **private** Project draft feedback (separate worktree) | Merged #100; **does not block #110**; credentials optional for disabled mode |
+| 0 | [#110](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) | P0 **web-first persistent local runtime**; React/browser primary | **Independent of #102**; coordinate shared-file changes across branches |
 | 1 | [#13](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/13) | Provisional lifecycle/intake spec with unknowns flagged | Existing workflow review |
 | 2 | [#14](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/14) | Case model, schema and migration contract | #13 spec |
 | 3 | [#15](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/15) | Case repository/typed WEB API and create/edit/state/archive/reopen | #14 and **#110** |
@@ -57,7 +57,7 @@ Unresolved and **not researcher-approved**: actual case state vocabulary, requir
 | 9 | [#20](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/20) | Case summary export and isolation suite | #17–#19; #109 hours totals optional |
 | 10 | [#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/21) | **Web-first** integrated pilot kit, tests and actual feedback | #110, #15–#20; include #109 if ready |
 
-**Throughput:** #13/#14 are short engineering documents using **reversible defaults** and should not require a new meeting to start coding. #21 is the real researcher acceptance point. #12 (Phase 1 installed desktop researcher pilot) remains OPEN independently until genuine signoff.
+**Throughput:** #110 is the first Live Mode prerequisite, while #102 may proceed in parallel as Phase 2 demo polish. #13/#14 are short engineering documents using **reversible defaults** and should not require a new meeting to start coding. #21 is the real researcher acceptance point. #12 (Phase 1 installed desktop researcher pilot) remains OPEN independently until genuine signoff.
 
 ## PR policy for an unattended Claude coding session
 
