@@ -2,7 +2,7 @@
 
 A browser-only copy of the Tracing Guatemala screens, for showing the current client workflows on a phone, tablet or another computer on the **same trusted home network** without installing the desktop app (#100).
 
-- **Fictional data only.** It starts with eight made-up clients and their notes. Every screen shows a *Demo Mode — Fictional Data Only* banner.
+- **Fictional data only.** It starts with 48 made-up clients (#115) with their notes, research cases, tasks, journal entries and hours. Every screen shows a *Demo Mode — Fictional Data Only* banner.
 - **Nothing is saved.** Changes live in that browser tab's memory. Refreshing the page, or opening it again, goes back to the sample clients.
 - **No backups.** Settings explains that backup and restore exist only in the desktop app.
 - **It is not the real app.** It has no Electron, no SQLite database and no server API. It can't read the desktop app's data, files or backups, and the desktop app's data is never changed by it. The page's Content Security Policy blocks all network requests (`connect-src 'none'`).
@@ -131,13 +131,13 @@ Remove-NetFirewallRule -DisplayName "Tracing Guatemala LAN demo"
 Run this once on the real home network after `npm run demo:lan` is running. (The automated tests open the demo at this computer's own LAN address; they can't test a second physical device.)
 
 1. On a phone or tablet on the **same Wi-Fi**, open the printed link (`http://<LAN-IP>:4173/#/clients`).
-2. The *Demo Mode — Fictional Data Only* banner is visible, and the Clients list shows **7 active · 1 archived**.
-3. Search `lucia` → one client. Clear it, then tap **Referral** under Source → only María José Alvarado. Tap **All** under Status → the archived Rosa Chávez Ixcoy appears too.
+2. The *Demo Mode — Fictional Data Only* banner is visible, and the Clients list shows **43 active · 5 archived**.
+3. Search `lucia` → one client. Clear it, then tap **Referral** under Source → 11 active clients, including María José Alvarado. Tap **All** under Status → the archived Rosa Chávez Ixcoy appears too.
 4. Open **Lucía Fernández**, add a note, and see it at the top of the history.
 5. **Add client** named `Daniel Ochoa` → the "This might be someone you already have" warning appears. Choose *Save as a new client anyway*.
 6. **Archive** that new client → the profile becomes read-only. **Restore client** → editable again.
 7. Open **Settings & Backup** → it says backup is only available in the desktop app, with no backup buttons.
-8. Refresh the page → the list is back to **7 active · 1 archived** and the new client and note are gone.
+8. Refresh the page → the list is back to **43 active · 5 archived** and the new client and note are gone.
 9. Turn the phone sideways and back → no sideways scrolling, and the menu stays reachable.
 10. Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd> → the page no longer loads on the phone after a refresh.
 
