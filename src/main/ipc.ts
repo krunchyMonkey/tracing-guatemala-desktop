@@ -1,5 +1,13 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
+import type {
+  CaseEvent,
+  CaseInput,
+  CaseMutationResult,
+  CaseQuery,
+  CaseState,
+  ResearchCase
+} from '../shared/case-model'
 import type { Client, ClientInput, ClientNote, DirectoryQuery, DuplicateCandidate, NoteInput } from '../shared/client-model'
 import type {
   AppInfo,
@@ -64,6 +72,18 @@ export interface NoteService {
   list(clientId: string): ClientNote[]
   create(clientId: string, input: NoteInput): NoteMutationResult
   update(clientId: string, noteId: string, input: NoteInput): NoteMutationResult
+}
+
+/** Research case operations for the local web host (CaseRepository in production). No IPC channels: desktop is frozen. */
+export interface CaseService {
+  list(query: CaseQuery): ResearchCase[]
+  get(id: string): ResearchCase | null
+  listEvents(caseId: string): CaseEvent[]
+  create(clientId: string, input: CaseInput): CaseMutationResult
+  update(id: string, input: CaseInput): CaseMutationResult
+  setState(id: string, to: CaseState): CaseMutationResult
+  archive(id: string): CaseMutationResult
+  unarchive(id: string): CaseMutationResult
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */

@@ -65,6 +65,63 @@ export const migrations: readonly Migration[] = [
 
       CREATE INDEX client_notes_client_idx ON client_notes (client_id, occurred_at);
     `
+  },
+  {
+    version: 3,
+    name: 'research_cases',
+    // case-model/v1 §5. No cascades: cases and their events are never deleted.
+    sql: `
+      CREATE TABLE research_cases (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        goal TEXT CHECK (goal IS NULL OR length(goal) BETWEEN 1 AND 4000),
+        order_reference TEXT CHECK (order_reference IS NULL OR length(order_reference) BETWEEN 1 AND 100),
+        due_date TEXT CHECK (due_date IS NULL OR due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        state TEXT NOT NULL DEFAULT 'intake'
+          CHECK (state IN ('intake', 'active', 'waiting', 'delivered', 'closed')),
+        state_changed_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT
+      ) STRICT;
+
+      CREATE INDEX research_cases_client_idx ON research_cases (client_id, updated_at);
+      CREATE INDEX research_cases_due_idx ON research_cases (due_date) WHERE due_date IS NOT NULL;
+
+      CREATE TRIGGER research_cases_no_delete BEFORE DELETE ON research_cases
+      BEGIN
+        SELECT RAISE(ABORT, 'research cases are never deleted');
+      END;
+
+      CREATE TRIGGER research_cases_immutable_keys BEFORE UPDATE OF id, client_id ON research_cases
+      BEGIN
+        SELECT RAISE(ABORT, 'case id and client are immutable');
+      END;
+
+      CREATE TABLE case_events (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        kind TEXT NOT NULL CHECK (kind IN ('created', 'state', 'archived', 'unarchived')),
+        from_state TEXT CHECK (from_state IS NULL OR from_state IN ('intake', 'active', 'waiting', 'delivered', 'closed')),
+        to_state TEXT CHECK (to_state IS NULL OR to_state IN ('intake', 'active', 'waiting', 'delivered', 'closed')),
+        occurred_at TEXT NOT NULL,
+        CHECK ((kind = 'state') = (from_state IS NOT NULL)),
+        CHECK ((kind IN ('created', 'state')) = (to_state IS NOT NULL))
+      ) STRICT;
+
+      CREATE INDEX case_events_case_idx ON case_events (case_id, occurred_at);
+
+      CREATE TRIGGER case_events_append_only_update BEFORE UPDATE ON case_events
+      BEGIN
+        SELECT RAISE(ABORT, 'case events are append-only');
+      END;
+
+      CREATE TRIGGER case_events_append_only_delete BEFORE DELETE ON case_events
+      BEGIN
+        SELECT RAISE(ABORT, 'case events are append-only');
+      END;
+    `
   }
 ]
 

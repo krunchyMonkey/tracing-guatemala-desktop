@@ -1,12 +1,12 @@
 import type { AppData } from './database/app-data'
-import type { ClientService, NoteService } from './ipc'
+import type { CaseService, ClientService, NoteService } from './ipc'
 
 /**
- * Client and note services over the live AppData, shared by the Electron main
+ * Client, note and case services over the live AppData, shared by the Electron main
  * process and the local web host (#110). They look up the repositories on
  * every call, because a restore replaces the connection and repositories.
  */
-export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService } {
+export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService } {
   return {
     clients: {
       list: (query) => current().clients.list(query),
@@ -21,6 +21,16 @@ export function createDataServices(current: () => AppData): { clients: ClientSer
       list: (clientId) => current().notes.list(clientId),
       create: (clientId, input) => current().notes.create(clientId, input),
       update: (clientId, noteId, input) => current().notes.update(clientId, noteId, input)
+    },
+    cases: {
+      list: (query) => current().cases.list(query),
+      get: (id) => current().cases.get(id),
+      listEvents: (caseId) => current().cases.listEvents(caseId),
+      create: (clientId, input) => current().cases.create(clientId, input),
+      update: (id, input) => current().cases.update(id, input),
+      setState: (id, to) => current().cases.setState(id, to),
+      archive: (id) => current().cases.archive(id),
+      unarchive: (id) => current().cases.unarchive(id)
     }
   }
 }

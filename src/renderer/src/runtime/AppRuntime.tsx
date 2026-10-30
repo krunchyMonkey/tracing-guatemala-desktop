@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
+import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
 import type { TracingGuatemalaApi } from '../../../shared/ipc'
 
 // Where the shared React UI gets its data (#100, #110). The desktop app reads and
@@ -12,10 +13,25 @@ export type AppDataApi = Omit<TracingGuatemalaApi, 'createBackup' | 'chooseBacku
 
 export type BackupApi = Pick<TracingGuatemalaApi, 'createBackup' | 'chooseBackupToRestore' | 'restoreBackup'>
 
+/**
+ * Research case calls (case-model/v1 §8). The desktop app is frozen and has none
+ * (`cases: null`), the demo gets an in-memory adapter with #16.
+ */
+export interface CaseApi {
+  listCases(query: CaseQuery): Promise<ResearchCase[]>
+  getCase(id: string): Promise<ResearchCase | null>
+  listCaseEvents(caseId: string): Promise<CaseEvent[]>
+  createCase(clientId: string, input: CaseInput): Promise<CaseMutationResult>
+  updateCase(id: string, input: CaseInput): Promise<CaseMutationResult>
+  setCaseState(id: string, to: CaseState): Promise<CaseMutationResult>
+  archiveCase(id: string): Promise<CaseMutationResult>
+  unarchiveCase(id: string): Promise<CaseMutationResult>
+}
+
 export type AppRuntime =
-  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi }
-  | { mode: 'live'; data: AppDataApi; backup: BackupApi }
-  | { mode: 'demo'; data: AppDataApi; backup: null }
+  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null }
+  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi }
+  | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null }
 
 /**
  * The Electron runtime. Getters read the preload bridge at call time, so the
@@ -28,7 +44,8 @@ export const desktopRuntime: AppRuntime = {
   },
   get backup() {
     return window.tracingGuatemala
-  }
+  },
+  cases: null
 }
 
 const AppRuntimeContext = createContext<AppRuntime>(desktopRuntime)

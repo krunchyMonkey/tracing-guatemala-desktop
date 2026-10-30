@@ -48,7 +48,7 @@ A plain `node:http` server with no framework:
 | `POST /api/v1/backup/upload` | Cookie + Origin + CSRF | `application/octet-stream`, ≤ 512 MB. Checked before anything changes; returns a one-time restore token. |
 | `GET /api/v1/backup/download/<file>` | Cookie, not cross-site | Only file names this host generated |
 
-Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup` and `restoreBackup`. Later Phase 2 features (cases, journal, tasks, hours) add contracts and names here.
+Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup` and `restoreBackup`, plus the research case calls below. Later Phase 2 features (journal, tasks, hours) add contracts and names here.
 
 Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-signed-in` (401), `not-same-origin`/`bad-csrf-token` (403), `unsupported-media-type` (415), `too-large` (413), `invalid-arguments` (400), `not-found` (404) and `internal-error` (500). They never echo submitted or stored values. Logs hold method, route template and status only. They never hold bodies, ids, names, paths or tokens; database errors are logged by error name only.
 
@@ -108,3 +108,20 @@ On a clean machine (Node ≥ 22.12): `npm ci`, then `npm run web:build`, then `n
 - `tests/unit/live-host.test.ts`: real HTTP against the host. Covers the launch link and cookies, Host spoofing, cross-origin and unauthenticated writes, CSRF, media types, sizes, strict arguments, no echo or logging of values, CSP and headers, path traversal, persistence across restart, cross-client note isolation, backup create/download/upload/restore, rejection of junk files, LAN unreachability, data-folder guards and the lock.
 - `tests/renderer/LiveWeb.test.tsx`: the browser adapter (CSRF header, session loss, download, upload, cancel) and the sign-in screen.
 - `tests/web/live-web.spec.ts` (Playwright `web-live`): the built host in Edge/Chromium. Covers sign-in guidance, CRUD + notes persisting across reload and host restart, backup download, a hostile page in the same browser, demo-bundle isolation, and 375/768/1280px layouts.
+
+## #15 status: research cases (storage and typed API)
+
+Cases arrive as storage and API only; the screens belong to #16. The rules, states and schema are in `docs/case-data-model.md` (`case-model/v1`). Migration 3 adds `research_cases` and `case_events` (forward-only, nothing cascades or deletes). Case changes and their event row are written in one transaction.
+
+| Call | Args | Result |
+| --- | --- | --- |
+| `listCases` | `[CaseQuery]` | `ResearchCase[]` |
+| `getCase` | `[caseId]` | `ResearchCase \| null` |
+| `listCaseEvents` | `[caseId]` | `CaseEvent[]`, newest first |
+| `createCase` | `[clientId, CaseInput]` | `CaseMutationResult` |
+| `updateCase` | `[caseId, CaseInput]` | `CaseMutationResult` |
+| `setCaseState` | `[caseId, CaseState]` | `CaseMutationResult` |
+| `archiveCase` / `unarchiveCase` | `[caseId]` | `CaseMutationResult` |
+
+- The contracts live in `caseContracts` (`src/main/contracts.ts`) and have no Electron IPC channel: desktop stays frozen, so `AppRuntime.cases` is `null` there and in the demo until #16 adds the in-memory adapter. `CaseInput` is strict, so `id`, `clientId`, `state` and timestamps are rejected as `invalid-arguments`.
+- Tests: `tests/unit/{case-model,cases,live-cases}.test.ts` (rules, transition matrix, real v2 to v3 migration, backup round trips, HTTP), the case block in `tests/renderer/LiveWeb.test.tsx`, and `tests/web/live-cases.spec.ts` (port 4192, built host, persistence across restart).

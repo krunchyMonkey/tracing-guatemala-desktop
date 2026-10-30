@@ -1,5 +1,14 @@
 import { z } from 'zod'
 import {
+  CASE_STATES,
+  type CaseEvent,
+  type CaseInput,
+  type CaseMutationResult,
+  type CaseQuery,
+  type CaseState,
+  type ResearchCase
+} from '../shared/case-model'
+import {
   CLIENT_SOURCES,
   CLIENT_STATUSES,
   CONTACT_CHANNELS,
@@ -32,10 +41,14 @@ import {
 // handlers (ipc.ts) and the local web host (src/server, #110), so both
 // transports validate exactly the same shapes. No Electron imports here.
 
-export interface ChannelContract<Args extends z.ZodTuple, Result extends z.ZodType> {
-  channel: IpcChannelName
+/** Argument and result schemas of one call. Calls without an IPC channel (cases, #15) are only this. */
+export interface CallContract<Args extends z.ZodTuple, Result extends z.ZodType> {
   args: Args
   result: Result
+}
+
+export interface ChannelContract<Args extends z.ZodTuple, Result extends z.ZodType> extends CallContract<Args, Result> {
+  channel: IpcChannelName
 }
 
 // Raw text bounds only stop oversized payloads. The field rules (lengths,
@@ -144,6 +157,65 @@ const noteResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<NoteMutationResult>
 
+const caseStateSchema = z.enum(CASE_STATES as [CaseState, ...CaseState[]])
+
+/** Strict: id, client, state and timestamps cannot come from the browser. Field rules run in the repository. */
+const caseInputSchema = z.strictObject({
+  title: rawText,
+  goal: z.string().max(8_000).nullable(),
+  orderReference: rawText.nullable(),
+  dueDate: z.string().max(64).nullable()
+}) satisfies z.ZodType<CaseInput>
+
+const caseQuerySchema = z.strictObject({
+  clientId: idSchema.nullable(),
+  archived: z.enum(['active', 'archived', 'all']),
+  states: z.array(caseStateSchema).max(CASE_STATES.length),
+  text: z.string().max(200),
+  sort: z.enum(['due', 'updated', 'created', 'title'])
+}) satisfies z.ZodType<CaseQuery>
+
+const researchCaseSchema = z.strictObject({
+  id: idSchema,
+  clientId: idSchema,
+  title: z.string(),
+  goal: z.string().nullable(),
+  orderReference: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  state: caseStateSchema,
+  stateChangedAt: timestamp,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  archivedAt: timestamp.nullable()
+}) satisfies z.ZodType<ResearchCase>
+
+const caseEventSchema = z.strictObject({
+  id: idSchema,
+  caseId: idSchema,
+  kind: z.enum(['created', 'state', 'archived', 'unarchived']),
+  fromState: caseStateSchema.nullable(),
+  toState: caseStateSchema.nullable(),
+  occurredAt: timestamp
+}) satisfies z.ZodType<CaseEvent>
+
+const caseResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), case: researchCaseSchema }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.literal('invalid'),
+    issues: z.array(
+      z.strictObject({
+        field: z.enum(['title', 'goal', 'orderReference', 'dueDate']),
+        code: z.enum(['required', 'too-long', 'invalid-characters', 'invalid-format', 'invalid-date'])
+      })
+    )
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.enum(['not-found', 'client-archived', 'wrong-status', 'invalid-transition'])
+  })
+]) satisfies z.ZodType<CaseMutationResult>
+
 const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
 const count = z.number().int().nonnegative()
 
@@ -244,3 +316,15 @@ export const contracts = {
     result: noteResultSchema
   }
 } as const
+
+/** Research case calls (case-model/v1 §8). Served by the local web host only: desktop is frozen, so no IPC channels. */
+export const caseContracts = {
+  listCases: { args: z.tuple([caseQuerySchema]), result: z.array(researchCaseSchema) },
+  getCase: { args: z.tuple([idSchema]), result: researchCaseSchema.nullable() },
+  listCaseEvents: { args: z.tuple([idSchema]), result: z.array(caseEventSchema) },
+  createCase: { args: z.tuple([idSchema, caseInputSchema]), result: caseResultSchema },
+  updateCase: { args: z.tuple([idSchema, caseInputSchema]), result: caseResultSchema },
+  setCaseState: { args: z.tuple([idSchema, caseStateSchema]), result: caseResultSchema },
+  archiveCase: { args: z.tuple([idSchema]), result: caseResultSchema },
+  unarchiveCase: { args: z.tuple([idSchema]), result: caseResultSchema }
+} as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

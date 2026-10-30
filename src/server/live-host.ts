@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { z } from 'zod'
-import { contracts, type ChannelContract } from '../main/contracts'
+import { caseContracts, contracts, type CallContract } from '../main/contracts'
 import { createDataServices } from '../main/data-services'
 import type { AppData } from '../main/database/app-data'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
@@ -44,7 +44,15 @@ const callable = {
   createNote: contracts.createNote,
   updateNote: contracts.updateNote,
   createBackup: contracts.createBackup,
-  restoreBackup: contracts.restoreBackup
+  restoreBackup: contracts.restoreBackup,
+  listCases: caseContracts.listCases,
+  getCase: caseContracts.getCase,
+  listCaseEvents: caseContracts.listCaseEvents,
+  createCase: caseContracts.createCase,
+  updateCase: caseContracts.updateCase,
+  setCaseState: caseContracts.setCaseState,
+  archiveCase: caseContracts.archiveCase,
+  unarchiveCase: caseContracts.unarchiveCase
 } as const
 
 export type CallName = keyof typeof callable
@@ -143,7 +151,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes } = createDataServices(data)
+  const { clients, notes, cases } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -159,7 +167,15 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     createNote: ([clientId, input]) => notes.create(clientId, input),
     updateNote: ([clientId, noteId, input]) => notes.update(clientId, noteId, input),
     createBackup: () => backup.create(),
-    restoreBackup: ([token]) => backup.restore(token)
+    restoreBackup: ([token]) => backup.restore(token),
+    listCases: ([query]) => cases.list(query),
+    getCase: ([id]) => cases.get(id),
+    listCaseEvents: ([caseId]) => cases.listEvents(caseId),
+    createCase: ([clientId, input]) => cases.create(clientId, input),
+    updateCase: ([id, input]) => cases.update(id, input),
+    setCaseState: ([id, to]) => cases.setState(id, to),
+    archiveCase: ([id]) => cases.archive(id),
+    unarchiveCase: ([id]) => cases.unarchive(id)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
@@ -199,7 +215,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       throw new RequestError(400, 'invalid-request')
     }
 
-    const contract = callable[name as CallName] as ChannelContract<z.ZodTuple, z.ZodType>
+    const contract = callable[name as CallName] as CallContract<z.ZodTuple, z.ZodType>
     const parsed = contract.args.safeParse((body as { args: unknown[] }).args)
     if (!parsed.success) throw new RequestError(400, 'invalid-arguments')
     let result: unknown
