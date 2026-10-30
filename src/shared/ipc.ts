@@ -73,6 +73,17 @@ export type BackupRestoreResult =
   /** `expired`: the token is unknown or was already used. `failed`: the previous data was kept. */
   | { ok: false; reason: 'expired' | 'failed' | BackupProblem }
 
+/**
+ * What the Live host knows about backups it made (#117). Names and dates only,
+ * never paths. `lastBackupAt` is null until a backup was made and verified.
+ */
+export interface BackupStatus {
+  lastBackupAt: string | null
+  fileName: string | null
+  /** Backups the host made that are still in its backups folder. */
+  backupCount: number
+}
+
 /** The only surface the renderer has into the main process (window.tracingGuatemala). */
 export interface TracingGuatemalaApi {
   getAppInfo(): Promise<AppInfo>

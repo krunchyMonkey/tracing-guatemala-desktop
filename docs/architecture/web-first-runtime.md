@@ -36,7 +36,8 @@ A plain `node:http` server with no framework:
 | `access.ts` | Launch token, sessions, CSRF tokens, Host/Origin checks. |
 | `backup.ts` | Backups in `<data>/backups`, downloads, upload-and-check, restore. |
 | `data-dir.ts` | Default profile folder, desktop-profile refusal, single-host lock. |
-| `main.ts` | `web:local` command line. |
+| `open-browser.ts` | `--open`: validates the launch link and builds the OS "open" command (no shell). |
+| `main.ts` | `web:local` command line (`--port`, `--data-dir`, `--open`). |
 
 ### API (v1)
 
@@ -48,7 +49,7 @@ A plain `node:http` server with no framework:
 | `POST /api/v1/backup/upload` | Cookie + Origin + CSRF | `application/octet-stream`, ≤ 512 MB. Checked before anything changes; returns a one-time restore token. |
 | `GET /api/v1/backup/download/<file>` | Cookie, not cross-site | Only file names this host generated |
 
-Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup` and `restoreBackup`, plus the research case calls below. Later Phase 2 features (journal, tasks, hours) add contracts and names here.
+Callable names are `getAppInfo`, `listClients`, `getClient`, `createClient`, `updateClient`, `archiveClient`, `restoreClient`, `findDuplicateClients`, `listNotes`, `createNote`, `updateNote`, `createBackup`, `restoreBackup` and `getBackupStatus` (#117: `{ lastBackupAt, fileName, backupCount }`, names and dates only), plus the research case calls below. Later Phase 2 features (journal, tasks, hours) add contracts and names here.
 
 Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-signed-in` (401), `not-same-origin`/`bad-csrf-token` (403), `unsupported-media-type` (415), `too-large` (413), `invalid-arguments` (400), `not-found` (404) and `internal-error` (500). They never echo submitted or stored values. Logs hold method, route template and status only. They never hold bodies, ids, names, paths or tokens; database errors are logged by error name only.
 
@@ -76,7 +77,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 - Plain HTTP on loopback: traffic never leaves the computer, so TLS adds nothing here. Remote access would need it.
 - Sessions live in memory. Restarting the host signs every browser out (the page says so; nothing is lost). The launch link works for as long as the host runs, and opening it again starts another session (at most 20 are kept).
 - Backups (`<data>/backups/*.tgbackup`) and downloads are **not encrypted**, the same as the desktop backup. Pre-migration and pre-restore safety copies stay in `<data>/data/`.
-- No retention policy yet for the backups folder (#117).
+- Nothing in the backups folder or the safety copies is deleted automatically; the retention habit is a proposal in [live-readiness](../operations/live-readiness.md). The data folder is `0700` on macOS/Linux; on Windows it relies on the per-user AppData permissions.
 - `node:sqlite` is still marked experimental in Node; `web:local` hides that warning.
 
 **Deferred on purpose:** any access from another device (phone, tablet). That needs authentication beyond a link, HTTPS, hardened sessions and a separate privacy review, and it is not part of Phase 2. `demo:lan` stays fictional-only and has no API.
@@ -98,14 +99,17 @@ The layout inside matches the desktop's (`data/tracing-guatemala.sqlite`, `data/
 ```sh
 npm run web:dev     # React HMR + API on http://127.0.0.1:5175, prints a sign-in link; data in .web-dev-data/
 npm run web:build   # client → dist-web/client, host → dist-web/server/main.mjs
-npm run web:local   # Live on http://127.0.0.1:4180 (--port <n>, --data-dir <folder>); Ctrl+C stops
+npm run web:local   # Live on http://127.0.0.1:4180 (--port <n>, --data-dir <folder>, --open); Ctrl+C stops
+npm run live        # build if missing, then web:local --open (scripts/live.mjs)
+npm run smoke:live  # drill against the built host: restart, backup, restore, isolation
 ```
 
-On a clean machine (Node ≥ 22.12): `npm ci`, then `npm run web:build`, then `npm run web:local`, then open the printed link **on the same computer**. One-click start and stop, backup reminders and a readiness checklist belong to #117. The Demo/Live entry UX belongs to #114.
+On a clean machine (Node ≥ 22.12): `npm ci`, then `npm run web:build`, then `npm run web:local`, then open the printed link **on the same computer**. `npm run live`, `Start Tracing Guatemala.cmd` and `start-tracing-guatemala.sh` build if needed, start the host and open the browser (#117; see [live-readiness](../operations/live-readiness.md) for stop, backups, recovery and the release checklist). The Demo/Live entry UX belongs to #114.
 
 ## Tests
 
 - `tests/unit/live-host.test.ts`: real HTTP against the host. Covers the launch link and cookies, Host spoofing, cross-origin and unauthenticated writes, CSRF, media types, sizes, strict arguments, no echo or logging of values, CSP and headers, path traversal, persistence across restart, cross-client note isolation, backup create/download/upload/restore, rejection of junk files, LAN unreachability, data-folder guards and the lock.
+- `tests/unit/backup-status.test.ts`, `tests/unit/live-launch.test.ts` (#117): the backup status file and `getBackupStatus`, restoring a schema-v2 backup by upload, the `--open` link check and per-platform commands, and the `0700` folder mode.
 - `tests/renderer/LiveWeb.test.tsx`: the browser adapter (CSRF header, session loss, download, upload, cancel) and the sign-in screen.
 - `tests/web/live-web.spec.ts` (Playwright `web-live`): the built host in Edge/Chromium. Covers sign-in guidance, CRUD + notes persisting across reload and host restart, backup download, a hostile page in the same browser, demo-bundle isolation, and 375/768/1280px layouts.
 

@@ -37,6 +37,7 @@ export function AppLayout() {
             ))}
           </ul>
         </nav>
+        {runtime.mode === 'live' && <p className="live-status">Live · saved on this computer</p>}
       </aside>
       <main id="main-content" className="content" tabIndex={-1}>
         <Outlet />

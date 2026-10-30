@@ -152,6 +152,13 @@ a {
   font-weight: 600;
 }
 
+.live-status {
+  margin: 1.5rem 0 0;
+  padding: 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
 .content {
   padding: 2rem 3rem 3rem;
   max-width: 72rem;
@@ -1243,6 +1250,11 @@ h1[tabindex='-1']:focus {
 
   .brand {
     margin: 0;
+  }
+
+  .live-status {
+    margin: 0;
+    padding: 0;
   }
 
   .sidebar ul {
