@@ -1,3 +1,9 @@
+import {
+  checkJournalEntry,
+  compareJournalEntries,
+  type JournalEntry,
+  type JournalMutationResult
+} from '../../../shared/case-journal'
 import { checkCaseBrief, emptyBrief, type CaseBrief, type CaseBriefMutationResult } from '../../../shared/case-brief'
 import {
   canTransition,
@@ -19,6 +25,8 @@ import type { DemoClock } from './demoApi'
 // or case/client archived (changes), then the transition matrix, then validation.
 // Research briefs (#17) follow the same rules: not found, then case/client
 // archived, then validation; a save also moves the case's updated time.
+// The research journal (#18) uses the same order of checks: case not found,
+// case/client archived, entry belongs to the case, then validation.
 // Cases read client status through the demo's own client data, so archiving a
 // client in the demo makes its cases read-only like everywhere else.
 
@@ -26,6 +34,7 @@ export interface DemoCaseData {
   cases: ResearchCase[]
   events: CaseEvent[]
   briefs: CaseBrief[]
+  journal: JournalEntry[]
 }
 
 export function createDemoCases(
@@ -36,6 +45,7 @@ export function createDemoCases(
   let cases = structuredClone(initial.cases)
   let events = structuredClone(initial.events)
   let briefs = structuredClone(initial.briefs)
+  let journal = structuredClone(initial.journal)
 
   const reply = async <T>(work: () => T): Promise<T> => structuredClone(work())
 
@@ -142,6 +152,37 @@ export function createDemoCases(
       briefs = [...briefs.filter((b) => b.caseId !== caseId), brief]
       store({ ...existing, updatedAt: at })
       return structuredClone({ ok: true as const, brief })
+    },
+
+    listJournalEntries: (caseId) =>
+      reply(() => journal.filter((e) => e.caseId === caseId).sort(compareJournalEntries)),
+
+    async createJournalEntry(caseId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as JournalMutationResult
+      const { input, issues } = checkJournalEntry(raw, clock.now())
+      if (!input) return { ok: false, reason: 'invalid', issues }
+
+      const at = clock.now().toISOString()
+      const entry: JournalEntry = { ...input, id: clock.newId(), caseId, createdAt: at, updatedAt: at }
+      journal = [...journal, entry]
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, entry })
+    },
+
+    async updateJournalEntry(caseId, entryId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as JournalMutationResult
+      const current = journal.find((e) => e.id === entryId && e.caseId === caseId)
+      if (!current) return { ok: false, reason: 'not-found' }
+      const { input, issues } = checkJournalEntry(raw, clock.now())
+      if (!input) return { ok: false, reason: 'invalid', issues }
+
+      const at = clock.now().toISOString()
+      const entry: JournalEntry = { ...current, ...input, updatedAt: at }
+      journal = journal.map((e) => (e.id === entryId ? entry : e))
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, entry })
     }
   }
 }

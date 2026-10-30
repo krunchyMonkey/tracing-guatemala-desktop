@@ -1,4 +1,5 @@
 import type { CaseBrief } from '../../../shared/case-brief'
+import type { JournalEntry } from '../../../shared/case-journal'
 import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
 import type { DemoCaseData } from './demoCases'
@@ -393,5 +394,33 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseData {
     }
   ]
 
-  return { cases, events, briefs }
+  // Fictional research log. The first two entries share a time to show the tie order
+  // (the one written last is listed first). Two cases of the same client have entries.
+  const logTime = at(4, 10)
+  const entry = (number: number, caseId: string, occurredAt: string, activity: string | null, body: string, editedAt?: string): JournalEntry => ({
+    id: `de300000-0000-4000-8000-4000000000${String(number).padStart(2, '0')}`,
+    caseId,
+    occurredAt,
+    activity,
+    body,
+    createdAt: occurredAt,
+    updatedAt: editedAt ?? occurredAt
+  })
+  const journal: JournalEntry[] = [
+    entry(1, caseIds.paternal, at(20, 16), 'Archive search', 'Searched the fictional diocesan index for baptisms of the Ejemplo family, 1880 to 1890.\nFound two possible entries; neither names a father.'),
+    {
+      ...entry(2, caseIds.paternal, logTime, 'Record analysis', 'Compared the two possible baptisms with the family story.\nThe second one fits the date the client gave.'),
+      createdAt: at(4, 11),
+      updatedAt: at(4, 11)
+    },
+    {
+      ...entry(3, caseIds.paternal, logTime, 'Client communication', 'Asked the client for the photograph and any letters. Waiting for a reply.'),
+      createdAt: at(4, 12),
+      updatedAt: at(3, 9)
+    },
+    entry(4, caseIds.maternal, at(12, 15), 'Online database search', 'Looked for the 1931 marriage in an online index of fictional civil records. No match under “Ejemplo”; trying spelling variants next.'),
+    entry(5, caseIds.maternal, at(8, 15), null, 'Wrote down the variants to try: Ejemplos, Exemplo, Egemplo.')
+  ]
+
+  return { cases, events, briefs, journal }
 }

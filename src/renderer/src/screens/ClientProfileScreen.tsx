@@ -24,6 +24,7 @@ import {
 import { ClientCases } from '../cases/ClientCases'
 import { useAppRuntime } from '../runtime/AppRuntime'
 import { useClientNotes, type NoteSaveResult } from '../clients/useClientNotes'
+import { fromLocalInput, toLocalInput } from '../clients/localTime'
 
 // Client profile (#3 baseline). Reads the saved client when opened (#8);
 // archive/restore (#6) and notes/contact log (#9) are saved through the main
@@ -252,18 +253,6 @@ const noteSaveMessages: Record<'failed' | 'not-found' | 'wrong-status', string> 
   failed: 'Couldn’t save this entry. Your text is still here; please try again.',
   'not-found': 'This entry or client couldn’t be found any more. Copy your text if you need it.',
   'wrong-status': 'This client is archived, so entries can’t be changed. Restore the client first.'
-}
-
-/** "2026-10-29T14:05" in local time, for <input type="datetime-local">. */
-function toLocalInput(iso: string): string {
-  const date = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function fromLocalInput(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
 }
 
 function History({ clientId, version, readOnly }: { clientId: string; version: string; readOnly: boolean }) {

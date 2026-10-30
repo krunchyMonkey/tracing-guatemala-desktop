@@ -1,5 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
+import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
 import type {
   CaseEvent,
@@ -91,6 +92,13 @@ export interface CaseService {
 export interface BriefService {
   get(caseId: string): CaseBrief | null
   save(caseId: string, input: CaseBriefInput): CaseBriefMutationResult
+}
+
+/** Case research journal operations for the local web host (CaseJournalRepository in production). */
+export interface JournalService {
+  list(caseId: string): JournalEntry[]
+  create(caseId: string, input: JournalEntryInput): JournalMutationResult
+  update(caseId: string, entryId: string, input: JournalEntryInput): JournalMutationResult
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */
