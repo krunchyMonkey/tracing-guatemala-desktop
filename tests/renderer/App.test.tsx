@@ -35,6 +35,32 @@ describe('App navigation', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Welcome' })).toBeTruthy()
   })
 
+  it('shows future phases as disabled, non-routed Coming Soon items', () => {
+    render(<App />)
+    const nav = screen.getByRole('navigation', { name: 'Main' })
+    expect(screen.getByRole('heading', { name: /Coming soon/i })).toBeTruthy()
+
+    const upcoming = [
+      ['Evidence Library', 3],
+      ['Document AI', 4],
+      ['Client Reports', 5],
+      ['Family Trees', 6],
+      ['Research Copilot', 7],
+      ['Integrations', 8],
+      ['Business Tools', 9]
+    ] as const
+
+    for (const [label, phase] of upcoming) {
+      const button = screen.getByRole('button', { name: `${label}, coming soon in Phase ${phase}` })
+      expect((button as HTMLButtonElement).disabled).toBe(true)
+      expect(button.querySelector('svg[aria-hidden="true"]')).toBeTruthy()
+      expect(Array.from(nav.querySelectorAll('a')).some((link) => link.textContent === label)).toBe(false)
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Family Trees, coming soon in Phase 6' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome' })).toBeTruthy()
+  })
+
   it('shows a friendly message when app info cannot be loaded', async () => {
     const { api } = createFakeApi()
     vi.mocked(api.getAppInfo).mockRejectedValue(new Error('rejected'))
