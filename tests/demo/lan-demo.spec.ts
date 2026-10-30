@@ -79,6 +79,30 @@ test('serves the shared UI over plain HTTP, with no Electron bridge and no other
   expect([...origins]).toEqual([`http://${host}:${port}`])
 })
 
+test('keeps roadmap links locked and preserves working navigation', async ({ page }) => {
+  await page.goto(server.url)
+  const navigation = nav(page)
+  await expect(navigation.getByRole('heading', { name: /Coming soon/i })).toBeVisible()
+
+  for (const [label, phase] of [
+    ['Evidence Library', 3],
+    ['Document AI', 4],
+    ['Client Reports', 5],
+    ['Family Trees', 6],
+    ['Research Copilot', 7],
+    ['Integrations', 8],
+    ['Business Tools', 9]
+  ] as const) {
+    const placeholder = navigation.getByRole('button', { name: `${label}, coming soon in Phase ${phase}` })
+    await expect(placeholder).toBeDisabled()
+    await expect(placeholder.locator('svg')).toBeVisible()
+    await expect(navigation.getByRole('link', { name: label, exact: true })).toHaveCount(0)
+  }
+
+  await navigation.getByRole('link', { name: 'Clients' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Clients' })).toBeVisible()
+})
+
 test('creates clients with v4 UUIDs on a non-secure LAN origin', async ({ page }) => {
   test.skip(!lanAddress, 'No private LAN address on this computer; the next test still covers the UUID fallback.')
   await page.goto(server.url)
