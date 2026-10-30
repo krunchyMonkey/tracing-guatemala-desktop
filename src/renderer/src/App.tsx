@@ -11,40 +11,51 @@ import { ClientProfileScreen } from './screens/ClientProfileScreen'
 import { ClientsScreen } from './screens/ClientsScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { NotebookAdaptersProvider, type NotebookAdapters } from './notebook/NotebookAdapters'
+import { defaultNotebookAdapters } from './notebook/adapters'
 import { AppRuntimeProvider, desktopRuntime, type AppRuntime } from './runtime/AppRuntime'
 
 // Hash routing keeps every screen on the single app://renderer/index.html document.
 // Client screens read and save through `runtime`: the main process on the desktop,
-// or the in-memory fictional data of the browser demo (#100).
-export function App({ runtime = desktopRuntime }: { runtime?: AppRuntime }) {
+// or the in-memory fictional data of the browser demo (#100). Notebook editors come
+// from `notebookAdapters`, so a test or entry can swap the editing library (#146).
+export function App({
+  runtime = desktopRuntime,
+  notebookAdapters = defaultNotebookAdapters
+}: {
+  runtime?: AppRuntime
+  notebookAdapters?: NotebookAdapters
+}) {
   return (
     <AppRuntimeProvider runtime={runtime}>
-      <HashRouter>
-        <ClientStoreProvider>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route index element={<HomeScreen />} />
-              <Route path="clients" element={<ClientsLoaded />}>
-                <Route index element={<ClientsScreen />} />
-                <Route path="new" element={<ClientFormScreen />} />
-                <Route path=":id" element={<ClientProfileScreen />} />
-                <Route path=":id/edit" element={<ClientFormScreen />} />
-              </Route>
-              {runtime.cases && (
-                <Route path="cases" element={<ClientsLoaded />}>
-                  <Route index element={<CasesScreen />} />
-                  <Route path="new" element={<CaseFormScreen />} />
-                  <Route path=":caseId" element={<CaseScreen />} />
-                  <Route path=":caseId/edit" element={<CaseFormScreen />} />
-                  <Route path=":caseId/brief" element={<CaseBriefScreen />} />
+      <NotebookAdaptersProvider adapters={notebookAdapters}>
+        <HashRouter>
+          <ClientStoreProvider>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route index element={<HomeScreen />} />
+                <Route path="clients" element={<ClientsLoaded />}>
+                  <Route index element={<ClientsScreen />} />
+                  <Route path="new" element={<ClientFormScreen />} />
+                  <Route path=":id" element={<ClientProfileScreen />} />
+                  <Route path=":id/edit" element={<ClientFormScreen />} />
                 </Route>
-              )}
-              <Route path="settings" element={<SettingsScreen />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
-        </ClientStoreProvider>
-      </HashRouter>
+                {runtime.cases && (
+                  <Route path="cases" element={<ClientsLoaded />}>
+                    <Route index element={<CasesScreen />} />
+                    <Route path="new" element={<CaseFormScreen />} />
+                    <Route path=":caseId" element={<CaseScreen />} />
+                    <Route path=":caseId/edit" element={<CaseFormScreen />} />
+                    <Route path=":caseId/brief" element={<CaseBriefScreen />} />
+                  </Route>
+                )}
+                <Route path="settings" element={<SettingsScreen />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </ClientStoreProvider>
+        </HashRouter>
+      </NotebookAdaptersProvider>
     </AppRuntimeProvider>
   )
 }

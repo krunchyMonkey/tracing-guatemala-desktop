@@ -25,6 +25,32 @@ const rendererForbiddenImports = [
   '**/preload/**'
 ]
 
+// Editor and canvas libraries stay behind the notebook ports (#146): their packages
+// may only be imported under notebook/adapters/, and a concrete adapter folder only
+// from within notebook/adapters/ (the composition root, adapters/index.ts, picks one).
+const notebookVendorPackages = [
+  '@tiptap/*',
+  'prosemirror-*',
+  '@excalidraw/*',
+  'excalidraw',
+  'lexical',
+  '@lexical/*',
+  'tldraw',
+  '@tldraw/*',
+  'slate',
+  'slate-*',
+  'quill',
+  'quill-*'
+]
+const notebookVendorPattern = {
+  group: notebookVendorPackages,
+  message: 'Editor and canvas libraries may only be imported under src/renderer/src/notebook/adapters/.'
+}
+const concreteAdapterPattern = {
+  group: ['**/adapters/*/**', '**/adapters/*', '!**/adapters/index'],
+  message: 'Import adapters through the notebook ports and the composition root (notebook/adapters/index.ts), not a concrete adapter folder.'
+}
+
 export default defineConfig(
   { ignores: ['out/**', 'dist-demo/**', 'dist-web/**', '.web-dev-data/**', 'release/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**'] },
   js.configs.recommended,
@@ -52,7 +78,9 @@ export default defineConfig(
             {
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
-            }
+            },
+            notebookVendorPattern,
+            concreteAdapterPattern
           ]
         }
       ],
@@ -98,6 +126,8 @@ export default defineConfig(
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
             },
+            notebookVendorPattern,
+            concreteAdapterPattern,
             { group: ['**/demo/**', './demo', '../demo'], message: 'Only the browser demo entry may import demo code.' },
             { group: ['**/web/**', './web', '../web'], message: 'Only the Live web entry may import Live web code.' }
           ]
@@ -116,6 +146,8 @@ export default defineConfig(
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
             },
+            notebookVendorPattern,
+            concreteAdapterPattern,
             { group: ['**/web/**', './web', '../web'], message: 'The fictional demo must never reach the Live web host.' }
           ]
         }
@@ -133,7 +165,34 @@ export default defineConfig(
               group: rendererForbiddenImports,
               message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
             },
+            notebookVendorPattern,
+            concreteAdapterPattern,
             { group: ['**/demo/**', './demo', '../demo'], message: 'Fictional demo data must never reach the Live web app.' }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    // Everything outside the renderer never touches an editor or canvas library.
+    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/server/**/*.ts', 'src/shared/**/*.ts'],
+    rules: { 'no-restricted-imports': ['error', { patterns: [notebookVendorPattern] }] }
+  },
+  {
+    // Adapters are where the libraries live: they may import them and each other, but
+    // keep every other renderer boundary.
+    files: ['src/renderer/src/notebook/adapters/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: rendererForbiddenImports,
+              message: 'Renderer code must use window.tracingGuatemala instead of Node, Electron, or main-process modules.'
+            },
+            { group: ['**/demo/**', './demo', '../demo'], message: 'Only the browser demo entry may import demo code.' },
+            { group: ['**/web/**', './web', '../web'], message: 'Only the Live web entry may import Live web code.' }
           ]
         }
       ]

@@ -52,6 +52,7 @@ flowchart TD
 - Maintain a `NotebookRepository` behind the typed application API and SQLite; no editor-specific JSON, SDK shape or runtime instance escapes to the server contracts.
 - React views call adapter-owned ports e.g. `RichTextEditorAdapter` and `CanvasSurfaceAdapter`. Concrete integrations (Tiptap, Excalidraw or alternatives) live under `src/renderer/src/notebook/adapters/<provider>/`. Imports of vendor packages forbidden outside their adapter folder and the composition root.
 - The canvas stores links to canonical `NoteBlock` IDs, never an independent copy of text. Prefer storing portable transforms/edges and an app-owned ink model. If exact SDK feature fidelity requires native scene state, isolate it in an explicit `provider`/`schemaVersion` payload and provide versioned migration + portable export.
+- Architecture, formats (`tg-note/1`, `tg-canvas/1`), ports and the lint boundary: [architecture/research-notebook.md](architecture/research-notebook.md).
 - Save/export/load round trips are verified against a fake adapter (including a replacement mock provider) before considering any library integration complete.
 - Favor permissively licensed, replaceable SDKs; avoid cloud-only functionality, and review license before adding a commercial dependency. Do not claim handwritten text recognition in the initial release.
 
