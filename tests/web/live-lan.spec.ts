@@ -1,9 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { createServer } from 'node:net'
-import { networkInterfaces, tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
 import { chromium, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { channel, cleanupHosts, DEMO_NAME, freePort, HTTP_TEXT, lanIp, startHost as launchHost, stop, type Host } from './lan-helpers'
 
 // Home-network Live, end to end (#137, finishing the browser tests of #136): the
 // built host is started with --lan-host on this computer's own private address
@@ -15,86 +11,14 @@ import { chromium, expect, test, type Browser, type BrowserContext, type Page } 
 // resolve the demo name server-side; the browser maps it with
 // --host-resolver-rules. Neither does anything outside automated tests.
 
-const root = resolve(__dirname, '../..')
-const DEMO_NAME = 'tg-demo.test'
-const HTTP_TEXT = 'Unencrypted HTTP — trusted home network only'
-
-const addresses = Object.values(networkInterfaces())
-  .flatMap((entries) => entries ?? [])
-  .filter((e) => e.family === 'IPv4' && !e.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(e.address))
-  .map((e) => e.address)
-const lanIp = addresses.find((address) => addresses.filter((a) => a === address).length === 1)
-
 test.skip(!lanIp, 'This machine has no private IPv4 address.')
 
-interface Host {
-  child: ChildProcess
-  launchUrl: string
-  output: () => string
-}
-
-const running: ChildProcess[] = []
-const folders: string[] = []
-
-async function freePort(): Promise<number> {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const port = await new Promise<number>((done, fail) => {
-      const probe = createServer()
-      probe.once('error', fail)
-      probe.listen(0, '127.0.0.1', () => {
-        const p = (probe.address() as { port: number }).port
-        probe.close(() => done(p))
-      })
-    })
-    // Both the Live port and port + 1 (the demo) must be free on both interfaces.
-    const free = async (host: string, p: number) =>
-      new Promise<boolean>((done) => {
-        const probe = createServer()
-        probe.once('error', () => done(false))
-        probe.listen(p, host, () => probe.close(() => done(true)))
-      })
-    if ((await free('127.0.0.1', port)) && (await free('127.0.0.1', port + 1)) && (await free(lanIp!, port)) && (await free(lanIp!, port + 1))) return port
-  }
-  throw new Error('no free port pair')
-}
-
 async function startHost(port: number, withLan: boolean): Promise<{ host: Host; dataDir: string }> {
-  const parent = mkdtempSync(join(tmpdir(), 'tg-lan-e2e-'))
-  folders.push(parent)
-  const dataDir = join(parent, 'profile')
-  const args = ['--disable-warning=ExperimentalWarning', 'dist-web/server/main.mjs', '--port', String(port), '--data-dir', dataDir]
-  if (withLan) args.push('--lan-host', lanIp!, '--init-lan-test-profile', '--lan-demo-name', DEMO_NAME)
-  const child = spawn(process.execPath, args, {
-    cwd: root,
-    env: { ...process.env, TG_TEST_HOOKS: '1', TG_TEST_RESOLVE: `${DEMO_NAME}=${lanIp}` }
-  })
-  running.push(child)
-  let output = ''
-  const launchUrl = await new Promise<string>((ready, fail) => {
-    child.stdout!.on('data', (chunk: Buffer) => {
-      output += chunk.toString()
-      const match = /http:\/\/127\.0\.0\.1:\d+\/launch\?token=[\w-]+/.exec(output)
-      if (match && output.includes('Press Ctrl+C to stop')) ready(match[0])
-    })
-    child.stderr!.on('data', (chunk: Buffer) => (output += chunk.toString()))
-    child.once('exit', (code) => fail(new Error(`web:local exited with ${code}: ${output}`)))
-  })
-  return { host: { child, launchUrl, output: () => output }, dataDir }
+  return launchHost(port, { withLan })
 }
 
-async function stop(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise((done) => child.once('exit', done))
-  child.kill()
-  await exited
-}
+test.afterAll(cleanupHosts)
 
-test.afterAll(async () => {
-  await Promise.all(running.splice(0).map(stop))
-  for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true })
-})
-
-const channel = process.platform === 'win32' ? 'msedge' : undefined
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Main' })
 const switcher = (page: Page) => page.getByRole('region', { name: 'Workspace mode' })
 const pick = (page: Page, name: string) => page.locator('label').filter({ hasText: new RegExp(`^${name}$`) }).click()
@@ -217,6 +141,8 @@ test.describe.serial('home-network Live on this computer', () => {
       for (const hash of ['#/', '#/clients', '#/cases', '#/settings']) {
         await devicePage.goto(`${lan}/${hash}`)
         await expect(nav(devicePage)).toBeVisible()
+        // Page scroll carries over a same-document navigation; the banner sits at the top.
+        await devicePage.evaluate(() => window.scrollTo(0, 0))
         const banner = devicePage.getByRole('note', { name: 'Connection warning' })
         await expect(banner).toBeVisible()
         await expect(banner).toBeInViewport()

@@ -31,6 +31,7 @@
     "live": "node scripts/live.mjs",
     "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke.mjs",
     "pilot:rehearsal": "node --disable-warning=ExperimentalWarning scripts/pilot-rehearsal.mjs",
+    "lan:rehearsal": "node --disable-warning=ExperimentalWarning scripts/lan-rehearsal.mjs",
     "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs"
   },
   "dependencies": {

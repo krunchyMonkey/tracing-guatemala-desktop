@@ -68,3 +68,7 @@ The recovery pages never mention the private launch link; it only works on the r
 ## Automated test hook
 
 `tests/web/live-lan.spec.ts` starts the built host with `--lan-demo-name tg-demo.test`, which does not exist in DNS. The host honours `TG_TEST_RESOLVE=<name>=<address>` **only** when `TG_TEST_HOOKS=1` is also set, and prints a "TEST HOOK ACTIVE" warning when it does. Without `TG_TEST_HOOKS=1` the system resolver is always used. Never set either variable outside automated tests. The browser side uses Chromium's `--host-resolver-rules`. The spec is skipped when the machine has no private IPv4 address.
+
+## Validation record
+
+What was tested automatically for this mode, what was not (network isolation, guest networks, real Wi-Fi), and the manual owner checklist: [Phase 2.5 validation record](../pilot/phase-2.5-lan-validation.md). Run `npm run lan:rehearsal` after `npm run web:build` for a step-by-step rehearsal of the commands above against the built host on a throwaway fictional profile.
