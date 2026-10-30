@@ -52,7 +52,7 @@ describe('migrate', () => {
   it('creates the schema on an empty database and is idempotent', () => {
     const db = memoryDb()
     expect(migrate(db)).toEqual({ from: 0, to: migrations.length })
-    expect(tableNames(db)).toEqual(['client_notes', 'clients'])
+    expect(tableNames(db)).toEqual(['case_events', 'client_notes', 'clients', 'research_cases'])
     expect(migrate(db)).toEqual({ from: migrations.length, to: migrations.length })
   })
 
@@ -117,7 +117,7 @@ describe('openAppDatabase', () => {
     first.db.close()
     // Simulate a database left by an app version that only knew migration 1.
     const old = new DatabaseSync(first.file)
-    old.exec('DROP TABLE client_notes; PRAGMA user_version = 1;')
+    old.exec('DROP TABLE case_events; DROP TABLE research_cases; DROP TABLE client_notes; PRAGMA user_version = 1;')
     old
       .prepare(
         `INSERT INTO clients (id, display_name, source, created_at, updated_at)

@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LaunchRequired } from '../../src/renderer/src/web/LaunchRequired'
 import { createLiveApi, fetchSession, LiveApiError } from '../../src/renderer/src/web/liveApi'
+import type { CaseQuery } from '../../src/shared/case-model'
 import { defaultQuery } from '../../src/shared/client-model'
 
 // The Live web app's data adapter (#110), with fetch stubbed. Fictional data only.
@@ -87,5 +88,37 @@ describe('LaunchRequired', () => {
   it('says nothing was lost after a restart', () => {
     render(<LaunchRequired reason="session-ended" />)
     expect(screen.getByText(/Nothing was lost/)).toBeTruthy()
+  })
+})
+
+describe('Live API adapter: cases', () => {
+  const clientId = '11111111-1111-4111-8111-111111111111'
+  const caseId = '22222222-2222-4222-8222-222222222222'
+  const input = { title: 'Maternal grandparents', goal: null, orderReference: 'FO-EXAMPLE-0042', dueDate: '2026-11-15' }
+  const query: CaseQuery = { clientId, archived: 'active', states: ['intake', 'active'], text: '', sort: 'due' }
+
+  it.each([
+    ['listCases', (api: ReturnType<typeof setup>['api']) => api.cases.listCases(query), [query]],
+    ['getCase', (api: ReturnType<typeof setup>['api']) => api.cases.getCase(caseId), [caseId]],
+    ['listCaseEvents', (api: ReturnType<typeof setup>['api']) => api.cases.listCaseEvents(caseId), [caseId]],
+    ['createCase', (api: ReturnType<typeof setup>['api']) => api.cases.createCase(clientId, input), [clientId, input]],
+    ['updateCase', (api: ReturnType<typeof setup>['api']) => api.cases.updateCase(caseId, input), [caseId, input]],
+    ['setCaseState', (api: ReturnType<typeof setup>['api']) => api.cases.setCaseState(caseId, 'waiting'), [caseId, 'waiting']],
+    ['archiveCase', (api: ReturnType<typeof setup>['api']) => api.cases.archiveCase(caseId), [caseId]],
+    ['unarchiveCase', (api: ReturnType<typeof setup>['api']) => api.cases.unarchiveCase(caseId), [caseId]]
+  ])('posts %s to its own call with the right arguments and the CSRF token', async (name, run, args) => {
+    const { api, fetchImpl } = setup([reply(200, { result: { ok: false, reason: 'not-found' } })])
+    await expect(run(api)).resolves.toEqual({ ok: false, reason: 'not-found' })
+    expect(fetchImpl).toHaveBeenCalledOnce()
+    const [url, init] = fetchImpl.mock.calls[0]!
+    expect(url).toBe(`/api/v1/call/${name}`)
+    expect(init).toMatchObject({ method: 'POST', headers: { 'Content-Type': 'application/json', 'X-TG-CSRF': 'token-123' } })
+    expect(JSON.parse(init!.body as string)).toEqual({ args })
+  })
+
+  it('reports a lost session from a case call like any other call', async () => {
+    const { api, onSessionLost } = setup([reply(401, { error: 'not-signed-in' })])
+    await expect(api.cases.listCases(query)).rejects.toEqual(new LiveApiError('not-signed-in'))
+    expect(onSessionLost).toHaveBeenCalledOnce()
   })
 })

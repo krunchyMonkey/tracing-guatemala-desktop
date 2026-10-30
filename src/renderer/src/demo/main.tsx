@@ -16,7 +16,8 @@ const runtime: AppRuntime = {
     version: __APP_VERSION__,
     platform: 'browser'
   }),
-  backup: null
+  backup: null,
+  cases: null
 }
 
 const container = document.getElementById('root')
