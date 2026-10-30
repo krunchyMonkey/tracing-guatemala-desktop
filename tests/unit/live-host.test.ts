@@ -176,9 +176,10 @@ describe('signing in', () => {
 
   it('reports no session, and no CSRF token, to a browser without the cookie', async () => {
     const live = await start()
-    expect((await send(live, 'GET', '/api/v1/session')).json()).toEqual({ authenticated: false })
+    expect((await send(live, 'GET', '/api/v1/session')).json()).toEqual({ authenticated: false, demoUrl: null })
     expect((await send(live, 'GET', '/api/v1/session', { Cookie: `tg_live_${live.port}=forged` })).json()).toEqual({
-      authenticated: false
+      authenticated: false,
+      demoUrl: null
     })
   })
 
@@ -190,8 +191,32 @@ describe('signing in', () => {
 
     // Same port, so the old cookie would be sent again.
     server = await startLiveServer({ dataDir, port: first.port, staticDir, appInfo: { name: 'T', version: '0', platform: 'web' }, log: () => {} })
-    expect((await send(server, 'GET', '/api/v1/session', { Cookie: signed.cookie })).json()).toEqual({ authenticated: false })
+    expect((await send(server, 'GET', '/api/v1/session', { Cookie: signed.cookie })).json()).toEqual({ authenticated: false, demoUrl: null })
     expect((await send(server, 'GET', oldLaunch.pathname + oldLaunch.search)).status).toBe(403)
+  })
+})
+
+describe('demo address (#114)', () => {
+  it('reports the configured demo address to signed-in and signed-out browsers alike', async () => {
+    server = await startLiveServer({
+      dataDir,
+      port: 0,
+      staticDir,
+      demoUrl: 'http://localhost:4181/?live=4180',
+      appInfo: { name: 'T', version: '0', platform: 'web' },
+      log: () => {}
+    })
+    const signedOut = (await send(server, 'GET', '/api/v1/session')).json()
+    expect(signedOut).toEqual({ authenticated: false, demoUrl: 'http://localhost:4181/?live=4180' })
+    const signed = await signIn(server)
+    const signedIn = (await send(server, 'GET', '/api/v1/session', { Cookie: signed.cookie })).json()
+    expect(signedIn).toEqual({ authenticated: true, csrfToken: signed.csrf, demoUrl: 'http://localhost:4181/?live=4180' })
+  })
+
+  it('reports null when no demo mirror runs', async () => {
+    const live = await start()
+    const signed = await signIn(live)
+    expect(((await send(live, 'GET', '/api/v1/session', { Cookie: signed.cookie })).json() as { demoUrl: unknown }).demoUrl).toBeNull()
   })
 })
 

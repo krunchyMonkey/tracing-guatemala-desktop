@@ -12,10 +12,19 @@ export type AppDataApi = Omit<TracingGuatemalaApi, 'createBackup' | 'chooseBacku
 
 export type BackupApi = Pick<TracingGuatemalaApi, 'createBackup' | 'chooseBackupToRestore' | 'restoreBackup'>
 
+/**
+ * How the person gets to the other mode (#114). Demo and Live are separate
+ * origins, so switching is only ever a plain link, decided by each entry point
+ * without any shared state; never a switch inside one page.
+ */
+export type ModeSwitch =
+  | { kind: 'link'; href: string }
+  | { kind: 'unavailable'; reason: 'not-on-host' | 'not-running' | 'not-available' }
+
 export type AppRuntime =
-  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi }
-  | { mode: 'live'; data: AppDataApi; backup: BackupApi }
-  | { mode: 'demo'; data: AppDataApi; backup: null }
+  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; switcher: ModeSwitch }
+  | { mode: 'live'; data: AppDataApi; backup: BackupApi; switcher: ModeSwitch }
+  | { mode: 'demo'; data: AppDataApi; backup: null; switcher: ModeSwitch }
 
 /**
  * The Electron runtime. Getters read the preload bridge at call time, so the
@@ -28,7 +37,9 @@ export const desktopRuntime: AppRuntime = {
   },
   get backup() {
     return window.tracingGuatemala
-  }
+  },
+  // The desktop app has no second mode to switch to.
+  switcher: { kind: 'unavailable', reason: 'not-available' }
 }
 
 const AppRuntimeContext = createContext<AppRuntime>(desktopRuntime)

@@ -72,6 +72,11 @@ export interface LiveHostOptions {
   appInfo: AppInfo
   /** The built web client to serve; null when Vite serves it (`web:dev`). */
   staticDir: string | null
+  /**
+   * Where the fictional demo mirror listens (#114), or null when there is none.
+   * Reported by `GET /api/v1/session` so the page can offer a link; not a secret.
+   */
+  demoUrl?: string | null
   now?: () => Date
   log?: (line: string) => void
 }
@@ -140,6 +145,7 @@ function mediaType(req: IncomingMessage): string {
 
 export function createLiveHost(options: LiveHostOptions): LiveHost {
   const { port, data, appInfo, staticDir } = options
+  const demoUrl = options.demoUrl ?? null
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
@@ -308,7 +314,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     if (path === `${API_PREFIX}/session`) {
       if (method !== 'GET') throw new RequestError(405, 'method-not-allowed')
       const session = sessionOf(req)
-      send(res, 200, session ? { authenticated: true, csrfToken: session.csrfToken } : { authenticated: false })
+      send(res, 200, session ? { authenticated: true, csrfToken: session.csrfToken, demoUrl } : { authenticated: false, demoUrl })
       return path
     }
     if (path.startsWith(`${API_PREFIX}/call/`)) {

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
@@ -21,6 +21,7 @@ const host = lanAddress ?? '127.0.0.1'
 const port = Number(process.env['DEMO_E2E_PORT'] ?? 4183)
 const root = resolve(__dirname, '../..')
 const shotsDir = join(root, 'docs/screenshots/issue-100')
+const switchShotsDir = join(root, 'docs/screenshots/issue-114')
 const capture = Boolean(process.env['CAPTURE_SCREENSHOTS'])
 const UUID_V4 = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/
 
@@ -188,6 +189,35 @@ for (const viewport of viewports) {
     await expect(page.getByRole('heading', { level: 1, name: 'Grace Whitfield' })).toBeVisible()
   })
 }
+
+// Switching to Live (#114): the link is offered only when the demo page itself
+// is on the researcher's computer. A phone or tablet on the LAN must never get a
+// link to "its own" localhost, whatever the address bar says.
+test('on the LAN address, never links to Live, even when asked to with ?live=4180', async ({ page }) => {
+  test.skip(!lanAddress, 'No private LAN address on this computer; the unit tests cover every hostname.')
+  await page.goto(`${server.url}?live=4180#/clients`)
+  await expect(page.getByRole('region', { name: 'Workspace mode' })).toContainText('Demo · nothing is saved')
+  await expect(page.getByText('Live mode opens only on the researcher’s own computer.')).toBeVisible()
+  await expect(page.getByRole('link', { name: /Back to Live/ })).toHaveCount(0)
+  const hrefs = await page.locator('a[href]').evaluateAll((links) => links.map((a) => a.getAttribute('href') ?? ''))
+  expect(hrefs.filter((href) => ['http://127.', 'http://localhost', 'http://[::1]'].some((prefix) => href.toLowerCase().startsWith(prefix)))).toEqual([])
+  expect(await page.locator('[href^="http://127.0.0.1"], [href^="http://localhost"]').count()).toBe(0)
+
+  // Navigating inside the demo keeps it that way.
+  await nav(page).getByRole('link', { name: 'Settings & Backup' }).click()
+  await expect(page.getByText('Live mode opens only on the researcher’s own computer.')).toBeVisible()
+  if (capture) {
+    mkdirSync(switchShotsDir, { recursive: true })
+    await page.screenshot({ path: join(switchShotsDir, 'lan-demo-live-unavailable.png') })
+  }
+})
+
+test('without a usable live port, the demo says Live is not running on this computer and offers no link', async ({ page }) => {
+  test.skip(lanAddress !== undefined, 'Needs the loopback fallback; this computer has a LAN address, which the test above covers.')
+  await page.goto(`${server.url}#/clients`)
+  await expect(page.getByText('Start Tracing Guatemala on this computer to use Live.')).toBeVisible()
+  await expect(page.getByRole('link', { name: /Back to Live/ })).toHaveCount(0)
+})
 
 test('keeps demo code and sample data out of the desktop bundle', () => {
   const assets = resolve(__dirname, '../../out/renderer/assets')

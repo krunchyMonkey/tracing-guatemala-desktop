@@ -31,6 +31,8 @@ npm run web:build
 npm run web:local    # prints a private sign-in link for http://127.0.0.1:4180; Ctrl+C stops it
 ```
 
+It also serves the fictional demo on this computer at `http://localhost:4181/` (Live port + 1; `--no-demo` turns it off). The sidebar always shows which mode you are in, with a link to the other one at a separate address, so demo changes never touch Live data and Live data never appears in the demo.
+
 To bring desktop data across, make a backup in the desktop app and restore it in the web app's **Settings & Backup**. See [docs/architecture/web-first-runtime.md](docs/architecture/web-first-runtime.md) for data folders, the security model, the API and known limitations.
 
 ## Browser demo on your home network

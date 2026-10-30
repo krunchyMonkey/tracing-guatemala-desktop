@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router'
 import { useAppRuntime } from '../runtime/AppRuntime'
 import { DemoBanner } from './DemoBanner'
+import { ModeSwitcher } from './ModeSwitcher'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -21,6 +22,7 @@ export function AppLayout() {
           Tracing Guatemala
           <span className="brand-tagline">Research workspace</span>
         </p>
+        <ModeSwitcher />
         <nav aria-label="Main">
           <ul>
             {navItems.map((item) => (
