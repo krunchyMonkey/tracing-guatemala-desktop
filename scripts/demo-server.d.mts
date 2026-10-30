@@ -15,4 +15,14 @@ export function isPrivateIPv4(address: string): boolean
 export function isLoopbackIPv4(address: string): boolean
 export function localIPv4Addresses(interfaces?: NodeJS.Dict<NetworkInterfaceInfo[]>): LocalAddress[]
 export function chooseLanHost(requested: string | undefined, addresses?: LocalAddress[]): HostChoice
-export function startDemoServer(options: { host: string; port?: number }): Promise<{ url: string; close: () => Promise<void> }>
+export interface FeedbackOptions {
+  env: NodeJS.ProcessEnv | Record<string, string | undefined>
+  log?: (line: string) => void
+  fetchImpl?: typeof fetch
+}
+export function allowConnectToSelf(policy: string): string
+export function startDemoServer(options: {
+  host: string
+  port?: number
+  feedback?: FeedbackOptions | null
+}): Promise<{ url: string; close: () => Promise<void>; feedback: { accessCode: string; enabled: boolean } | null }>

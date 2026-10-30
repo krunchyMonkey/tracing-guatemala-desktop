@@ -69,3 +69,6 @@ Unresolved and **not researcher-approved**: actual case state vocabulary, requir
 
 ## Exit criteria
 Engineering ready when the **web-client** feature PRs are validated and merged into `main`. **Phase 2 accepted** only when the researcher exercises the local web app's client→case workflows, journal, tasks, optional time tracker and export in #21, with real feedback recorded. Phase 1 desktop user acceptance stays open/deferred in #12; desktop continuation will be decided only after web feature completeness. No fabricated completion.
+
+## #110 status (implementation)
+The persistent local web runtime exists. Commands, data folders, the API, the threat model and limitations are in [docs/architecture/web-first-runtime.md](architecture/web-first-runtime.md). Case features (#15+) add contracts and `callable` names to the same host, the same `AppDataApi`, and fictional-demo parity. Deferred: Demo/Live entry UX (#114), one-click launch, backup retention and a readiness checklist (#117), and any access from another device (not in Phase 2).

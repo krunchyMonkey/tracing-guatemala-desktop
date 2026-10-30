@@ -21,7 +21,11 @@ import {
   type NoteInput,
   type NoteIssue
 } from '../clients/model'
+import { ClientCases } from '../cases/ClientCases'
+import { useAppRuntime } from '../runtime/AppRuntime'
 import { useClientNotes, type NoteSaveResult } from '../clients/useClientNotes'
+import { fromLocalInput, toLocalInput } from '../clients/localTime'
+import { guideAnchor } from '../guidance/anchors'
 
 // Client profile (#3 baseline). Reads the saved client when opened (#8);
 // archive/restore (#6) and notes/contact log (#9) are saved through the main
@@ -32,6 +36,7 @@ type HistoryFilter = 'all' | 'note' | 'contact'
 export function ClientProfileScreen() {
   const { id } = useParams()
   const store = useClientStore()
+  const { cases } = useAppRuntime()
   const location = useLocation()
   const flash = (location.state as { flash?: string } | null)?.flash
   const [pending, setPending] = useState<'archive' | 'restore' | null>(null)
@@ -96,7 +101,7 @@ export function ClientProfileScreen() {
         </div>
       )}
 
-      <header className="profile-header">
+      <header className="profile-header" {...guideAnchor('client-summary')}>
         <div className="avatar" aria-hidden="true">
           {initials(client.displayName)}
         </div>
@@ -109,7 +114,7 @@ export function ClientProfileScreen() {
             <span className="muted">Client since {formatDate(client.createdAt)}</span>
           </p>
         </div>
-        <div className="profile-actions">
+        <div className="profile-actions" {...guideAnchor('client-archive')}>
           {isArchived ? (
             <button type="button" className="button button-primary" disabled={working} onClick={() => setPending('restore')}>
               Restore client
@@ -137,13 +142,17 @@ export function ClientProfileScreen() {
         <DetailsCard client={client} />
       </div>
 
-      <section className="card placeholder-card" aria-labelledby="orders-heading">
-        <h2 id="orders-heading">Orders &amp; research cases</h2>
-        <p className="muted">
-          Planned for a later phase. For now, record orders and custom offers as notes below, for example “Custom
-          offer sent: Premium package, adjusted price”.
-        </p>
-      </section>
+      {cases ? (
+        <ClientCases client={client} api={cases} />
+      ) : (
+        <section className="card placeholder-card" aria-labelledby="orders-heading">
+          <h2 id="orders-heading">Orders &amp; research cases</h2>
+          <p className="muted">
+            Planned for a later phase. For now, record orders and custom offers as notes below, for example “Custom
+            offer sent: Premium package, adjusted price”.
+          </p>
+        </section>
+      )}
 
       {/* Archive and restore add system entries, so the history re-reads when the client changes. */}
       <History clientId={client.id} version={client.updatedAt} readOnly={isArchived} />
@@ -247,18 +256,6 @@ const noteSaveMessages: Record<'failed' | 'not-found' | 'wrong-status', string> 
   'wrong-status': 'This client is archived, so entries can’t be changed. Restore the client first.'
 }
 
-/** "2026-10-29T14:05" in local time, for <input type="datetime-local">. */
-function toLocalInput(iso: string): string {
-  const date = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function fromLocalInput(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
-}
-
 function History({ clientId, version, readOnly }: { clientId: string; version: string; readOnly: boolean }) {
   const notes = useClientNotes(clientId, version)
   const [filter, setFilter] = useState<HistoryFilter>('all')
@@ -266,7 +263,7 @@ function History({ clientId, version, readOnly }: { clientId: string; version: s
   const visible = notes.notes.filter((n) => filter === 'all' || n.kind === filter)
 
   return (
-    <section className="card history" aria-labelledby="history-heading">
+    <section className="card history" aria-labelledby="history-heading" {...guideAnchor('client-history')}>
       <div className="history-header">
         <h2 id="history-heading">Notes &amp; contact history</h2>
         <fieldset className="segmented segmented-small">

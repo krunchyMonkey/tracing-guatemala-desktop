@@ -9,7 +9,7 @@ The project's **React/Vite WEB application is now the primary feature client**, 
 Read [Phase 2 web-first roadmap](./docs/phase-2-case-management-spec.md) and [#110 web-first runtime foundation](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) before implementing new Phase 2 features. Tickets #13–#21 and #109 have been groomed to target web-first development. All user-specific changes must be consistent with these newer directions; ticket references to “main process”, “IPC”, “desktop restart”, or “native export” should be interpreted as web host/API, browser refresh+host restart, and browser download for the web-first target.
 
 ### Two *separate* web modes — security boundary
-1. **`demo:build` / `demo:lan` / `demo:dev`**: existing trusted-LAN **plain HTTP, fictional, in-memory demo**, resets on refresh. **NEVER** accepts or displays real clients/research records or accesses SQLite. #102 adds Driver.js and an *opt-in* server-side private GitHub Project draft feedback bridge; no GitHub tokens in browser, no fallback to PUBLIC repo issues.
+1. **`demo:build` / `demo:lan` / `demo:dev`**: existing trusted-LAN **plain HTTP, fictional, in-memory demo**, resets on refresh. **NEVER** accepts or displays real clients/research records or accesses SQLite. #102 adds a Driver.js tour (`src/renderer/src/guidance/`, demo-only dynamic import; see `docs/architecture/guidance-service.md`) and an *opt-in* (`npm run demo:lan:feedback`, `scripts/demo-feedback.mjs`) server-side private GitHub Project draft feedback bridge; no GitHub tokens in browser, no fallback to PUBLIC repo issues.
 2. **Persistent local web app, added by #110**: use a compact Node host plus typed same-origin HTTP API, shared validation and SQLite. Start **loopback-only** (127.0.0.1) on the same computer, with Host/Origin/CSRF/session safeguards and transactional backups. No remote-LAN real data or unencrypted access to sensitive records. New feature pages and tests use **this** app as the primary working product.
 
 Electron and its DB remain preserved, but no automatic migration from the researcher's existing `userData` database. Do not make actual client records public, upload data to GitHub, or bundle secrets in `dist-demo/`.
@@ -45,3 +45,9 @@ Electron and its DB remain preserved, but no automatic migration from the resear
 
 ## Definition of complete
 The last Phase 1 **feature PR** can finish at #102, but installed desktop **pilot #12 is intentionally deferred**, not signed off. Phase 2 **web engineering complete** means web PRs merged/tested; Phase 2 **accepted** means the researcher actually pilots the local persistent WEB app in #21 and provides feedback. Desktop continuation is a later owner product decision.
+
+## #110 web-first runtime: implemented (PR pending review)
+- `npm run web:dev` (127.0.0.1:5175, HMR + API, `.web-dev-data/`), `npm run web:build` (`dist-web/`), `npm run web:local` (127.0.0.1:4180, real data in its own profile folder).
+- Runtime `mode: 'live'` with `src/renderer/src/web/liveApi.ts`; the host is in `src/server/`. Contracts are shared via `src/main/contracts.ts`, services via `src/main/data-services.ts`.
+- Security: loopback only, Host check, launch link → HttpOnly SameSite=Strict cookie, Origin + CSRF header on writes, size and media-type limits, CSP `connect-src 'self'`. See `docs/architecture/web-first-runtime.md`.
+- New Phase 2 data calls: add the zod contract to `src/main/contracts.ts`, a name to `callable` in `src/server/live-host.ts`, a method to `AppDataApi`, `liveApi.ts` and `demoApi.ts`, and tests in `tests/unit/live-host.test.ts` / `tests/web/`.

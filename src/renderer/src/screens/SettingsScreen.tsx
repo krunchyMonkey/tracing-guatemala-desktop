@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
-import type { AppInfo, BackupChoice, BackupProblem } from '../../../shared/ipc'
+import type { AppInfo, BackupChoice, BackupProblem, BackupStatus } from '../../../shared/ipc'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDateTime } from '../clients/components'
 import { useAppRuntime, type BackupApi } from '../runtime/AppRuntime'
+import { describeAge, daysSince, useBackupStatus } from '../runtime/useBackupStatus'
 
-// Settings & Backup (#11). Backups are made and restored by the main process
-// through native file dialogs; this screen never sees file paths. The browser
-// demo (#100) has no backups and says so instead of offering the controls.
+// Settings & Backup (#11). On the desktop, backups are made and restored by the
+// main process through native file dialogs; in the Live web app (#110) the host
+// keeps a copy and the browser downloads one, and a restore is uploaded. The Live
+// app also shows when the last verified backup was made and explains that data
+// is not encrypted (#117). This screen never sees file paths. The browser demo (#100) has no backups and says
+// so instead of offering the controls.
 
 type Ready = Extract<BackupChoice, { ok: true }>
 
@@ -52,7 +56,8 @@ export function SettingsScreen() {
               data folder. Nothing is sent over the internet, and nothing is uploaded to the cloud.
             </p>
           </section>
-          <BackupSection backup={runtime.backup} />
+          <BackupSection backup={runtime.backup} web={runtime.mode === 'live'} />
+          {runtime.mode === 'live' && <EncryptionNotice />}
         </>
       ) : (
         <>
@@ -88,8 +93,9 @@ export function SettingsScreen() {
   )
 }
 
-function BackupSection({ backup }: { backup: BackupApi }) {
+function BackupSection({ backup, web }: { backup: BackupApi; web: boolean }) {
   const { reload } = useClientStore()
+  const backupStatus = useBackupStatus()
   const [busy, setBusy] = useState<'backup' | 'choose' | 'restore' | null>(null)
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
   const [pendingRestore, setPendingRestore] = useState<Ready | null>(null)
@@ -110,11 +116,14 @@ function BackupSection({ backup }: { backup: BackupApi }) {
   async function createBackup() {
     const result = await run('backup', () => backup.createBackup())
     if (!result || (!result.ok && result.reason === 'cancelled')) return
+    if (result.ok) backupStatus.refresh()
     setMessage(
       result.ok
         ? {
             tone: 'success',
-            text: `Backup saved as “${result.fileName}”, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. Keep it somewhere private.`
+            text: web
+              ? `Backup “${result.fileName}” made, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. A copy is kept in the app’s backups folder and your browser is downloading another. Keep it somewhere private.`
+              : `Backup saved as “${result.fileName}”, with ${plural(result.clients, 'client')} and ${plural(result.notes, 'note')}. Keep it somewhere private.`
           }
         : { tone: 'error', text: 'The backup couldn’t be saved. Nothing was changed. Try another folder or drive.' }
     )
@@ -158,6 +167,7 @@ function BackupSection({ backup }: { backup: BackupApi }) {
         anyone who opens the file can read it. Save it somewhere private, such as your own external drive, and make a
         new one regularly.
       </p>
+      {backupStatus.supported && <BackupStatusLine status={backupStatus.status} failed={backupStatus.failed} />}
       <div role="status" aria-live="polite">
         {message?.tone === 'success' && <p className="flash">{message.text}</p>}
       </div>
@@ -213,6 +223,48 @@ function BackupSection({ backup }: { backup: BackupApi }) {
           </p>
         </ConfirmDialog>
       )}
+    </section>
+  )
+}
+
+/** Only backups this app verified are counted; nothing here guesses or claims more. */
+function BackupStatusLine({ status, failed }: { status: BackupStatus | null; failed: boolean }) {
+  if (!status) return <p className="muted">{failed ? 'Backup status is unavailable right now.' : 'Checking your last backup…'}</p>
+  return (
+    <div data-testid="backup-status">
+      <p>
+        {status.lastBackupAt ? (
+          <>
+            Last backup: <strong>{formatDateTime(status.lastBackupAt)}</strong> ({describeAge(daysSince(status.lastBackupAt))})
+          </>
+        ) : (
+          <strong>No backup made yet</strong>
+        )}
+      </p>
+      <p className="muted">{plural(status.backupCount, 'backup')} in the app’s backups folder.</p>
+    </div>
+  )
+}
+
+function EncryptionNotice() {
+  return (
+    <section aria-labelledby="encryption-heading" className="card">
+      <h2 id="encryption-heading">Your data is not encrypted</h2>
+      <p>
+        The database, every backup, and the safety copies the app makes before an upgrade or a restore are plain files:
+        anyone who can open them can read your clients’ information.
+      </p>
+      <ul>
+        <li>
+          Keep this computer’s disk encrypted: BitLocker on Windows, FileVault on macOS. Use a strong sign-in password.
+        </li>
+        <li>Keep a copy of your backups off this computer, on an encrypted drive that only you use.</li>
+        <li>Never email backups or put them in a shared or public folder.</li>
+        <li>
+          Nothing is ever deleted automatically. When you have newer backups, remove old ones yourself. A good habit:
+          keep the last 5, plus one from each month.
+        </li>
+      </ul>
     </section>
   )
 }

@@ -53,6 +53,10 @@ These copies contain client information too, and they are not cleaned up automat
 
 Phase 1 has no in-app deletion: clients are archived, never deleted (see `docs/client-data-model.md`, Q9). To remove all data from a computer, quit the app and delete the app data folder above, including its `pre-migration/` and `pre-restore/` folders, and any backup files made elsewhere. Whether the app needs a "permanently delete a client" feature (for example, when a client asks) is a question for the #12 pilot.
 
+## Live web app (#110, #117)
+
+The Live web app keeps its own data folder (`Tracing Guatemala Web`), never the desktop app’s, and is reachable only from this computer. The same rules apply: nothing leaves the computer, and the database, backups and safety copies are **not encrypted**. In Live, **Create backup** keeps a verified copy in the app’s `backups` folder and downloads another; **Settings & Backup** shows when the last verified backup was made and the Home screen reminds when there is none or it is over 7 days old. Nothing is deleted automatically. The data folder is owner-only (`0700`) on macOS/Linux and relies on the per-user AppData permissions on Windows. Launching, stopping, the recovery drill, retention and the real-use checklist are in [operations/live-readiness.md](operations/live-readiness.md).
+
 ## Not covered in Phase 1
 
 - Encryption of the database or backups.

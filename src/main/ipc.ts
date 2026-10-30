@@ -1,33 +1,30 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
-import { z } from 'zod'
-import {
-  CLIENT_SOURCES,
-  CLIENT_STATUSES,
-  CONTACT_CHANNELS,
-  NOTE_CHANNELS,
-  NOTE_DIRECTIONS,
-  NOTE_MAX,
-  type Client,
-  type ClientInput,
-  type ClientNote,
-  type ClientSource,
-  type ContactChannel,
-  type DirectoryQuery,
-  type DuplicateCandidate,
-  type NoteChannel,
-  type NoteDirection,
-  type NoteInput
-} from '../shared/client-model'
-import {
-  IpcChannel,
-  type AppInfo,
-  type BackupChoice,
-  type BackupCreateResult,
-  type BackupRestoreResult,
-  type ClientMutationResult,
-  type IpcChannelName,
-  type NoteMutationResult
+import type { z } from 'zod'
+import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
+import type { StudioSummary } from '../shared/studio-summary'
+import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../shared/case-tasks'
+import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../shared/case-time'
+import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
+import type {
+  CaseEvent,
+  CaseInput,
+  CaseMutationResult,
+  CaseQuery,
+  CaseState,
+  ResearchCase
+} from '../shared/case-model'
+import type { Client, ClientInput, ClientNote, DirectoryQuery, DuplicateCandidate, NoteInput } from '../shared/client-model'
+import type {
+  AppInfo,
+  BackupChoice,
+  BackupCreateResult,
+  BackupRestoreResult,
+  ClientMutationResult,
+  NoteMutationResult
 } from '../shared/ipc'
+import { contracts, type ChannelContract } from './contracts'
+
+export { contracts }
 
 /** Thrown to the renderer without echoing its input (which may contain personal data). */
 export class IpcRejectedError extends Error {
@@ -36,219 +33,6 @@ export class IpcRejectedError extends Error {
     this.name = 'IpcRejectedError'
   }
 }
-
-interface ChannelContract<Args extends z.ZodTuple, Result extends z.ZodType> {
-  channel: IpcChannelName
-  args: Args
-  result: Result
-}
-
-// Raw text bounds only stop oversized payloads. The field rules (lengths,
-// formats) run in the repository and come back as typed issues, not rejections.
-const RAW_TEXT_MAX = 1_000
-
-const sourceSchema = z.enum(CLIENT_SOURCES as [ClientSource, ...ClientSource[]])
-const channelSchema = z.enum(CONTACT_CHANNELS as [ContactChannel, ...ContactChannel[]])
-const rawText = z.string().max(RAW_TEXT_MAX)
-const idSchema = z.uuid()
-const timestamp = z.iso.datetime()
-
-/** Strict: system fields (id, status, timestamps) or any other extra key reject the call. */
-const clientInputSchema = z.strictObject({
-  displayName: rawText,
-  source: sourceSchema,
-  sourceDetail: rawText.nullable(),
-  fiverrUsername: rawText.nullable(),
-  email: rawText.nullable(),
-  otherContact: rawText.nullable(),
-  preferredContactChannel: channelSchema
-}) satisfies z.ZodType<ClientInput>
-
-const directoryQuerySchema = z.strictObject({
-  text: z.string().max(200),
-  status: z.enum(['active', 'archived', 'all']),
-  sources: z.array(sourceSchema).max(CLIENT_SOURCES.length),
-  sort: z.enum(['name', 'updated', 'created'])
-}) satisfies z.ZodType<DirectoryQuery>
-
-const clientSchema = z.strictObject({
-  id: idSchema,
-  displayName: z.string(),
-  source: sourceSchema,
-  sourceDetail: z.string().nullable(),
-  fiverrUsername: z.string().nullable(),
-  email: z.string().nullable(),
-  otherContact: z.string().nullable(),
-  preferredContactChannel: channelSchema,
-  status: z.enum(CLIENT_STATUSES as ['active', 'archived']),
-  createdAt: timestamp,
-  updatedAt: timestamp,
-  archivedAt: timestamp.nullable()
-}) satisfies z.ZodType<Client>
-
-const issueSchema = z.strictObject({
-  field: z
-    .enum(['displayName', 'source', 'sourceDetail', 'fiverrUsername', 'email', 'otherContact', 'preferredContactChannel'])
-    .nullable(),
-  severity: z.enum(['error', 'warning', 'info']),
-  code: z.enum([
-    'required',
-    'too-long',
-    'invalid-characters',
-    'invalid-format',
-    'contains-spaces',
-    'required-for-channel',
-    'missing-for-channel',
-    'no-contact-details'
-  ])
-})
-
-const mutationResultSchema = z.union([
-  z.strictObject({ ok: z.literal(true), client: clientSchema }),
-  z.strictObject({ ok: z.literal(false), reason: z.literal('invalid'), issues: z.array(issueSchema) }),
-  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
-]) satisfies z.ZodType<ClientMutationResult>
-
-const noteChannelSchema = z.enum(NOTE_CHANNELS as [NoteChannel, ...NoteChannel[]])
-const noteDirectionSchema = z.enum(NOTE_DIRECTIONS as [NoteDirection, ...NoteDirection[]])
-
-/** Strict: ids, timestamps, the client id and `system` entries cannot come from the renderer. */
-const noteInputSchema = z.strictObject({
-  kind: z.enum(['note', 'contact']),
-  occurredAt: z.string().max(64),
-  channel: noteChannelSchema.nullable(),
-  direction: noteDirectionSchema.nullable(),
-  // Room for surrounding whitespace; the trimmed length rule runs in the repository.
-  body: z.string().max(NOTE_MAX * 2)
-}) satisfies z.ZodType<NoteInput>
-
-const noteSchema = z.strictObject({
-  id: idSchema,
-  clientId: idSchema,
-  kind: z.enum(['note', 'contact', 'system']),
-  occurredAt: timestamp,
-  channel: noteChannelSchema.nullable(),
-  direction: noteDirectionSchema.nullable(),
-  body: z.string(),
-  createdAt: timestamp,
-  updatedAt: timestamp
-}) satisfies z.ZodType<ClientNote>
-
-const noteResultSchema = z.union([
-  z.strictObject({ ok: z.literal(true), note: noteSchema }),
-  z.strictObject({
-    ok: z.literal(false),
-    reason: z.literal('invalid'),
-    issues: z.array(
-      z.strictObject({
-        field: z.enum(['kind', 'occurredAt', 'channel', 'direction', 'body']),
-        code: z.enum(['required', 'too-long', 'invalid-format', 'in-future'])
-      })
-    )
-  }),
-  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
-]) satisfies z.ZodType<NoteMutationResult>
-
-const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
-const count = z.number().int().nonnegative()
-
-export const contracts = {
-  getAppInfo: {
-    channel: IpcChannel.getAppInfo,
-    args: z.tuple([]),
-    result: z.strictObject({
-      name: z.string().min(1),
-      version: z.string().min(1),
-      platform: z.string().min(1)
-    }) satisfies z.ZodType<AppInfo>
-  },
-  listClients: {
-    channel: IpcChannel.listClients,
-    args: z.tuple([directoryQuerySchema]),
-    result: z.array(clientSchema)
-  },
-  getClient: {
-    channel: IpcChannel.getClient,
-    args: z.tuple([idSchema]),
-    result: clientSchema.nullable()
-  },
-  createClient: {
-    channel: IpcChannel.createClient,
-    args: z.tuple([clientInputSchema]),
-    result: mutationResultSchema
-  },
-  updateClient: {
-    channel: IpcChannel.updateClient,
-    args: z.tuple([idSchema, clientInputSchema]),
-    result: mutationResultSchema
-  },
-  archiveClient: {
-    channel: IpcChannel.archiveClient,
-    args: z.tuple([idSchema]),
-    result: mutationResultSchema
-  },
-  restoreClient: {
-    channel: IpcChannel.restoreClient,
-    args: z.tuple([idSchema]),
-    result: mutationResultSchema
-  },
-  findDuplicateClients: {
-    channel: IpcChannel.findDuplicateClients,
-    args: z.tuple([clientInputSchema, idSchema.nullable()]),
-    result: z.array(
-      z.strictObject({
-        client: clientSchema,
-        signals: z.array(z.enum(['email', 'fiverrUsername', 'displayName'])).min(1)
-      })
-    ) satisfies z.ZodType<DuplicateCandidate[]>
-  },
-  createBackup: {
-    channel: IpcChannel.createBackup,
-    args: z.tuple([]),
-    result: z.union([
-      z.strictObject({ ok: z.literal(true), fileName: z.string().min(1), clients: count, notes: count }),
-      z.strictObject({ ok: z.literal(false), reason: z.enum(['cancelled', 'failed']) })
-    ]) satisfies z.ZodType<BackupCreateResult>
-  },
-  chooseBackupToRestore: {
-    channel: IpcChannel.chooseBackupToRestore,
-    args: z.tuple([]),
-    result: z.union([
-      z.strictObject({
-        ok: z.literal(true),
-        token: idSchema,
-        fileName: z.string().min(1),
-        savedAt: timestamp,
-        clients: count,
-        notes: count
-      }),
-      z.strictObject({ ok: z.literal(false), reason: z.union([z.enum(['cancelled', 'failed']), backupProblem]) })
-    ]) satisfies z.ZodType<BackupChoice>
-  },
-  restoreBackup: {
-    channel: IpcChannel.restoreBackup,
-    args: z.tuple([idSchema]),
-    result: z.union([
-      z.strictObject({ ok: z.literal(true), clients: count, notes: count }),
-      z.strictObject({ ok: z.literal(false), reason: z.union([z.enum(['expired', 'failed']), backupProblem]) })
-    ]) satisfies z.ZodType<BackupRestoreResult>
-  },
-  listNotes: {
-    channel: IpcChannel.listNotes,
-    args: z.tuple([idSchema]),
-    result: z.array(noteSchema)
-  },
-  createNote: {
-    channel: IpcChannel.createNote,
-    args: z.tuple([idSchema, noteInputSchema]),
-    result: noteResultSchema
-  },
-  updateNote: {
-    channel: IpcChannel.updateNote,
-    args: z.tuple([idSchema, idSchema, noteInputSchema]),
-    result: noteResultSchema
-  }
-} as const
 
 /**
  * Wrap a handler so every call checks that it came from the trusted renderer
@@ -293,6 +77,60 @@ export interface NoteService {
   list(clientId: string): ClientNote[]
   create(clientId: string, input: NoteInput): NoteMutationResult
   update(clientId: string, noteId: string, input: NoteInput): NoteMutationResult
+}
+
+/** Research case operations for the local web host (CaseRepository in production). No IPC channels: desktop is frozen. */
+export interface CaseService {
+  list(query: CaseQuery): ResearchCase[]
+  get(id: string): ResearchCase | null
+  listEvents(caseId: string): CaseEvent[]
+  create(clientId: string, input: CaseInput): CaseMutationResult
+  update(id: string, input: CaseInput): CaseMutationResult
+  setState(id: string, to: CaseState): CaseMutationResult
+  archive(id: string): CaseMutationResult
+  unarchive(id: string): CaseMutationResult
+}
+
+/** Case research brief operations for the local web host (CaseBriefRepository in production). */
+export interface BriefService {
+  get(caseId: string): CaseBrief | null
+  save(caseId: string, input: CaseBriefInput): CaseBriefMutationResult
+}
+
+/** Case research journal operations for the local web host (CaseJournalRepository in production). */
+export interface JournalService {
+  list(caseId: string): JournalEntry[]
+  create(caseId: string, input: JournalEntryInput): JournalMutationResult
+  update(caseId: string, entryId: string, input: JournalEntryInput): JournalMutationResult
+}
+
+/** Case task operations for the local web host (CaseTaskRepository in production). */
+export interface TaskService {
+  list(caseId: string): CaseTask[]
+  create(caseId: string, input: CaseTaskInput): CaseTaskMutationResult
+  update(caseId: string, taskId: string, input: CaseTaskInput): CaseTaskMutationResult
+  complete(caseId: string, taskId: string): CaseTaskMutationResult
+  reopen(caseId: string, taskId: string): CaseTaskMutationResult
+}
+
+/** Case research hours and the pending timer for the local web host (CaseTimeRepository in production). */
+export interface TimeService {
+  list(caseId: string): TimeEntry[]
+  create(caseId: string, input: TimeEntryInput): TimeEntryMutationResult
+  update(caseId: string, entryId: string, input: TimeEntryInput): TimeEntryMutationResult
+  delete(caseId: string, entryId: string): TimeEntryMutationResult
+  getActiveTimer(): TimerSnapshot | null
+  start(caseId: string): TimerResult
+  pause(version: number): TimerResult
+  resume(version: number): TimerResult
+  heartbeat(version: number): TimerResult
+  stopAndSave(version: number, options: StopOptions): TimerResult
+  discard(version: number): TimerResult
+}
+
+/** Research Studio dashboard summary for the local web host (StudioSummaryRepository in production). */
+export interface StudioService {
+  summary(): StudioSummary
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */

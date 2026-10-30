@@ -1,12 +1,17 @@
 import { NavLink, Outlet } from 'react-router'
 import { useAppRuntime } from '../runtime/AppRuntime'
+import { TimerProvider } from '../cases/TimerContext'
 import { DemoBanner } from './DemoBanner'
+import { ModeSwitcher } from './ModeSwitcher'
+import { TimerPill } from './TimerPill'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
   { to: '/clients', label: 'Clients', end: false },
   { to: '/settings', label: 'Settings & Backup', end: false }
 ]
+
+const casesItem = { to: '/cases', label: 'Cases', end: false }
 
 // A product-roadmap preview, not functioning navigation. Individual phases own
 // their routes and remove these placeholders only when the features ship.
@@ -21,8 +26,12 @@ const upcomingItems = [
 ] as const
 
 export function AppLayout() {
-  const demo = useAppRuntime().mode === 'demo'
+  const runtime = useAppRuntime()
+  const demo = runtime.mode === 'demo'
+  // Research cases exist only where the runtime provides them (not in the desktop app).
+  const items = runtime.cases ? [...navItems.slice(0, 2), casesItem, ...navItems.slice(2)] : navItems
   return (
+    <TimerProvider>
     <div className={demo ? 'app-shell has-demo-banner' : 'app-shell'}>
       <a className="skip-link" href="#main-content">
         Skip to content
@@ -33,9 +42,10 @@ export function AppLayout() {
           Tracing Guatemala
           <span className="brand-tagline">Research workspace</span>
         </p>
+        <ModeSwitcher />
         <nav aria-label="Main">
           <ul>
-            {navItems.map((item) => (
+            {items.map((item) => (
               <li key={item.to}>
                 <NavLink to={item.to} end={item.end}>
                   {item.label}
@@ -79,10 +89,12 @@ export function AppLayout() {
             </ul>
           </section>
         </nav>
+        <TimerPill />
       </aside>
       <main id="main-content" className="content" tabIndex={-1}>
         <Outlet />
       </main>
     </div>
+    </TimerProvider>
   )
 }

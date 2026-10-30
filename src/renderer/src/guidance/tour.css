@@ -1,0 +1,23 @@
+/* Tour popover tweaks (#102). Loaded only with the Driver.js provider. */
+
+.driver-popover.tg-tour-popover {
+  max-width: min(22rem, calc(100vw - 2rem));
+  font-family: inherit;
+}
+
+.driver-popover.tg-tour-popover .driver-popover-title {
+  font-size: 1.1rem;
+}
+
+.driver-popover.tg-tour-popover .driver-popover-description {
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-popover,
+  .driver-popover * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
