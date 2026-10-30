@@ -518,6 +518,7 @@ describe('the timer', () => {
     await cases.startTimer(demoCaseIds.paternal)
     openAt(`#/cases/${demoCaseIds.paternal}`, { ...runtime, cases: { ...cases, heartbeatTimer: heartbeat } } as AppRuntime)
     await waitFor(() => expect(pill().getByText('Running')).toBeTruthy())
+    await act(async () => undefined) // let the heartbeat interval's effect register before moving the clock
     expect(heartbeat).not.toHaveBeenCalled()
     await act(async () => void vi.advanceTimersByTime(30_000))
     expect(heartbeat).toHaveBeenCalledTimes(1)
