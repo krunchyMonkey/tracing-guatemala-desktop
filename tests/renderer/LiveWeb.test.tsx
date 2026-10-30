@@ -50,6 +50,15 @@ describe('Live API adapter', () => {
     expect(download).toHaveBeenCalledWith(`/api/v1/backup/download/${encodeURIComponent(fileName)}`)
   })
 
+  it('reads the backup status with a plain call and no arguments', async () => {
+    const status = { lastBackupAt: '2026-10-29T08:05:09.000Z', fileName: 'Tracing Guatemala backup 2026-10-29 08-05-09.tgbackup', backupCount: 2 }
+    const { api, fetchImpl } = setup([reply(200, { result: status })])
+    await expect(api.backupStatus()).resolves.toEqual(status)
+    const [url, init] = fetchImpl.mock.calls[0]!
+    expect(url).toBe('/api/v1/call/getBackupStatus')
+    expect(JSON.parse(init!.body as string)).toEqual({ args: [] })
+  })
+
   it('treats a dismissed file picker as cancelled without uploading', async () => {
     const { api, fetchImpl } = setup()
     await expect(api.backup.chooseBackupToRestore()).resolves.toEqual({ ok: false, reason: 'cancelled' })

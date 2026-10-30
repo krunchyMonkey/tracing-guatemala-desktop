@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { z } from 'zod'
-import { caseContracts, contracts, type CallContract } from '../main/contracts'
+import { caseContracts, contracts, liveContracts, type CallContract } from '../main/contracts'
 import { createDataServices } from '../main/data-services'
 import type { AppData } from '../main/database/app-data'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
@@ -46,6 +46,7 @@ const callable = {
   updateNote: contracts.updateNote,
   createBackup: contracts.createBackup,
   restoreBackup: contracts.restoreBackup,
+  getBackupStatus: liveContracts.getBackupStatus,
   listCases: caseContracts.listCases,
   getCase: caseContracts.getCase,
   listCaseEvents: caseContracts.listCaseEvents,
@@ -179,6 +180,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     updateNote: ([clientId, noteId, input]) => notes.update(clientId, noteId, input),
     createBackup: () => backup.create(),
     restoreBackup: ([token]) => backup.restore(token),
+    getBackupStatus: () => backup.status(),
     listCases: ([query]) => cases.list(query),
     getCase: ([id]) => cases.get(id),
     listCaseEvents: ([caseId]) => cases.listEvents(caseId),

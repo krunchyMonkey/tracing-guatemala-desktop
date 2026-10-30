@@ -1,5 +1,5 @@
 import type { BackupChoice } from '../../../shared/ipc'
-import type { AppDataApi, BackupApi, CaseApi } from '../runtime/AppRuntime'
+import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi } from '../runtime/AppRuntime'
 
 // The Live web app's data calls (#110): same-origin fetches to the loopback
 // local web host (src/server/live-host.ts). Every call carries the session's
@@ -58,7 +58,12 @@ export function downloadUrl(url: string): void {
   link.remove()
 }
 
-export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; backup: BackupApi; cases: CaseApi } {
+export function createLiveApi(options: LiveApiOptions): {
+  data: AppDataApi
+  backup: BackupApi
+  backupStatus: BackupStatusApi
+  cases: CaseApi
+} {
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const pickFile = options.pickFile ?? pickBackupFile
   const download = options.download ?? downloadUrl
@@ -114,6 +119,8 @@ export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; back
     restoreBackup: (token) => call('restoreBackup', token)
   }
 
+  const backupStatus: BackupStatusApi = () => call('getBackupStatus')
+
   const cases: CaseApi = {
     listCases: (query) => call('listCases', query),
     getCase: (id) => call('getCase', id),
@@ -135,5 +142,5 @@ export function createLiveApi(options: LiveApiOptions): { data: AppDataApi; back
     reopenCaseTask: (caseId, taskId) => call('reopenCaseTask', caseId, taskId)
   }
 
-  return { data, backup, cases }
+  return { data, backup, backupStatus, cases }
 }

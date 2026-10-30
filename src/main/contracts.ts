@@ -48,6 +48,7 @@ import {
   type BackupChoice,
   type BackupCreateResult,
   type BackupRestoreResult,
+  type BackupStatus,
   type ClientMutationResult,
   type IpcChannelName,
   type NoteMutationResult
@@ -458,4 +459,16 @@ export const caseContracts = {
   updateCaseTask: { args: z.tuple([idSchema, idSchema, taskInputSchema]), result: taskResultSchema },
   completeCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema },
   reopenCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema }
+} as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>
+
+/** Live-only calls (#117): no IPC channel, because the desktop app is frozen. */
+export const liveContracts = {
+  getBackupStatus: {
+    args: z.tuple([]),
+    result: z.strictObject({
+      lastBackupAt: timestamp.nullable(),
+      fileName: z.string().min(1).nullable(),
+      backupCount: count
+    }) satisfies z.ZodType<BackupStatus>
+  }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

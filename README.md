@@ -20,6 +20,7 @@ npm run dev          # Electron desktop app (paused for new features)
 npm run check        # lint, typecheck, unit tests, then builds + Electron, demo and Live web E2E tests
 npm run package:dir  # unpacked app for the current OS, in release/
 npm run smoke:packaged  # after package:dir: packaged app creates and reopens its database
+npm run smoke:live      # after web:build: Live launch, backup and restore drill with fictional data
 ```
 
 ## Live web app on this computer
@@ -27,9 +28,11 @@ npm run smoke:packaged  # after package:dir: packaged app creates and reopens it
 Your real data, saved in SQLite, reachable **only from this computer** (127.0.0.1). It keeps its own data folder and never opens the desktop app's database:
 
 ```sh
-npm run web:build
-npm run web:local    # prints a private sign-in link for http://127.0.0.1:4180; Ctrl+C stops it
+npm run live         # builds if needed, starts the app and opens your browser; Ctrl+C stops it
+npm run web:local    # same host without opening the browser; prints the private sign-in link
 ```
+
+On Windows double-click `Start Tracing Guatemala.cmd`; on macOS or Linux run `./start-tracing-guatemala.sh`. `npm run smoke:live` rehearses backup and restore against the built app. Launching, stopping, backups, recovery and the real-use release checklist are in [docs/operations/live-readiness.md](docs/operations/live-readiness.md).
 
 To bring desktop data across, make a backup in the desktop app and restore it in the web app's **Settings & Backup**. See [docs/architecture/web-first-runtime.md](docs/architecture/web-first-runtime.md) for data folders, the security model, the API and known limitations.
 

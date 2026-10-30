@@ -3,7 +3,7 @@ import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../../.
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../../../shared/case-journal'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../shared/case-tasks'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
-import type { TracingGuatemalaApi } from '../../../shared/ipc'
+import type { BackupStatus, TracingGuatemalaApi } from '../../../shared/ipc'
 
 // Where the shared React UI gets its data (#100, #110). The desktop app reads and
 // saves through the preload bridge (main process + SQLite). The Live web app
@@ -44,10 +44,17 @@ export interface CaseApi {
   reopenCaseTask(caseId: string, taskId: string): Promise<CaseTaskMutationResult>
 }
 
+/**
+ * When the last verified backup was made (#117). Only the Live host keeps this;
+ * the desktop and the demo leave it out (null), and the UI then shows no
+ * backup status or reminder.
+ */
+export type BackupStatusApi = () => Promise<BackupStatus>
+
 export type AppRuntime =
-  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null }
-  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi }
-  | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null }
+  | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null; backupStatus?: null }
+  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi; backupStatus?: BackupStatusApi | null }
+  | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null; backupStatus?: null }
 
 /**
  * The Electron runtime. Getters read the preload bridge at call time, so the

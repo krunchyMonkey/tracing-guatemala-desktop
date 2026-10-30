@@ -27,6 +27,8 @@
     "demo:dev": "vite --configLoader runner --config vite.demo.config.ts",
     "web:dev": "vite --configLoader runner --config vite.web.config.ts",
     "web:build": "vite build --configLoader runner --config vite.web.config.ts && vite build --configLoader runner --config vite.web-host.config.ts",
+    "live": "node scripts/live.mjs",
+    "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke.mjs",
     "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs"
   },
   "dependencies": {
