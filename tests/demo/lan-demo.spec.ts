@@ -393,3 +393,23 @@ test('shows seeded fictional next steps including an overdue one, lets one be co
   await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
   await expect(steps.getByText('No next steps yet.')).toBeVisible()
 })
+
+test('exports a fictional case summary as a file under the demo CSP, without contact details or requests', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const requests: string[] = []
+  page.on('request', (request) => requests.push(`${request.method()} ${request.url()}`))
+  await page.getByRole('button', { name: 'Export summary…' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toContainText('The file is not encrypted.')
+  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: 'Download' }).click()])
+
+  expect(download.suggestedFilename()).toMatch(/^case-summary-paternal-line-quetzaltenango-1880s-\d{4}-\d{2}-\d{2}\.md$/)
+  const text = readFileSync((await download.path())!, 'utf8')
+  expect(text.split('\n').slice(0, 3)).toEqual(['# Case summary: Paternal line — Quetzaltenango, 1880s', '', 'Fictional demo data — not a real client.'])
+  expect(text).toContain('- Client: Lucía Fernández (Quetzaltenango line)')
+  expect(text).toContain('Compare spelling variants of the surname')
+  expect(text).not.toContain('@example.')
+  expect(text).not.toContain('lucia_roots_demo')
+  expect(text).not.toContain('Maternal grandparents')
+  expect(requests.filter((request) => !request.includes(`http://${host}:${port}/`) || !request.startsWith('GET'))).toEqual([])
+})
