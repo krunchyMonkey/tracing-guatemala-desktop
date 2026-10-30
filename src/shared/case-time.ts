@@ -1,4 +1,4 @@
-// Case research hours rules (case-time/v1, docs/case-data-model.md §8): saved time
+// Case research hours rules (case-time/v1, docs/case-research-hours.md): saved time
 // entries (manual or from the timer) and the single recoverable pending timer.
 // Shared by the host's repository (authoritative) and the browser (instant
 // feedback, demo). No Node imports: the renderer bundles this file. Work dates are
@@ -326,7 +326,9 @@ export function planStop(record: TimerRecord, now: Date, options: StopOptions): 
   if (issues.length > 0) return { ok: false, reason: 'invalid', issues }
   const snapshot = evaluateTimer(record, now)
   if (snapshot.needsReview && options.durationMinutesOverride === null) return { ok: false, reason: 'needs-review', timer: snapshot }
-  if (snapshot.elapsedSeconds < TIMER_MIN_SECONDS) return { ok: false, reason: 'too-short' }
+  // A reviewed duration is the person's own figure, so the 30-second floor only guards counted time.
+  const reviewed = snapshot.needsReview && options.durationMinutesOverride !== null
+  if (!reviewed && snapshot.elapsedSeconds < TIMER_MIN_SECONDS) return { ok: false, reason: 'too-short' }
   const minutes = options.durationMinutesOverride ?? Math.max(TIME_MIN_MINUTES, roundToMinutes(snapshot.elapsedSeconds))
   return { ok: true, minutes, workedAt: snapshot.needsReview ? new Date(Date.parse(record.lastHeartbeatAt)) : now }
 }

@@ -239,6 +239,10 @@ describe('evaluateTimer and planStop', () => {
     const stale = { ...base, lastHeartbeatAt: at(60 * SEC).toISOString() }
     expect(plan(stale, 3 * 3600 * 1000)).toMatchObject({ ok: false, reason: 'needs-review' })
     expect(plan(stale, 3 * 3600 * 1000, { ...noStop, durationMinutesOverride: 15 })).toMatchObject({ ok: true, minutes: 15 })
+    // Interrupted 20 seconds in: the reviewed minutes still save; without them it stays a review, not "too short".
+    const earlyStale = { ...base, accumulatedSeconds: 0, lastHeartbeatAt: at(20 * SEC).toISOString() }
+    expect(plan(earlyStale, 3 * 3600 * 1000)).toMatchObject({ ok: false, reason: 'needs-review' })
+    expect(plan(earlyStale, 3 * 3600 * 1000, { ...noStop, durationMinutesOverride: 60 })).toMatchObject({ ok: true, minutes: 60 })
     expect(plan(stale, 3 * 3600 * 1000, { ...noStop, durationMinutesOverride: 0 })).toMatchObject({ ok: false, reason: 'invalid' })
     expect(plan(stale, 3 * 3600 * 1000, { ...noStop, durationMinutesOverride: 721 })).toMatchObject({ ok: false, reason: 'invalid' })
     expect(plan(base, SEC, { ...noStop, note: 'x'.repeat(TIME_NOTE_MAX + 1) })).toMatchObject({ ok: false, reason: 'invalid' })
