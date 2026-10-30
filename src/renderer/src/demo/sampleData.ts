@@ -1,4 +1,5 @@
 import type { CaseBrief } from '../../../shared/case-brief'
+import type { CaseTask } from '../../../shared/case-tasks'
 import type { JournalEntry } from '../../../shared/case-journal'
 import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
@@ -422,5 +423,36 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseData {
     entry(5, caseIds.maternal, at(8, 15), null, 'Wrote down the variants to try: Ejemplos, Exemplo, Egemplo.')
   ]
 
-  return { cases, events, briefs, journal }
+  // Fictional next steps, with deadlines relative to today: one overdue, one due
+  // today, one due soon, one later, some without a date, and one already done.
+  const task = (
+    number: number,
+    caseId: string,
+    title: string,
+    dueInDays: number | null,
+    description: string | null = null,
+    completedDaysAgo?: number
+  ): CaseTask => ({
+    id: `de400000-0000-4000-8000-4000000000${String(number).padStart(2, '0')}`,
+    caseId,
+    title,
+    description,
+    status: completedDaysAgo === undefined ? 'pending' : 'completed',
+    dueDate: dueInDays === null ? null : due(dueInDays),
+    completedAt: completedDaysAgo === undefined ? null : at(completedDaysAgo, 11),
+    createdAt: at(12, 9),
+    updatedAt: completedDaysAgo === undefined ? at(12, 9) : at(completedDaysAgo, 11)
+  })
+  const tasks: CaseTask[] = [
+    task(1, caseIds.paternal, 'Ask the client for the photograph and letters', -2, 'They mentioned a photograph of Teodoro; ask whether any letters survive too.'),
+    task(2, caseIds.paternal, 'Search the 1880s baptism index for the second parish', 0),
+    task(3, caseIds.paternal, 'Compare spelling variants of the surname', 2),
+    task(4, caseIds.paternal, 'Draft the interim findings summary', 14, 'Keep it to one page; list what is confirmed and what is still reported.'),
+    task(5, caseIds.paternal, 'Note down archive opening hours', null),
+    task(6, caseIds.paternal, 'Confirm the client’s grandfather’s birth year', -20, null, 15),
+    task(7, caseIds.maternal, 'Request 1931 civil marriage register extract', -4),
+    task(8, caseIds.maternal, 'Try the spelling variants in the online index', 5)
+  ]
+
+  return { cases, events, briefs, journal, tasks }
 }

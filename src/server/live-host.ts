@@ -58,7 +58,12 @@ const callable = {
   saveCaseBrief: caseContracts.saveCaseBrief,
   listJournalEntries: caseContracts.listJournalEntries,
   createJournalEntry: caseContracts.createJournalEntry,
-  updateJournalEntry: caseContracts.updateJournalEntry
+  updateJournalEntry: caseContracts.updateJournalEntry,
+  listCaseTasks: caseContracts.listCaseTasks,
+  createCaseTask: caseContracts.createCaseTask,
+  updateCaseTask: caseContracts.updateCaseTask,
+  completeCaseTask: caseContracts.completeCaseTask,
+  reopenCaseTask: caseContracts.reopenCaseTask
 } as const
 
 export type CallName = keyof typeof callable
@@ -157,7 +162,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs, journal } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal, tasks } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -186,7 +191,12 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input),
     listJournalEntries: ([caseId]) => journal.list(caseId),
     createJournalEntry: ([caseId, input]) => journal.create(caseId, input),
-    updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input)
+    updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input),
+    listCaseTasks: ([caseId]) => tasks.list(caseId),
+    createCaseTask: ([caseId, input]) => tasks.create(caseId, input),
+    updateCaseTask: ([caseId, taskId, input]) => tasks.update(caseId, taskId, input),
+    completeCaseTask: ([caseId, taskId]) => tasks.complete(caseId, taskId),
+    reopenCaseTask: ([caseId, taskId]) => tasks.reopen(caseId, taskId)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

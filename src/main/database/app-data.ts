@@ -4,6 +4,7 @@ import { basename, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { CaseBriefRepository } from './case-brief-repository'
 import { CaseJournalRepository } from './case-journal-repository'
+import { CaseTaskRepository } from './case-task-repository'
 import { CaseRepository } from './case-repository'
 import { ClientRepository } from './client-repository'
 import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase } from './connection'
@@ -125,6 +126,7 @@ export class AppData {
   cases: CaseRepository
   briefs: CaseBriefRepository
   journal: CaseJournalRepository
+  tasks: CaseTaskRepository
 
   constructor(
     private readonly userDataDir: string,
@@ -136,6 +138,7 @@ export class AppData {
     this.cases = new CaseRepository(this.opened.db)
     this.briefs = new CaseBriefRepository(this.opened.db)
     this.journal = new CaseJournalRepository(this.opened.db)
+    this.tasks = new CaseTaskRepository(this.opened.db)
   }
 
   get file(): string {
@@ -243,5 +246,6 @@ export class AppData {
     this.cases = new CaseRepository(this.opened.db)
     this.briefs = new CaseBriefRepository(this.opened.db)
     this.journal = new CaseJournalRepository(this.opened.db)
+    this.tasks = new CaseTaskRepository(this.opened.db)
   }
 }

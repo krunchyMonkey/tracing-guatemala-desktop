@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX, type CaseTask, type CaseTaskInput, type CaseTaskMutationResult } from '../shared/case-tasks'
 import {
   JOURNAL_ACTIVITY_MAX,
   JOURNAL_BODY_MAX,
@@ -299,6 +300,43 @@ const journalResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<JournalMutationResult>
 
+/** Strict: only the three writable fields. Raw bounds are twice the limits; dueDate is a short string. */
+const taskInputSchema = z.strictObject({
+  title: z.string().max(TASK_TITLE_MAX * 2),
+  description: z
+    .string()
+    .max(TASK_DESCRIPTION_MAX * 2)
+    .nullable(),
+  dueDate: z.string().max(64).nullable()
+}) satisfies z.ZodType<CaseTaskInput>
+
+const taskSchema = z.strictObject({
+  id: idSchema,
+  caseId: idSchema,
+  title: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(['pending', 'completed']),
+  dueDate: z.string().nullable(),
+  completedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp
+}) satisfies z.ZodType<CaseTask>
+
+const taskResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), task: taskSchema }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.literal('invalid'),
+    issues: z.array(
+      z.strictObject({
+        field: z.enum(['title', 'description', 'dueDate']),
+        code: z.enum(['required', 'too-long', 'invalid-characters', 'invalid-format', 'invalid-date'])
+      })
+    )
+  }),
+  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
+]) satisfies z.ZodType<CaseTaskMutationResult>
+
 const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
 const count = z.number().int().nonnegative()
 
@@ -414,5 +452,10 @@ export const caseContracts = {
   saveCaseBrief: { args: z.tuple([idSchema, briefInputSchema]), result: briefResultSchema },
   listJournalEntries: { args: z.tuple([idSchema]), result: z.array(journalEntrySchema) },
   createJournalEntry: { args: z.tuple([idSchema, journalInputSchema]), result: journalResultSchema },
-  updateJournalEntry: { args: z.tuple([idSchema, idSchema, journalInputSchema]), result: journalResultSchema }
+  updateJournalEntry: { args: z.tuple([idSchema, idSchema, journalInputSchema]), result: journalResultSchema },
+  listCaseTasks: { args: z.tuple([idSchema]), result: z.array(taskSchema) },
+  createCaseTask: { args: z.tuple([idSchema, taskInputSchema]), result: taskResultSchema },
+  updateCaseTask: { args: z.tuple([idSchema, idSchema, taskInputSchema]), result: taskResultSchema },
+  completeCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema },
+  reopenCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

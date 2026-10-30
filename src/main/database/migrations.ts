@@ -175,6 +175,36 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'journal entry id and case are immutable');
       END;
     `
+  },
+  {
+    version: 6,
+    name: 'case_tasks',
+    sql: `
+      CREATE TABLE case_tasks (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 160),
+        description TEXT CHECK (description IS NULL OR length(description) BETWEEN 1 AND 2000),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+        due_date TEXT CHECK (due_date IS NULL OR due_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        completed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK ((status = 'completed') = (completed_at IS NOT NULL))
+      ) STRICT;
+
+      CREATE INDEX case_tasks_case_idx ON case_tasks (case_id, status);
+
+      CREATE TRIGGER case_tasks_no_delete BEFORE DELETE ON case_tasks
+      BEGIN
+        SELECT RAISE(ABORT, 'case tasks are never deleted');
+      END;
+
+      CREATE TRIGGER case_tasks_immutable_keys BEFORE UPDATE OF id, case_id ON case_tasks
+      BEGIN
+        SELECT RAISE(ABORT, 'task id and case are immutable');
+      END;
+    `
   }
 ]
 

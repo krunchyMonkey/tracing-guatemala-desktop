@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../../../shared/case-brief'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../../../shared/case-journal'
+import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../shared/case-tasks'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
 import type { TracingGuatemalaApi } from '../../../shared/ipc'
 
@@ -35,6 +36,12 @@ export interface CaseApi {
   listJournalEntries(caseId: string): Promise<JournalEntry[]>
   createJournalEntry(caseId: string, input: JournalEntryInput): Promise<JournalMutationResult>
   updateJournalEntry(caseId: string, entryId: string, input: JournalEntryInput): Promise<JournalMutationResult>
+  /** The case's tasks, pending first by due date; empty for an unknown case. */
+  listCaseTasks(caseId: string): Promise<CaseTask[]>
+  createCaseTask(caseId: string, input: CaseTaskInput): Promise<CaseTaskMutationResult>
+  updateCaseTask(caseId: string, taskId: string, input: CaseTaskInput): Promise<CaseTaskMutationResult>
+  completeCaseTask(caseId: string, taskId: string): Promise<CaseTaskMutationResult>
+  reopenCaseTask(caseId: string, taskId: string): Promise<CaseTaskMutationResult>
 }
 
 export type AppRuntime =

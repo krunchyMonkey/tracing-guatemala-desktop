@@ -4,6 +4,7 @@ import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDate, formatDateTime } from '../clients/components'
 import { BriefCard } from '../cases/BriefCard'
 import { JournalCard } from '../cases/JournalCard'
+import { TasksCard } from '../cases/TasksCard'
 import { ArchivedBadge, CaseNotFound, CasesLoadError, DueDate, StateBadge } from '../cases/components'
 import {
   CASE_TRANSITIONS,
@@ -20,7 +21,7 @@ import {
 import { useCaseApi } from '../cases/useCaseApi'
 import { useLoad } from '../cases/useLoad'
 
-// Case overview (#16): the case's details, its state controls, research brief
+// Case overview (#16): the case's details, its state controls, next steps (#19), research brief
 // (#17), research journal (#18), history, and archive. Archived cases and cases of archived clients are read-only.
 
 type Pending = { kind: 'state'; to: CaseState } | { kind: 'archive' } | { kind: 'unarchive' }
@@ -257,6 +258,16 @@ function CaseOverview({ caseId }: { caseId: string }) {
           )}
         </section>
       </div>
+
+      <TasksCard
+        caseId={researchCase.id}
+        readOnly={readOnly}
+        readOnlyReason={
+          caseArchived
+            ? 'This case is archived, so its next steps can’t be changed. Existing steps stay visible.'
+            : 'This client is archived, so the next steps can’t be changed. Existing steps stay visible.'
+        }
+      />
 
       <BriefCard
         researchCase={researchCase}
