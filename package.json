@@ -30,6 +30,7 @@
     "web:build": "vite build --configLoader runner --config vite.web.config.ts && vite build --configLoader runner --config vite.web-host.config.ts",
     "live": "node scripts/live.mjs",
     "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke.mjs",
+    "pilot:rehearsal": "node --disable-warning=ExperimentalWarning scripts/pilot-rehearsal.mjs",
     "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs"
   },
   "dependencies": {
