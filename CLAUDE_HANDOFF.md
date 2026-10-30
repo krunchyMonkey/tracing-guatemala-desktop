@@ -1,4 +1,10 @@
-# Claude handoff — Web-first (updated 2026-10-30 after Phase 2.5)
+# Claude handoff — Web-first (updated 2026-10-30 for Phase 3 notebook priority)
+
+> **LATEST OWNER ROADMAP / PR POLICY OVERRIDE — 2026-10-30:** Phase 3 is now **Research Notebook & Freeform Canvas**, prioritized before previous Phase 3 Evidence Management (now future Phase 4). See [Phase 3 spec](docs/phase-3-research-notebook-spec.md) and [tracking issue #145](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/145); child issues #146–#157 by Release A–D, with #158 AI formalization design **DEFERRED**. Older instructions below are historical where inconsistent.
+>
+> **Standing PR instruction for routine project implementation:** When an issue's acceptance criteria are complete, local tests/review/security checks genuinely pass and dependencies are merged/verified, **merge its PR promptly**, confirm GitHub reports merged, and continue to the next unblocked issue. Prefer squash for focused PRs. Never merge a failing/blocked PR or bypass real researcher signoff (#21/#157), unresolved review, privacy decision, HTTPS LAN exposure (#139), or other sensitive owner-required approval. GitHub repo `allow_auto_merge=false`; this is a safe merge-on-completion process, **not** blind auto-merge. Preserve unrelated PR #111 pending its own review.
+>
+> **Replaceable notebook libraries:** Domain, SQLite, typed API and recap service use application-owned versioned notebook/page/block/scene IDs/contracts; rich-text and canvas implementation libraries stay behind injected editor/canvas adapters. Canvas references canonical blocks, not duplicate copies. No LLM dependency or external calls in Phase 3; deterministic recaps are first class. No real client data over HTTP LAN.
 
 **Repository:** https://github.com/krunchyMonkey/tracing-guatemala-desktop  
 **Base:** `main` · **Current owner direction: WEB CLIENT FIRST** · **No autonomous merge** unless the owner authorizes a named set of PRs (Phase 2.5 #135–#138 was authorized on 2026-10-30; that authorization does not cover #111, #139 or later work)
