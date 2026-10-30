@@ -5,6 +5,23 @@ import {
   type JournalMutationResult
 } from '../../../shared/case-journal'
 import { checkCaseTask, compareTasks, type CaseTask, type CaseTaskMutationResult } from '../../../shared/case-tasks'
+import { localDateString } from '../../../shared/case-model'
+import {
+  checkTimeEntry,
+  compareEntries,
+  evaluateTimer,
+  heartbeatRecord,
+  newTimerRecord,
+  normalizeNote,
+  pausedRecord,
+  planStop,
+  resumedRecord,
+  type TimeEntry,
+  type TimeEntryInput,
+  type TimeEntryMutationResult,
+  type TimerRecord,
+  type TimerResult
+} from '../../../shared/case-time'
 import { checkCaseBrief, emptyBrief, type CaseBrief, type CaseBriefMutationResult } from '../../../shared/case-brief'
 import {
   canTransition,
@@ -30,6 +47,9 @@ import type { DemoClock } from './demoApi'
 // case/client archived, entry belongs to the case, then validation.
 // Case tasks (#19) use that order too, plus: complete/reopen of a task already in
 // that status is refused (wrong-status) with no change.
+// Research hours (#109) follow it as well, and the timer is the same state machine as
+// the host's (shared transitions, version conflicts, review of an interrupted
+// timer); it lives in this page's memory, so a refresh forgets it.
 // Cases read client status through the demo's own client data, so archiving a
 // client in the demo makes its cases read-only like everywhere else.
 
@@ -39,6 +59,7 @@ export interface DemoCaseData {
   briefs: CaseBrief[]
   journal: JournalEntry[]
   tasks: CaseTask[]
+  timeEntries: TimeEntry[]
 }
 
 export function createDemoCases(
@@ -51,6 +72,8 @@ export function createDemoCases(
   let briefs = structuredClone(initial.briefs)
   let journal = structuredClone(initial.journal)
   let tasks = structuredClone(initial.tasks)
+  let timeEntries = structuredClone(initial.timeEntries)
+  let timer: TimerRecord | null = null
 
   const reply = async <T>(work: () => T): Promise<T> => structuredClone(work())
 
@@ -221,7 +244,128 @@ export function createDemoCases(
     },
 
     completeCaseTask: (caseId, taskId) => setTaskStatus(caseId, taskId, 'completed'),
-    reopenCaseTask: (caseId, taskId) => setTaskStatus(caseId, taskId, 'pending')
+    reopenCaseTask: (caseId, taskId) => setTaskStatus(caseId, taskId, 'pending'),
+
+    listTimeEntries: (caseId) => reply(() => timeEntries.filter((e) => e.caseId === caseId).sort(compareEntries)),
+
+    async createTimeEntry(caseId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as TimeEntryMutationResult
+      const { input, issues } = checkTimeEntry(raw)
+      if (!input) return { ok: false, reason: 'invalid', issues }
+      const at = clock.now().toISOString()
+      const entry = addEntry(caseId, input, 'manual', at)
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, entry })
+    },
+
+    async updateTimeEntry(caseId, entryId, raw) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as TimeEntryMutationResult
+      const current = timeEntries.find((e) => e.id === entryId && e.caseId === caseId)
+      if (!current) return { ok: false, reason: 'not-found' }
+      const { input, issues } = checkTimeEntry(raw)
+      if (!input) return { ok: false, reason: 'invalid', issues }
+      const at = clock.now().toISOString()
+      const entry: TimeEntry = { ...current, ...input, updatedAt: at }
+      timeEntries = timeEntries.map((e) => (e.id === entryId ? entry : e))
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, entry })
+    },
+
+    async deleteTimeEntry(caseId, entryId) {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as TimeEntryMutationResult
+      const current = timeEntries.find((e) => e.id === entryId && e.caseId === caseId)
+      if (!current) return { ok: false, reason: 'not-found' }
+      timeEntries = timeEntries.filter((e) => e.id !== entryId)
+      store({ ...existing, updatedAt: clock.now().toISOString() })
+      return structuredClone({ ok: true as const, entry: current })
+    },
+
+    getActiveTimer: () => reply(() => (timer ? evaluateTimer(timer, clock.now()) : null)),
+
+    async startTimer(caseId): Promise<TimerResult> {
+      const existing = await writable(caseId)
+      if (isRefusal(existing)) return existing as TimerResult
+      const now = clock.now()
+      if (timer) {
+        const snapshot = evaluateTimer(timer, now)
+        return structuredClone(timer.caseId === caseId ? { ok: true as const, timer: snapshot, entry: null } : { ok: false as const, reason: 'other-case-timer' as const, timer: snapshot })
+      }
+      timer = newTimerRecord(caseId, now)
+      return structuredClone({ ok: true as const, timer: evaluateTimer(timer, now), entry: null })
+    },
+
+    async pauseTimer(version): Promise<TimerResult> {
+      const found = expectTimer(version)
+      if ('ok' in found) return found
+      if (found.state === 'paused') return { ok: false, reason: 'wrong-status' }
+      const now = clock.now()
+      const snapshot = evaluateTimer(found, now)
+      if (snapshot.needsReview) return { ok: false, reason: 'needs-review', timer: snapshot }
+      timer = pausedRecord(found, now)
+      return structuredClone({ ok: true as const, timer: evaluateTimer(timer, now), entry: null })
+    },
+
+    async resumeTimer(version): Promise<TimerResult> {
+      const found = expectTimer(version)
+      if ('ok' in found) return found
+      if (found.state === 'running') return { ok: false, reason: 'wrong-status' }
+      const blocked = await writable(found.caseId)
+      if (isRefusal(blocked)) return blocked as TimerResult
+      const now = clock.now()
+      timer = resumedRecord(found, now)
+      return structuredClone({ ok: true as const, timer: evaluateTimer(timer, now), entry: null })
+    },
+
+    async heartbeatTimer(version): Promise<TimerResult> {
+      const found = expectTimer(version)
+      if ('ok' in found) return found
+      const now = clock.now()
+      const snapshot = evaluateTimer(found, now)
+      if (found.state === 'running' && !snapshot.needsReview) timer = heartbeatRecord(found, now)
+      return structuredClone({ ok: true as const, timer: timer ? evaluateTimer(timer, now) : null, entry: null })
+    },
+
+    async stopAndSaveTimer(version, options): Promise<TimerResult> {
+      const found = expectTimer(version)
+      if ('ok' in found) return found
+      const existing = await writable(found.caseId)
+      if (isRefusal(existing)) return existing as TimerResult
+      const now = clock.now()
+      const plan = planStop(found, now, options)
+      if (!plan.ok) return structuredClone(plan)
+      const at = now.toISOString()
+      const entry = addEntry(
+        found.caseId,
+        { workDate: localDateString(plan.workedAt), durationMinutes: plan.minutes, activityType: options.activityType, note: normalizeNote(options.note) },
+        'timer',
+        at
+      )
+      timer = null
+      store({ ...existing, updatedAt: at })
+      return structuredClone({ ok: true as const, timer: null, entry })
+    },
+
+    async discardTimer(version): Promise<TimerResult> {
+      const found = expectTimer(version)
+      if ('ok' in found) return found
+      timer = null
+      return { ok: true, timer: null, entry: null }
+    }
+  }
+
+  function addEntry(caseId: string, input: TimeEntryInput, source: TimeEntry['source'], at: string): TimeEntry {
+    const entry: TimeEntry = { ...input, id: clock.newId(), caseId, source, createdAt: at, updatedAt: at }
+    timeEntries = [...timeEntries, entry]
+    return entry
+  }
+
+  function expectTimer(version: number): TimerRecord | Extract<TimerResult, { ok: false }> {
+    if (!timer) return { ok: false, reason: 'not-found' }
+    if (timer.version !== version) return structuredClone({ ok: false as const, reason: 'conflict' as const, timer: evaluateTimer(timer, clock.now()) })
+    return timer
   }
 
   async function setTaskStatus(caseId: string, taskId: string, status: CaseTask['status']): Promise<CaseTaskMutationResult> {

@@ -344,7 +344,8 @@ describe('case overview', () => {
     await within(history).findByText('Waiting on someone')
     const sentences = within(history).getAllByRole('listitem').map((li) => li.querySelector('.kind-label')!.textContent)
     expect(sentences).toEqual(['Waiting on someone', 'Research started', 'Case created']) // newest first
-    expect(screen.getByRole('region', { name: 'Research hours — coming soon' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Research hours' })).toBeTruthy()
+    expect(screen.queryByText(/coming soon/)).toBeNull()
   })
 
   it('offers only the transitions from the current state, with human labels', async () => {

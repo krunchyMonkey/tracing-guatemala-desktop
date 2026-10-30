@@ -139,7 +139,18 @@ export function createLiveApi(options: LiveApiOptions): {
     createCaseTask: (caseId, input) => call('createCaseTask', caseId, input),
     updateCaseTask: (caseId, taskId, input) => call('updateCaseTask', caseId, taskId, input),
     completeCaseTask: (caseId, taskId) => call('completeCaseTask', caseId, taskId),
-    reopenCaseTask: (caseId, taskId) => call('reopenCaseTask', caseId, taskId)
+    reopenCaseTask: (caseId, taskId) => call('reopenCaseTask', caseId, taskId),
+    listTimeEntries: (caseId) => call('listTimeEntries', caseId),
+    createTimeEntry: (caseId, input) => call('createTimeEntry', caseId, input),
+    updateTimeEntry: (caseId, entryId, input) => call('updateTimeEntry', caseId, entryId, input),
+    deleteTimeEntry: (caseId, entryId) => call('deleteTimeEntry', caseId, entryId),
+    getActiveTimer: () => call('getActiveTimer'),
+    startTimer: (caseId) => call('startTimer', caseId),
+    pauseTimer: (version) => call('pauseTimer', version),
+    resumeTimer: (version) => call('resumeTimer', version),
+    heartbeatTimer: (version) => call('heartbeatTimer', version),
+    stopAndSaveTimer: (version, options) => call('stopAndSaveTimer', version, options),
+    discardTimer: (version) => call('discardTimer', version)
   }
 
   return { data, backup, backupStatus, cases }

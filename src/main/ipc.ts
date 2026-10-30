@@ -2,6 +2,7 @@ import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../shared/case-tasks'
+import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../shared/case-time'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
 import type {
   CaseEvent,
@@ -109,6 +110,21 @@ export interface TaskService {
   update(caseId: string, taskId: string, input: CaseTaskInput): CaseTaskMutationResult
   complete(caseId: string, taskId: string): CaseTaskMutationResult
   reopen(caseId: string, taskId: string): CaseTaskMutationResult
+}
+
+/** Case research hours and the pending timer for the local web host (CaseTimeRepository in production). */
+export interface TimeService {
+  list(caseId: string): TimeEntry[]
+  create(caseId: string, input: TimeEntryInput): TimeEntryMutationResult
+  update(caseId: string, entryId: string, input: TimeEntryInput): TimeEntryMutationResult
+  delete(caseId: string, entryId: string): TimeEntryMutationResult
+  getActiveTimer(): TimerSnapshot | null
+  start(caseId: string): TimerResult
+  pause(version: number): TimerResult
+  resume(version: number): TimerResult
+  heartbeat(version: number): TimerResult
+  stopAndSave(version: number, options: StopOptions): TimerResult
+  discard(version: number): TimerResult
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */

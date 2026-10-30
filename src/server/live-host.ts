@@ -64,7 +64,18 @@ const callable = {
   createCaseTask: caseContracts.createCaseTask,
   updateCaseTask: caseContracts.updateCaseTask,
   completeCaseTask: caseContracts.completeCaseTask,
-  reopenCaseTask: caseContracts.reopenCaseTask
+  reopenCaseTask: caseContracts.reopenCaseTask,
+  listTimeEntries: caseContracts.listTimeEntries,
+  createTimeEntry: caseContracts.createTimeEntry,
+  updateTimeEntry: caseContracts.updateTimeEntry,
+  deleteTimeEntry: caseContracts.deleteTimeEntry,
+  getActiveTimer: caseContracts.getActiveTimer,
+  startTimer: caseContracts.startTimer,
+  pauseTimer: caseContracts.pauseTimer,
+  resumeTimer: caseContracts.resumeTimer,
+  heartbeatTimer: caseContracts.heartbeatTimer,
+  stopAndSaveTimer: caseContracts.stopAndSaveTimer,
+  discardTimer: caseContracts.discardTimer
 } as const
 
 export type CallName = keyof typeof callable
@@ -163,7 +174,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs, journal, tasks } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal, tasks, time } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -198,7 +209,18 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     createCaseTask: ([caseId, input]) => tasks.create(caseId, input),
     updateCaseTask: ([caseId, taskId, input]) => tasks.update(caseId, taskId, input),
     completeCaseTask: ([caseId, taskId]) => tasks.complete(caseId, taskId),
-    reopenCaseTask: ([caseId, taskId]) => tasks.reopen(caseId, taskId)
+    reopenCaseTask: ([caseId, taskId]) => tasks.reopen(caseId, taskId),
+    listTimeEntries: ([caseId]) => time.list(caseId),
+    createTimeEntry: ([caseId, input]) => time.create(caseId, input),
+    updateTimeEntry: ([caseId, entryId, input]) => time.update(caseId, entryId, input),
+    deleteTimeEntry: ([caseId, entryId]) => time.delete(caseId, entryId),
+    getActiveTimer: () => time.getActiveTimer(),
+    startTimer: ([caseId]) => time.start(caseId),
+    pauseTimer: ([version]) => time.pause(version),
+    resumeTimer: ([version]) => time.resume(version),
+    heartbeatTimer: ([version]) => time.heartbeat(version),
+    stopAndSaveTimer: ([version, options]) => time.stopAndSave(version, options),
+    discardTimer: ([version]) => time.discard(version)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

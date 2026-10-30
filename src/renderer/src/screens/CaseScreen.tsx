@@ -5,6 +5,7 @@ import { Alert, ConfirmDialog, formatDate, formatDateTime } from '../clients/com
 import { BriefCard } from '../cases/BriefCard'
 import { ExportSummaryDialog } from '../cases/ExportSummaryDialog'
 import { JournalCard } from '../cases/JournalCard'
+import { HoursCard } from '../cases/HoursCard'
 import { TasksCard } from '../cases/TasksCard'
 import { ArchivedBadge, CaseNotFound, CasesLoadError, DueDate, StateBadge } from '../cases/components'
 import {
@@ -274,6 +275,17 @@ function CaseOverview({ caseId }: { caseId: string }) {
         }
       />
 
+      <HoursCard
+        caseId={researchCase.id}
+        caseTitle={researchCase.title}
+        readOnly={readOnly}
+        readOnlyReason={
+          caseArchived
+            ? 'This case is archived, so its hours can’t be changed. Existing entries stay visible.'
+            : 'This client is archived, so the hours can’t be changed. Existing entries stay visible.'
+        }
+      />
+
       <BriefCard
         researchCase={researchCase}
         readOnly={readOnly}
@@ -295,14 +307,6 @@ function CaseOverview({ caseId }: { caseId: string }) {
       />
 
       <History caseId={researchCase.id} version={version} />
-
-      <section className="card placeholder-card" aria-labelledby="hours-heading">
-        <h2 id="hours-heading">Research hours — coming soon</h2>
-        <p className="muted">
-          A place to note the time you spend on this case is planned for a later update. Nothing here is needed to
-          keep working.
-        </p>
-      </section>
 
       {exporting && (
         <ExportSummaryDialog
