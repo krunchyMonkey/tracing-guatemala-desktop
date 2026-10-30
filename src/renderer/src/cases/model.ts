@@ -3,7 +3,7 @@
 // the host re-runs every rule.
 
 import type { BriefField, BriefIssue } from '../../../shared/case-brief'
-import type { CaseEvent, CaseIssue, CaseState } from '../../../shared/case-model'
+import type { CaseIssue, CaseState } from '../../../shared/case-model'
 
 export {
   CASE_GOAL_MAX,
@@ -18,7 +18,9 @@ export {
   isOverdue,
   localDateString,
   needsConfirmation,
-  queryCases
+  eventSentence,
+  queryCases,
+  stateLabels
 } from '../../../shared/case-model'
 export type {
   CaseEvent,
@@ -30,14 +32,6 @@ export type {
   CaseState,
   ResearchCase
 } from '../../../shared/case-model'
-
-export const stateLabels: Record<CaseState, string> = {
-  intake: 'Intake',
-  active: 'Active',
-  waiting: 'Waiting',
-  delivered: 'Delivered',
-  closed: 'Closed'
-}
 
 /** One line explaining each state, shown beside the controls. */
 export const stateHelp: Record<CaseState, string> = {
@@ -56,20 +50,6 @@ export function transitionLabel(from: CaseState, to: CaseState): string {
   if (from === 'waiting') return 'Resume research'
   if (from === 'intake') return 'Start research'
   return 'Reopen'
-}
-
-export function eventSentence(event: CaseEvent): string {
-  if (event.kind === 'created') return 'Case created'
-  if (event.kind === 'archived') return 'Archived'
-  if (event.kind === 'unarchived') return 'Restored from the archive'
-  const { fromState: from, toState: to } = event
-  if (!from || !to) return 'State changed'
-  if (to === 'waiting') return 'Waiting on someone'
-  if (to === 'delivered') return 'Marked delivered'
-  if (to === 'closed') return 'Case closed'
-  if (from === 'intake') return 'Research started'
-  if (from === 'waiting') return 'Research resumed'
-  return `Reopened (was ${stateLabels[from].toLowerCase()})`
 }
 
 const dueFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })

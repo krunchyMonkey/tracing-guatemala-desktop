@@ -169,6 +169,30 @@ export const CONFIRMED_TRANSITIONS: ReadonlySet<string> = new Set([
 
 export const needsConfirmation = (from: CaseState, to: CaseState): boolean => CONFIRMED_TRANSITIONS.has(`${from}>${to}`)
 
+// ---------- plain-language labels (shared by the screens and the summary export) ----------
+
+export const stateLabels: Record<CaseState, string> = {
+  intake: 'Intake',
+  active: 'Active',
+  waiting: 'Waiting',
+  delivered: 'Delivered',
+  closed: 'Closed'
+}
+
+export function eventSentence(event: CaseEvent): string {
+  if (event.kind === 'created') return 'Case created'
+  if (event.kind === 'archived') return 'Archived'
+  if (event.kind === 'unarchived') return 'Restored from the archive'
+  const { fromState: from, toState: to } = event
+  if (!from || !to) return 'State changed'
+  if (to === 'waiting') return 'Waiting on someone'
+  if (to === 'delivered') return 'Marked delivered'
+  if (to === 'closed') return 'Case closed'
+  if (from === 'intake') return 'Research started'
+  if (from === 'waiting') return 'Research resumed'
+  return `Reopened (was ${stateLabels[from].toLowerCase()})`
+}
+
 // ---------- dates ----------
 
 /** Local calendar date as YYYY-MM-DD, never through UTC. */

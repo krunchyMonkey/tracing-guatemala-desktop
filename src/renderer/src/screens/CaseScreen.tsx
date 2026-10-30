@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDate, formatDateTime } from '../clients/components'
 import { BriefCard } from '../cases/BriefCard'
+import { ExportSummaryDialog } from '../cases/ExportSummaryDialog'
 import { JournalCard } from '../cases/JournalCard'
 import { TasksCard } from '../cases/TasksCard'
 import { ArchivedBadge, CaseNotFound, CasesLoadError, DueDate, StateBadge } from '../cases/components'
@@ -54,6 +55,7 @@ function CaseOverview({ caseId }: { caseId: string }) {
   const [failure, setFailure] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const { refreshClient } = store
 
@@ -184,13 +186,16 @@ function CaseOverview({ caseId }: { caseId: string }) {
             </span>
           </p>
         </div>
-        {!readOnly && (
-          <div className="profile-actions">
+        <div className="profile-actions">
+          {!readOnly && (
             <Link className="button button-primary" to={`/cases/${researchCase.id}/edit`}>
               Edit details
             </Link>
-          </div>
-        )}
+          )}
+          <button type="button" className="button button-secondary" onClick={() => setExporting(true)}>
+            Export summary…
+          </button>
+        </div>
       </header>
 
       <div className="case-grid">
@@ -298,6 +303,19 @@ function CaseOverview({ caseId }: { caseId: string }) {
           keep working.
         </p>
       </section>
+
+      {exporting && (
+        <ExportSummaryDialog
+          caseId={researchCase.id}
+          caseTitle={researchCase.title}
+          onCancel={() => setExporting(false)}
+          onExported={(text) => {
+            setExporting(false)
+            setFailure(null)
+            setMessage(text)
+          }}
+        />
+      )}
 
       {pending && (
         <ConfirmDialog
