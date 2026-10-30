@@ -81,6 +81,49 @@ These are **focused, separate** tickets. The local datastore remains `node:sqlit
 
 **Throughput:** #110 is the first Live Mode prerequisite, while #102/#112/#115 can proceed in parallel as Phase 2 demo polish. #13/#14 are short engineering documents using **reversible defaults** and should not require a new meeting to start coding. #21 is the real researcher acceptance point. #12 (Phase 1 installed desktop researcher pilot) remains OPEN independently until genuine signoff.
 
+## Claude Code model/effort matrix and sequential controller
+
+**These are recommendations, not GitHub Actions configuration.** A GitHub issue cannot by itself change the Claude Code model. The issue-running controller or operator must read the issue profile and explicitly select its model using `--model` and `--effort`. Use aliases to follow Claude Code model upgrades. The `opusplan` alias uses **Opus in Plan Mode** and **Sonnet outside Plan Mode**; ensure the planning step actually runs in Plan Mode, or launch a distinct Opus planning session.
+
+| Order (dependent work) | Ticket | Default model | Effort | Escalation / review |
+| --- | --- | --- | --- | --- |
+| 1 | #110 secure local web runtime | `opusplan` | high | Opus threat model; Sonnet implementation; Opus security review |
+| 2 | #13 lifecycle and intake spec | `sonnet` | medium | Researcher decisions provisional to #21 |
+| 3 | #14 portable case schema | `opusplan` | medium | Schema/migration design planning, Sonnet docs |
+| 4 | #15 case storage and API | `sonnet` | high | Opus for migration/data-loss edge cases only |
+| 5 | #16 case UI and demo adapter | `sonnet` | medium | Sonnet UX and isolation tests |
+| 6 | #17 objectives/facts/questions | `sonnet` | medium | Separate hypotheses from established facts |
+| 7 | #18 research journal | `sonnet` | medium | Validate ordering and case isolation |
+| 8 | #19 tasks and deadlines | `sonnet` | medium | Timezone and idempotence tests |
+| 9 | #20 scoped case export | `sonnet` | high | Opus privacy/isolation review |
+| 10 | #114 Demo/Live switch | `opusplan` | high | Opus threat model and mandatory security review |
+| 11 | #117 daily launch/backup readiness | `sonnet` | high | Opus review of rollback/restore and data-loss risks |
+| 12 | #109 research hours | `sonnet` | high | Opus for hard clock/concurrency anomalies |
+| Parallel-capable when dependencies allow | #112 locked future navigation | `haiku` | medium | Existing PR #113: review/test, do not reimplement |
+| Parallel-capable when dependencies allow | #102 Driver.js and private feedback | `sonnet` | high | Opus for opt-in GitHub private Project/CSP security |
+| Parallel-capable when dependencies allow | #115 fictional 48-client dataset | `haiku` | medium | Sonnet validates fixture integrity and isolation |
+| After core case APIs | #116 Research Studio dashboard | `sonnet` | medium | Sonnet UX, correct metrics, responsive tests |
+| Final / human gate | #21 integrated pilot | `sonnet` | medium | Prepare evidence; **researcher** signs off |
+
+**Sequential means one issue at a time.** Parallel-capable entries can be inserted between blockers but never executed concurrently by the same driver. Respect actual dependencies; the table is a suggested priority queue, not license to implement UI before required APIs exist.
+
+### Execution protocol for Claude Code
+
+1. **Inspect:** `CLAUDE_HANDOFF.md`, this plan, selected issue and latest status/PR/commits; inspect `git worktree list --porcelain`. Skip already completed work and reuse ongoing branch/worktree.
+2. **Choose:** read `## Claude execution model profile` from selected issue; start a dedicated Claude Code session using `claude --model <alias> --effort <level>` or `claude -p --model <alias> --effort <level> "<scoped task>"`. An ordinary issue comment does not enforce a model.
+3. **Plan briefly:** for `opusplan` enter Plan Mode to use Opus for planning, then Sonnet for implementation; for simple scoped work, avoid heavyweight model calls. Do not start a second issue while the first is running.
+4. **Implement/verify:** one bounded ticket, unit/type/API/browser tests as relevant, fictional-only screenshots, privacy and case-isolation regression. Use issue-specific reviewer only at its trigger; log model and effort chosen and any fallback/escalation in PR description.
+5. **Handoff:** open one PR referencing the issue. Do **not** auto-merge; when the base is unmerged, explicitly stack the subsequent issue's PR and document its upstream base and dependency. Pause on failed checks and material security/data risks; only pursue other truly independent tickets.
+6. **Stop:** #21 needs actual researcher acceptance; no model or automated script may supply it.
+
+### Cost controls
+
+- Default to Sonnet/medium for productive work, Haiku for repetitive deterministic edits, and Opus for scoped planning/review. Prefer separate brief high-capability consultation over entire expensive implementation sessions.
+- `claude -p --max-budget-usd <number>` is a **best-effort estimated spend bound for supported API/print-mode runs**, not a guaranteed billing cap, and may not match subscription usage. Select budgets after observing actual run costs rather than inventing per-issue estimates.
+- Never compromise isolation/backup testing to reduce token use. Avoid sending full multi-issue context to every Haiku call; supply focused issue/contracts and concise file paths.
+- Do not introduce a new autonomous runner or GitHub write credentials simply because this routing matrix exists. A later explicit runner may enforce the queue, costs and gates.
+
+
 ## PR policy for an unattended Claude coding session
 
 1. Locate the existing local checkout first and inspect `git worktree list --porcelain`; reuse issue worktrees. Clone only when no usable checkout exists. No reset, clean, removal or overwriting unrelated changes.
