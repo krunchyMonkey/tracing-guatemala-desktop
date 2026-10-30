@@ -74,54 +74,64 @@ describe('case list', () => {
 
   it('shows open, unarchived cases by default with state, client, due date and an Overdue marker', async () => {
     openAt('#/cases', setup().runtime)
-    expect(await screen.findByText(count(3))).toBeTruthy()
-    expect(rowTitles()).toEqual([
-      'Maternal grandparents — Totonicapán', // overdue, so the earliest due date
-      'Paternal line — Quetzaltenango, 1880s',
-      'Surname origin — one family, one town' // no due date sorts last
+    expect(await screen.findByText(count(28))).toBeTruthy()
+    expect(rowTitles().slice(0, 3)).toEqual([
+      'Samayoa Ramírez — Zacapa, 1950s', // overdue by ten days, so the earliest due date
+      'Mejía marriage search — Quiché', // overdue
+      'Maternal grandparents — Totonicapán' // overdue, and the Lucía line
     ])
     const overdue = screen.getAllByText('Overdue')
-    expect(overdue).toHaveLength(1)
-    expect(rows()[0]!.textContent).toContain('Overdue')
-    expect(within(rows()[0]!).getByText('Waiting')).toBeTruthy()
-    expect(within(rows()[0]!).getByRole('link', { name: 'Lucía Fernández (Quetzaltenango line)' }).getAttribute('href')).toBe(
+    expect(overdue).toHaveLength(5)
+    expect(rows()[2]!.textContent).toContain('Overdue')
+    expect(within(rows()[2]!).getByText('Waiting')).toBeTruthy()
+    expect(within(rows()[2]!).getByRole('link', { name: 'Lucía Fernández (Quetzaltenango line)' }).getAttribute('href')).toBe(
       `#/clients/${demoClientIds.lucia}`
     )
-    expect(screen.getByText(/3 open · 3 finished · 1 archived/)).toBeTruthy()
+    expect(screen.getByText(/28 open · 14 finished · 3 archived/)).toBeTruthy()
   })
 
   it('never marks delivered or closed cases overdue', async () => {
     openAt('#/cases?state=all', setup().runtime)
-    expect(await screen.findByText(count(6))).toBeTruthy()
-    expect(screen.getAllByText('Overdue')).toHaveLength(1)
+    expect(await screen.findByText(count(42))).toBeTruthy()
+    expect(screen.getAllByText('Overdue')).toHaveLength(5)
     expect(within(rows().find((r) => r.textContent?.includes('Second branch report'))!).queryByText('Overdue')).toBeNull()
   })
 
   it('filters by state group and by the case archive flag', async () => {
     openAt('#/cases', setup().runtime)
-    await screen.findByText(count(3))
+    await screen.findByText(count(28))
 
     fireEvent.click(within(stateGroup()).getByLabelText('Delivered'))
-    expect(await screen.findByText(count(1))).toBeTruthy()
-    expect(rowTitles()).toEqual(['Second branch report'])
+    expect(await screen.findByText(count(5))).toBeTruthy()
+    expect(rowTitles()).toEqual([
+      'Ortiz line — Huehuetenango, 1900s',
+      'Second line — Jalapa, 1920s',
+      'Yac family — San Marcos, 1940s',
+      'Ixcoy Tambriz — Chiquimula, 1900s',
+      'Second branch report'
+    ])
 
     fireEvent.click(within(stateGroup()).getByLabelText('Closed'))
-    expect(await screen.findByText(count(2))).toBeTruthy()
-    expect(rowTitles()).toEqual(['Surname spelling variations', 'Baptism search — San Pedro (fictional parish)']) // earliest due first
+    expect(await screen.findByText(count(9))).toBeTruthy()
+    expect(rowTitles().slice(0, 2)).toEqual(['Surname spelling variations', 'Choc Pop — Izabal, 1870s']) // earliest due first
 
     fireEvent.click(within(showGroup()).getByLabelText('Archived'))
-    expect(await screen.findByText(count(1))).toBeTruthy()
-    expect(rowTitles()).toEqual(['Short family history for a reunion'])
+    expect(await screen.findByText(count(3))).toBeTruthy()
+    expect(rowTitles()).toEqual([
+      'Rosales Tzep — Petén, 1920s',
+      'Short family history for a reunion',
+      'Pop family — Quetzaltenango, 1900s'
+    ])
     expect(within(rows()[0]!).getByText('Archived')).toBeTruthy()
 
     fireEvent.click(within(showGroup()).getByLabelText('All'))
     fireEvent.click(within(stateGroup()).getByLabelText('All'))
-    expect(await screen.findByText(count(7))).toBeTruthy()
+    expect(await screen.findByText(count(45))).toBeTruthy()
   })
 
   it('filters by client, searches title and order reference, and clears everything', async () => {
     openAt('#/cases?state=all', setup().runtime)
-    await screen.findByText(count(6))
+    await screen.findByText(count(42))
 
     fireEvent.change(screen.getByLabelText('Client'), { target: { value: demoClientIds.lucia } })
     expect(await screen.findByText(count(3))).toBeTruthy()
@@ -138,17 +148,17 @@ describe('case list', () => {
     expect(await screen.findByText('No matching cases')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }))
-    expect(await screen.findByText(count(3))).toBeTruthy()
+    expect(await screen.findByText(count(28))).toBeTruthy()
   })
 
   it('sorts by title, recently updated and recently created', async () => {
     openAt('#/cases?state=all', setup().runtime)
-    await screen.findByText(count(6))
+    await screen.findByText(count(42))
     fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'title' } })
-    expect(rowTitles()[0]).toBe('Baptism search — San Pedro (fictional parish)')
-    expect(rowTitles()[5]).toBe('Surname spelling variations')
+    expect(rowTitles()[0]).toBe('Ajanel Cux — Quiché, 1930s')
+    expect(rowTitles()[5]).toBe('Chub Ixtecoc — Alta Verapaz, 1960s')
     fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'updated' } })
-    expect(rowTitles()[0]).toBe('Second branch report') // updated yesterday
+    expect(rowTitles()[0]).toBe('Coc Ajcalón — Escuintla, 1880s') // updated yesterday, like the second branch report
     fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'created' } })
     expect(rowTitles()[0]).toBe('Surname origin — one family, one town') // created 6 days ago
   })
@@ -165,7 +175,7 @@ describe('case list', () => {
     openAt('#/cases', { ...runtime, cases: { ...cases, listCases } })
     expect(await screen.findByText('Your cases couldn’t be loaded')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByText(count(3))).toBeTruthy()
+    expect(await screen.findByText(count(28))).toBeTruthy()
   })
 })
 

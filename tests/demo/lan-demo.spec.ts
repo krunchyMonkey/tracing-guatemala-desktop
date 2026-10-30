@@ -67,7 +67,7 @@ test('serves the shared UI over plain HTTP, with no Electron bridge and no other
 
   await expect(page.getByRole('region', { name: 'Demo mode' })).toContainText('Demo Mode — Fictional Data Only')
   await expect(page.getByRole('heading', { level: 1, name: 'Clients' })).toBeVisible()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   expect(await page.evaluate(() => 'tracingGuatemala' in window)).toBe(false)
 
   await nav(page).getByRole('link', { name: 'Settings & Backup' }).click()
@@ -143,11 +143,11 @@ test('walks through search, notes, duplicates and archive/restore, then resets o
   await expect(page.getByText('Client restored.')).toBeVisible()
 
   await nav(page).getByRole('link', { name: 'Clients' }).click()
-  await expect(page.getByText('8 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('44 active · 5 archived')).toBeVisible()
 
   // Refresh: back to the documented sample set.
   await page.reload()
-  await expect(page.getByText('7 active · 1 archived')).toBeVisible()
+  await expect(page.getByText('43 active · 5 archived')).toBeVisible()
   await expect(page.getByRole('link', { name: 'daniel ochoa', exact: true })).toHaveCount(0)
   await page.getByRole('link', { name: 'Lucía Fernández (Quetzaltenango line)' }).click()
   await expect(page.getByRole('region', { name: 'Contact' }).getByText('lucia.fernandez@example.com')).toBeVisible()
@@ -189,6 +189,31 @@ for (const viewport of viewports) {
   })
 }
 
+// ---------- 48-client fictional portfolio (#115) ----------
+
+test('lists the 48 fictional clients, finds one by search, and opens it', async ({ page }) => {
+  await page.goto(`${server.url}#/clients`)
+  await pick(page, 'All')
+  await expect(page.locator('.result-count')).toHaveText(/^48 clients · /)
+
+  await page.getByRole('button', { name: 'Clear search and filters' }).click()
+  await page.getByLabel('Search clients').fill('ixchel')
+  await expect(page.locator('.result-count')).toHaveText(/^1 client · /)
+  await page.getByRole('link', { name: 'Ixchel Barrios Mencos' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ixchel Barrios Mencos' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Contact' }).getByText('ixchel.barrios@example.com')).toBeVisible()
+})
+
+test('fits the full 48-client directory on a phone (375px) without sideways scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto(`${server.url}#/clients`)
+  await pick(page, 'All')
+  await expect(page.locator('.result-count')).toHaveText(/^48 clients · /)
+  await expect(page.getByRole('region', { name: 'Demo mode' })).toBeVisible()
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `directory overflows by ${overflow}px`).toBeLessThanOrEqual(0)
+})
+
 test('keeps demo code and sample data out of the desktop bundle', () => {
   const assets = resolve(__dirname, '../../out/renderer/assets')
   const bundle = readdirSync(assets)
@@ -218,12 +243,12 @@ test('walks through cases: filter, open, change state, create under a client, th
   await page.goto(`${server.url}#/clients`)
   await nav(page).getByRole('link', { name: 'Cases' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Cases' })).toBeVisible()
-  await expect(page.locator('.result-count')).toHaveText('3 cases')
-  await expect(page.getByText('Overdue')).toHaveCount(1)
+  await expect(page.locator('.result-count')).toHaveText('28 cases')
+  await expect(page.getByText('Overdue')).toHaveCount(5)
 
   // Filter by state group, archived flag and client.
   await pick(page, 'Closed')
-  await expect(page.locator('.result-count')).toHaveText(/^2 cases · /)
+  await expect(page.locator('.result-count')).toHaveText(/^9 cases · /)
   await pick(page, 'Archived')
   await expect(page.getByRole('link', { name: 'Short family history for a reunion' })).toBeVisible()
   await page.getByRole('button', { name: 'Clear search and filters' }).click()
@@ -258,7 +283,7 @@ test('walks through cases: filter, open, change state, create under a client, th
 
   // Refresh: back to the documented sample set.
   await page.reload()
-  await expect(page.locator('.result-count')).toHaveText('3 cases')
+  await expect(page.locator('.result-count')).toHaveText('28 cases')
   await expect(page.getByRole('link', { name: 'Demo: parish records search' })).toHaveCount(0)
   await page.getByRole('link', { name: 'Paternal line — Quetzaltenango, 1880s' }).click()
   await expect(page.locator('.state-now')).toContainText('Active')
