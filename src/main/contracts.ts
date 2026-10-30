@@ -1,5 +1,34 @@
 import { z } from 'zod'
 import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX, type CaseTask, type CaseTaskInput, type CaseTaskMutationResult } from '../shared/case-tasks'
+import {
+  INLINE_MARKS,
+  NOTE_MAX_BLOCK_CHARS,
+  NOTE_MAX_BLOCKS,
+  NOTE_MAX_HREF,
+  NOTE_MAX_RUNS_PER_BLOCK,
+  type NoteBlock,
+  type NoteContent,
+  type TextRun
+} from '../shared/note-content'
+import {
+  NOTEBOOK_MAX_SECTIONS,
+  PAGE_TITLE_MAX,
+  SECTION_MAX_PAGES,
+  SECTION_TITLE_MAX,
+  type NotebookOutline,
+  type NotebookPage,
+  type NotebookPageResult,
+  type NotebookPageSaveResult,
+  type NotebookPageSummary,
+  type NotebookSection,
+  type NotebookSectionResult,
+  type PageInput,
+  type PageMove,
+  type PageRevision,
+  type PageRevisionSummary,
+  type PageSave,
+  type SectionInput
+} from '../shared/notebook'
 import type { StudioSummary } from '../shared/studio-summary'
 import {
   ACTIVITY_TYPES,
@@ -312,6 +341,124 @@ const journalResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<JournalMutationResult>
 
+// ---------- research notebook (docs/architecture/research-notebook.md) ----------
+// Structural schemas with raw bounds only (twice the limits, like the journal); the
+// repository's checkNoteContent and title rules stay authoritative and answer with
+// typed issues. A wrong block type or an unknown key is refused here, as invalid-arguments.
+
+const noteRunSchema = z.strictObject({
+  text: z.string().max(NOTE_MAX_BLOCK_CHARS * 2),
+  marks: z.array(z.enum(INLINE_MARKS)).max(INLINE_MARKS.length * 2).optional(),
+  href: z.string().max(NOTE_MAX_HREF * 2).optional()
+}) satisfies z.ZodType<TextRun>
+
+const noteRuns = z.array(noteRunSchema).max(NOTE_MAX_RUNS_PER_BLOCK * 2)
+const noteBlockId = z.string().max(64)
+const noteIndent = z.number().int().min(0).max(100)
+
+const noteBlockSchema = z.discriminatedUnion('type', [
+  z.strictObject({ id: noteBlockId, type: z.literal('paragraph'), indent: noteIndent, content: noteRuns }),
+  z.strictObject({ id: noteBlockId, type: z.literal('heading'), level: z.union([z.literal(1), z.literal(2), z.literal(3)]), content: noteRuns }),
+  z.strictObject({ id: noteBlockId, type: z.literal('bullet'), indent: noteIndent, content: noteRuns }),
+  z.strictObject({ id: noteBlockId, type: z.literal('numbered'), indent: noteIndent, content: noteRuns }),
+  z.strictObject({ id: noteBlockId, type: z.literal('check'), indent: noteIndent, checked: z.boolean(), content: noteRuns }),
+  z.strictObject({ id: noteBlockId, type: z.literal('divider') }),
+  z.strictObject({
+    id: noteBlockId,
+    type: z.literal('reference'),
+    target: z.strictObject({ kind: z.enum(['journal', 'task', 'time']), id: z.string().max(64) })
+  })
+]) satisfies z.ZodType<NoteBlock>
+
+const noteContentSchema = z.strictObject({
+  format: z.literal('tg-note'),
+  version: z.literal(1),
+  blocks: z.array(noteBlockSchema).max(NOTE_MAX_BLOCKS * 2)
+}) satisfies z.ZodType<NoteContent>
+
+const notebookIndex = z.number().int().min(0).max(NOTEBOOK_MAX_SECTIONS * SECTION_MAX_PAGES)
+const notebookVersion = z.number().int().min(1).max(2_000_000_000)
+
+const sectionInputSchema = z.strictObject({ title: z.string().max(SECTION_TITLE_MAX * 2) }) satisfies z.ZodType<SectionInput>
+const pageInputSchema = z.strictObject({ title: z.string().max(PAGE_TITLE_MAX * 2) }) satisfies z.ZodType<PageInput>
+const pageMoveSchema = z.strictObject({ sectionId: idSchema, toIndex: notebookIndex }) satisfies z.ZodType<PageMove>
+const pageSaveSchema = z.strictObject({ baseVersion: notebookVersion, content: noteContentSchema }) satisfies z.ZodType<PageSave>
+
+const notebookSectionSchema = z.strictObject({
+  id: idSchema,
+  notebookId: idSchema,
+  caseId: idSchema,
+  title: z.string(),
+  position: z.number().int().nonnegative(),
+  archivedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp
+}) satisfies z.ZodType<NotebookSection>
+
+const notebookPageSummaryShape = {
+  id: idSchema,
+  sectionId: idSchema,
+  caseId: idSchema,
+  title: z.string(),
+  position: z.number().int().nonnegative(),
+  version: notebookVersion,
+  archivedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+const notebookPageSummarySchema = z.strictObject(notebookPageSummaryShape) satisfies z.ZodType<NotebookPageSummary>
+const notebookPageSchema = z.strictObject({ ...notebookPageSummaryShape, content: noteContentSchema }) satisfies z.ZodType<NotebookPage>
+
+const notebookOutlineSchema = z.strictObject({
+  caseId: idSchema,
+  notebookId: idSchema.nullable(),
+  sections: z.array(z.strictObject({ ...notebookSectionSchema.shape, pages: z.array(notebookPageSummarySchema) }))
+}) satisfies z.ZodType<NotebookOutline>
+
+const revisionSummaryShape = {
+  id: idSchema,
+  pageId: idSchema,
+  caseId: idSchema,
+  version: notebookVersion,
+  title: z.string(),
+  reason: z.enum(['autosave', 'restore-point', 'restored']),
+  createdAt: timestamp
+}
+const pageRevisionSummarySchema = z.strictObject(revisionSummaryShape) satisfies z.ZodType<PageRevisionSummary>
+const pageRevisionSchema = z.strictObject({ ...revisionSummaryShape, content: noteContentSchema }) satisfies z.ZodType<PageRevision>
+
+const notebookInvalidSchema = z.strictObject({
+  ok: z.literal(false),
+  reason: z.literal('invalid'),
+  issues: z.array(
+    z.union([
+      z.strictObject({ field: z.literal('title'), code: z.enum(['required', 'too-long', 'invalid-characters']) }),
+      z.strictObject({ field: z.literal('limit'), code: z.literal('too-many') }),
+      z.strictObject({ field: z.literal('content'), code: z.string().max(64), blockIndex: z.number().int().nonnegative().optional() })
+    ])
+  )
+})
+const notebookRefusedSchema = z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
+
+const notebookSectionResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), section: notebookSectionSchema }),
+  notebookInvalidSchema,
+  notebookRefusedSchema
+]) as unknown as z.ZodType<NotebookSectionResult>
+
+const notebookPageResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), page: notebookPageSchema }),
+  notebookInvalidSchema,
+  notebookRefusedSchema
+]) as unknown as z.ZodType<NotebookPageResult>
+
+const notebookPageSaveResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), page: notebookPageSchema }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('conflict'), page: notebookPageSchema }),
+  notebookInvalidSchema,
+  notebookRefusedSchema
+]) as unknown as z.ZodType<NotebookPageSaveResult>
+
 /** Strict: only the three writable fields. Raw bounds are twice the limits; dueDate is a short string. */
 const taskInputSchema = z.strictObject({
   title: z.string().max(TASK_TITLE_MAX * 2),
@@ -562,6 +709,22 @@ export const caseContracts = {
   listJournalEntries: { args: z.tuple([idSchema]), result: z.array(journalEntrySchema) },
   createJournalEntry: { args: z.tuple([idSchema, journalInputSchema]), result: journalResultSchema },
   updateJournalEntry: { args: z.tuple([idSchema, idSchema, journalInputSchema]), result: journalResultSchema },
+  getNotebook: { args: z.tuple([idSchema]), result: notebookOutlineSchema.nullable() },
+  createNotebookSection: { args: z.tuple([idSchema, sectionInputSchema]), result: notebookSectionResultSchema },
+  renameNotebookSection: { args: z.tuple([idSchema, idSchema, sectionInputSchema]), result: notebookSectionResultSchema },
+  moveNotebookSection: { args: z.tuple([idSchema, idSchema, notebookIndex]), result: notebookSectionResultSchema },
+  archiveNotebookSection: { args: z.tuple([idSchema, idSchema]), result: notebookSectionResultSchema },
+  unarchiveNotebookSection: { args: z.tuple([idSchema, idSchema]), result: notebookSectionResultSchema },
+  createNotebookPage: { args: z.tuple([idSchema, idSchema, pageInputSchema]), result: notebookPageResultSchema },
+  getNotebookPage: { args: z.tuple([idSchema, idSchema]), result: notebookPageSchema.nullable() },
+  renameNotebookPage: { args: z.tuple([idSchema, idSchema, pageInputSchema]), result: notebookPageResultSchema },
+  moveNotebookPage: { args: z.tuple([idSchema, idSchema, pageMoveSchema]), result: notebookPageResultSchema },
+  archiveNotebookPage: { args: z.tuple([idSchema, idSchema]), result: notebookPageResultSchema },
+  unarchiveNotebookPage: { args: z.tuple([idSchema, idSchema]), result: notebookPageResultSchema },
+  saveNotebookPage: { args: z.tuple([idSchema, idSchema, pageSaveSchema]), result: notebookPageSaveResultSchema },
+  listPageRevisions: { args: z.tuple([idSchema, idSchema]), result: z.array(pageRevisionSummarySchema) },
+  getPageRevision: { args: z.tuple([idSchema, idSchema, idSchema]), result: pageRevisionSchema.nullable() },
+  restorePageRevision: { args: z.tuple([idSchema, idSchema, idSchema, notebookVersion]), result: notebookPageSaveResultSchema },
   listCaseTasks: { args: z.tuple([idSchema]), result: z.array(taskSchema) },
   createCaseTask: { args: z.tuple([idSchema, taskInputSchema]), result: taskResultSchema },
   updateCaseTask: { args: z.tuple([idSchema, idSchema, taskInputSchema]), result: taskResultSchema },

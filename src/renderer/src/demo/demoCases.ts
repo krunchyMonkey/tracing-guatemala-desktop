@@ -33,10 +33,12 @@ import {
   type CaseState,
   type ResearchCase
 } from '../../../shared/case-model'
+import type { NotebookFailure } from '../../../shared/notebook'
 import { buildStudioSummary } from '../../../shared/studio-summary'
 import type { Client } from '../../../shared/client-model'
 import type { CaseApi } from '../runtime/AppRuntime'
 import type { DemoClock } from './demoApi'
+import { createDemoNotebook, type DemoNotebookData } from './demoNotebook'
 
 // The browser demo's research cases (#16): fictional cases held in this page's
 // memory only. Same shared rules and check order as the host's repository
@@ -51,6 +53,8 @@ import type { DemoClock } from './demoApi'
 // Research hours (#109) follow it as well, and the timer is the same state machine as
 // the host's (shared transitions, version conflicts, review of an interrupted
 // timer); it lives in this page's memory, so a refresh forgets it.
+// Research notebooks (#147) live in demoNotebook.ts and follow the same order; they use this
+// file's write check and move the case's updated time.
 // Cases read client status through the demo's own client data, so archiving a
 // client in the demo makes its cases read-only like everywhere else.
 
@@ -61,6 +65,7 @@ export interface DemoCaseData {
   journal: JournalEntry[]
   tasks: CaseTask[]
   timeEntries: TimeEntry[]
+  notebook: DemoNotebookData
 }
 
 export function createDemoCases(
@@ -98,7 +103,24 @@ export function createDemoCases(
   }
   const isRefusal = (value: ResearchCase | CaseMutationResult): value is CaseMutationResult => 'ok' in value
 
+  const notebook = createDemoNotebook(
+    initial.notebook,
+    {
+      exists: (id) => cases.some((c) => c.id === id),
+      writable: async (id) => {
+        const existing = await writable(id)
+        return isRefusal(existing) ? (existing as NotebookFailure) : null
+      },
+      touch: (id, at) => {
+        const existing = cases.find((c) => c.id === id)
+        if (existing) store({ ...existing, updatedAt: at })
+      }
+    },
+    clock
+  )
+
   return {
+    ...notebook,
     listCases: (query) => reply(() => queryCases(cases, query)),
     getCase: (id) => reply(() => cases.find((c) => c.id === id) ?? null),
     listCaseEvents: (caseId) =>

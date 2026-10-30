@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../../../shared/case-brief'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../../../shared/case-journal'
+import type { NotebookApi } from './notebookApi'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../shared/case-tasks'
 import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../../../shared/case-time'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
@@ -31,7 +32,9 @@ export type ModeSwitch =
  * Research case calls (case-model/v1 §8). The desktop app is frozen and has none
  * (`cases: null`), the demo gets an in-memory adapter with #16.
  */
-export interface CaseApi {
+export type { NotebookApi }
+
+export interface CaseApi extends NotebookApi {
   listCases(query: CaseQuery): Promise<ResearchCase[]>
   getCase(id: string): Promise<ResearchCase | null>
   listCaseEvents(caseId: string): Promise<CaseEvent[]>

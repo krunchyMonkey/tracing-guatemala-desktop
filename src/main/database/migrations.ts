@@ -249,6 +249,135 @@ export const migrations: readonly Migration[] = [
         CHECK ((state = 'running') = (segment_started_at IS NOT NULL))
       ) STRICT;
     `
+  },
+  {
+    version: 8,
+    name: 'research_notebooks',
+    sql: `
+      CREATE TABLE case_notebooks (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        case_id TEXT NOT NULL UNIQUE REFERENCES research_cases (id) ON DELETE RESTRICT,
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TRIGGER case_notebooks_client_matches BEFORE INSERT ON case_notebooks
+      WHEN (SELECT client_id FROM research_cases WHERE id = NEW.case_id) IS NOT NEW.client_id
+      BEGIN
+        SELECT RAISE(ABORT, 'notebook client must be the case client');
+      END;
+
+      CREATE TRIGGER case_notebooks_no_delete BEFORE DELETE ON case_notebooks
+      BEGIN
+        SELECT RAISE(ABORT, 'notebooks are never deleted');
+      END;
+
+      CREATE TRIGGER case_notebooks_immutable_keys BEFORE UPDATE OF id, case_id, client_id ON case_notebooks
+      BEGIN
+        SELECT RAISE(ABORT, 'notebook id, case and client are immutable');
+      END;
+
+      CREATE TABLE notebook_sections (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        notebook_id TEXT NOT NULL REFERENCES case_notebooks (id) ON DELETE RESTRICT,
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 80),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        archived_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX notebook_sections_case_idx ON notebook_sections (case_id);
+      CREATE INDEX notebook_sections_order_idx ON notebook_sections (notebook_id, position);
+
+      CREATE TRIGGER notebook_sections_case_matches BEFORE INSERT ON notebook_sections
+      WHEN (SELECT case_id FROM case_notebooks WHERE id = NEW.notebook_id) IS NOT NEW.case_id
+      BEGIN
+        SELECT RAISE(ABORT, 'section case must be the notebook case');
+      END;
+
+      CREATE TRIGGER notebook_sections_no_delete BEFORE DELETE ON notebook_sections
+      BEGIN
+        SELECT RAISE(ABORT, 'sections are never deleted');
+      END;
+
+      CREATE TRIGGER notebook_sections_immutable_keys BEFORE UPDATE OF id, notebook_id, case_id ON notebook_sections
+      BEGIN
+        SELECT RAISE(ABORT, 'section id, notebook and case are immutable');
+      END;
+
+      CREATE TABLE notebook_pages (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        section_id TEXT NOT NULL REFERENCES notebook_sections (id) ON DELETE RESTRICT,
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 120),
+        position INTEGER NOT NULL CHECK (position >= 0),
+        version INTEGER NOT NULL CHECK (version >= 1),
+        content TEXT NOT NULL CHECK (json_valid(content) AND length(content) <= 1048576),
+        content_version INTEGER NOT NULL CHECK (content_version >= 1),
+        archived_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX notebook_pages_case_idx ON notebook_pages (case_id);
+      CREATE INDEX notebook_pages_order_idx ON notebook_pages (section_id, position);
+
+      CREATE TRIGGER notebook_pages_case_matches BEFORE INSERT ON notebook_pages
+      WHEN (SELECT case_id FROM notebook_sections WHERE id = NEW.section_id) IS NOT NEW.case_id
+      BEGIN
+        SELECT RAISE(ABORT, 'page case must be the section case');
+      END;
+
+      CREATE TRIGGER notebook_pages_move_stays_in_case BEFORE UPDATE OF section_id ON notebook_pages
+      WHEN (SELECT case_id FROM notebook_sections WHERE id = NEW.section_id) IS NOT NEW.case_id
+      BEGIN
+        SELECT RAISE(ABORT, 'a page can only move between sections of its case');
+      END;
+
+      CREATE TRIGGER notebook_pages_no_delete BEFORE DELETE ON notebook_pages
+      BEGIN
+        SELECT RAISE(ABORT, 'pages are never deleted');
+      END;
+
+      CREATE TRIGGER notebook_pages_immutable_keys BEFORE UPDATE OF id, case_id ON notebook_pages
+      BEGIN
+        SELECT RAISE(ABORT, 'page id and case are immutable');
+      END;
+
+      CREATE TABLE notebook_page_revisions (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        page_id TEXT NOT NULL REFERENCES notebook_pages (id) ON DELETE RESTRICT,
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 120),
+        content TEXT NOT NULL CHECK (json_valid(content) AND length(content) <= 1048576),
+        content_version INTEGER NOT NULL CHECK (content_version >= 1),
+        reason TEXT NOT NULL CHECK (reason IN ('autosave', 'restore-point', 'restored')),
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX notebook_page_revisions_case_idx ON notebook_page_revisions (case_id);
+      CREATE INDEX notebook_page_revisions_page_idx ON notebook_page_revisions (page_id, created_at);
+
+      CREATE TRIGGER notebook_page_revisions_case_matches BEFORE INSERT ON notebook_page_revisions
+      WHEN (SELECT case_id FROM notebook_pages WHERE id = NEW.page_id) IS NOT NEW.case_id
+      BEGIN
+        SELECT RAISE(ABORT, 'revision case must be the page case');
+      END;
+
+      CREATE TRIGGER notebook_page_revisions_no_update BEFORE UPDATE ON notebook_page_revisions
+      BEGIN
+        SELECT RAISE(ABORT, 'revisions are append-only');
+      END;
+
+      CREATE TRIGGER notebook_page_revisions_no_delete BEFORE DELETE ON notebook_page_revisions
+      BEGIN
+        SELECT RAISE(ABORT, 'revisions are append-only');
+      END;
+    `
   }
 ]
 

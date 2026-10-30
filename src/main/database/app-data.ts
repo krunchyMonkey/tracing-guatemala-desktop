@@ -12,6 +12,7 @@ import { ClientRepository } from './client-repository'
 import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase } from './connection'
 import { getSchemaVersion, migrate, migrations } from './migrations'
 import { NoteRepository } from './note-repository'
+import { NotebookRepository } from './notebook-repository'
 
 // Owns the live database connection and its repositories, and makes and
 // restores backups (#11). A backup is one self-contained SQLite file. Restore
@@ -67,7 +68,7 @@ function readsAsSqlite(file: string): boolean {
   return header.toString('latin1') === SQLITE_HEADER
 }
 
-type CountedTable = 'clients' | 'client_notes' | 'research_cases'
+type CountedTable = 'clients' | 'client_notes' | 'research_cases' | 'notebook_pages'
 
 function hasTable(db: DatabaseSync, table: CountedTable): boolean {
   return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !== undefined
@@ -84,8 +85,8 @@ export function inspectBackup(file: string): BackupSummary {
   return { clients, notes, schemaVersion }
 }
 
-/** inspectBackup plus the case count, which restore verifies but the public summary doesn't carry. */
-function inspectBackupContents(file: string): BackupSummary & { cases: number } {
+/** inspectBackup plus the case and notebook page counts, which restore verifies but the public summary doesn't carry. */
+function inspectBackupContents(file: string): BackupSummary & { cases: number; notebookPages: number } {
   if (!existsSync(file) || !readsAsSqlite(file)) throw new BackupInvalidError('not-a-backup')
 
   let db: DatabaseSync
@@ -110,7 +111,13 @@ function inspectBackupContents(file: string): BackupSummary & { cases: number } 
     if (schemaVersion > migrations.length) throw new BackupInvalidError('too-new')
     if (schemaVersion < 1 || !hasTable(db, 'clients')) throw new BackupInvalidError('not-a-backup')
 
-    return { clients: count(db, 'clients'), notes: count(db, 'client_notes'), cases: count(db, 'research_cases'), schemaVersion }
+    return {
+      clients: count(db, 'clients'),
+      notes: count(db, 'client_notes'),
+      cases: count(db, 'research_cases'),
+      notebookPages: count(db, 'notebook_pages'),
+      schemaVersion
+    }
   } finally {
     db.close()
   }
@@ -130,6 +137,7 @@ export class AppData {
   journal: CaseJournalRepository
   tasks: CaseTaskRepository
   time: CaseTimeRepository
+  notebook: NotebookRepository
   studio: StudioSummaryRepository
 
   constructor(
@@ -144,6 +152,7 @@ export class AppData {
     this.journal = new CaseJournalRepository(this.opened.db)
     this.tasks = new CaseTaskRepository(this.opened.db)
     this.time = new CaseTimeRepository(this.opened.db)
+    this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
   }
 
@@ -224,6 +233,9 @@ export class AppData {
       if (count(this.opened.db, 'research_cases') !== expected.cases) {
         throw new Error('restored case count differs from the backup')
       }
+      if (count(this.opened.db, 'notebook_pages') !== expected.notebookPages) {
+        throw new Error('restored notebook page count differs from the backup')
+      }
       options.verify?.(this)
     } catch (error) {
       try {
@@ -254,6 +266,7 @@ export class AppData {
     this.journal = new CaseJournalRepository(this.opened.db)
     this.tasks = new CaseTaskRepository(this.opened.db)
     this.time = new CaseTimeRepository(this.opened.db)
+    this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
   }
 }

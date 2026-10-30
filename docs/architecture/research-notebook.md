@@ -1,6 +1,6 @@
 # Research notebook architecture
 
-Status: contracts and ports only (#146). There is no notebook UI and no storage yet; those arrive with #147 (repository, host API) and #148 (screens). Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
+Status: contracts and ports (#146) and storage (#147: migration 8, `NotebookRepository`, host API, demo adapter). There is no notebook UI yet; the screens arrive with #148. Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
 
 The aim: the page content the researcher writes is owned by this app, in a small versioned format, and any editor or canvas library is a replaceable part that only renders and edits it.
 
@@ -13,6 +13,14 @@ Types and rules live in `src/shared/notebook.ts` (no Node imports, so the host a
 - A **page** has a `title`, a `version` (increments on each saved change, to detect stale writes) and `content`, which is always `NoteContent`.
 - A **page revision** is a saved earlier state of a page (`autosave`, `restore-point`, `restored`).
 - Titles: `checkNotebookTitle` (trimmed, required, 80 characters for sections, 120 for pages, no control characters). Issues carry a field and a code, never the submitted text.
+
+## Storage and host API (#147)
+
+- Migration 8 (`research_notebooks`, forward-only, STRICT): `case_notebooks` (one per case, created by the first section), `notebook_sections`, `notebook_pages` (with `version`, `content` JSON up to 1 MiB and `content_version`) and `notebook_page_revisions` (append-only). Triggers keep every row in its case and client (a page can only move between sections of its case), forbid deletes and key changes, and make revisions append-only.
+- `src/main/database/notebook-repository.ts` documents the rules. Writes run in one `BEGIN IMMEDIATE` transaction with the check order: case not found, case or client archived (`wrong-status`), target belongs to the case (`not-found`), archived target (`wrong-status`), input (`invalid`). Reads work on archived cases. Archived sections and pages are read-only until unarchived. Limits: 100 sections per notebook, 500 pages per section (`invalid` with a `too-many` issue).
+- Saves carry the `baseVersion` they started from. A stale one is refused with `conflict` and the current page; identical content is a no-op. An `autosave` revision is kept when a page has none or its newest is at least 5 minutes old (`shouldSnapshot`). `restoreRevision` keeps a `restore-point` of the current content, then writes the old content as a new version with a `restored` revision. Renaming and moving never change the version.
+- Calls (`caseContracts`, remote-callable like the journal): `getNotebook`, `create/rename/move/archive/unarchiveNotebookSection`, `create/get/rename/move/archive/unarchiveNotebookPage`, `saveNotebookPage`, `listPageRevisions`, `getPageRevision`, `restorePageRevision`. The zod schema of `NoteContent` is structural with raw bounds; `checkNoteContent` stays authoritative. The Live host's JSON body limit is 1 MiB for a full page.
+- The browser demo (`demoNotebook.ts`) follows the same rules in memory; `tests/unit/demo-notebook.test.ts` runs one script against both and compares the answers.
 
 ## tg-note/1: page content
 

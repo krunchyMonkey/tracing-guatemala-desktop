@@ -34,8 +34,9 @@ import { createWebBackupService, MAX_UPLOAD_BYTES, UploadTooLargeError } from '.
 
 export const API_PREFIX = '/api/v1'
 export const LAUNCH_PATH = '/launch'
-// Room for a full research brief at its raw bound (five sections, up to 4 bytes per character).
-const MAX_JSON_BYTES = 256 * 1024
+// Room for a full notebook page at its stored bound (1 MiB of JSON, PAGE_JSON_MAX); a research
+// brief at its raw bound (five sections, up to 4 bytes per character) is far smaller.
+const MAX_JSON_BYTES = 1024 * 1024
 const MAX_ENROLL_BYTES = 4 * 1024
 
 /** The data calls the browser may make, by name. Backup file choice is an upload instead. */
@@ -67,6 +68,22 @@ const callable = {
   listJournalEntries: caseContracts.listJournalEntries,
   createJournalEntry: caseContracts.createJournalEntry,
   updateJournalEntry: caseContracts.updateJournalEntry,
+  getNotebook: caseContracts.getNotebook,
+  createNotebookSection: caseContracts.createNotebookSection,
+  renameNotebookSection: caseContracts.renameNotebookSection,
+  moveNotebookSection: caseContracts.moveNotebookSection,
+  archiveNotebookSection: caseContracts.archiveNotebookSection,
+  unarchiveNotebookSection: caseContracts.unarchiveNotebookSection,
+  createNotebookPage: caseContracts.createNotebookPage,
+  getNotebookPage: caseContracts.getNotebookPage,
+  renameNotebookPage: caseContracts.renameNotebookPage,
+  moveNotebookPage: caseContracts.moveNotebookPage,
+  archiveNotebookPage: caseContracts.archiveNotebookPage,
+  unarchiveNotebookPage: caseContracts.unarchiveNotebookPage,
+  saveNotebookPage: caseContracts.saveNotebookPage,
+  listPageRevisions: caseContracts.listPageRevisions,
+  getPageRevision: caseContracts.getPageRevision,
+  restorePageRevision: caseContracts.restorePageRevision,
   listCaseTasks: caseContracts.listCaseTasks,
   createCaseTask: caseContracts.createCaseTask,
   updateCaseTask: caseContracts.updateCaseTask,
@@ -238,7 +255,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const sessions = new SessionStore()
   const devices = new DeviceAccess({ now: options.now })
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal, notebook, tasks, time, studio } = createDataServices(data)
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
   let lan: ListenerPolicy | null = options.lan
     ? { kind: 'lan', hosts: lanAllowedHosts(options.lan.address, port), origin: `http://${options.lan.address}:${port}` }
@@ -284,6 +301,22 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     listJournalEntries: ([caseId]) => journal.list(caseId),
     createJournalEntry: ([caseId, input]) => journal.create(caseId, input),
     updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input),
+    getNotebook: ([caseId]) => notebook.getOutline(caseId),
+    createNotebookSection: ([caseId, input]) => notebook.createSection(caseId, input),
+    renameNotebookSection: ([caseId, sectionId, input]) => notebook.renameSection(caseId, sectionId, input),
+    moveNotebookSection: ([caseId, sectionId, toIndex]) => notebook.moveSection(caseId, sectionId, toIndex),
+    archiveNotebookSection: ([caseId, sectionId]) => notebook.archiveSection(caseId, sectionId),
+    unarchiveNotebookSection: ([caseId, sectionId]) => notebook.unarchiveSection(caseId, sectionId),
+    createNotebookPage: ([caseId, sectionId, input]) => notebook.createPage(caseId, sectionId, input),
+    getNotebookPage: ([caseId, pageId]) => notebook.getPage(caseId, pageId),
+    renameNotebookPage: ([caseId, pageId, input]) => notebook.renamePage(caseId, pageId, input),
+    moveNotebookPage: ([caseId, pageId, move]) => notebook.movePage(caseId, pageId, move),
+    archiveNotebookPage: ([caseId, pageId]) => notebook.archivePage(caseId, pageId),
+    unarchiveNotebookPage: ([caseId, pageId]) => notebook.unarchivePage(caseId, pageId),
+    saveNotebookPage: ([caseId, pageId, save]) => notebook.savePage(caseId, pageId, save),
+    listPageRevisions: ([caseId, pageId]) => notebook.listRevisions(caseId, pageId),
+    getPageRevision: ([caseId, pageId, revisionId]) => notebook.getRevision(caseId, pageId, revisionId),
+    restorePageRevision: ([caseId, pageId, revisionId, baseVersion]) => notebook.restoreRevision(caseId, pageId, revisionId, baseVersion),
     listCaseTasks: ([caseId]) => tasks.list(caseId),
     createCaseTask: ([caseId, input]) => tasks.create(caseId, input),
     updateCaseTask: ([caseId, taskId, input]) => tasks.update(caseId, taskId, input),

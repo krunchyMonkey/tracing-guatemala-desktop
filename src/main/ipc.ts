@@ -1,6 +1,19 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
+import type {
+  NotebookOutline,
+  NotebookPage,
+  NotebookPageResult,
+  NotebookPageSaveResult,
+  NotebookSectionResult,
+  PageInput,
+  PageMove,
+  PageRevision,
+  PageRevisionSummary,
+  PageSave,
+  SectionInput
+} from '../shared/notebook'
 import type { StudioSummary } from '../shared/studio-summary'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../shared/case-tasks'
 import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../shared/case-time'
@@ -102,6 +115,26 @@ export interface JournalService {
   list(caseId: string): JournalEntry[]
   create(caseId: string, input: JournalEntryInput): JournalMutationResult
   update(caseId: string, entryId: string, input: JournalEntryInput): JournalMutationResult
+}
+
+/** Case research notebook operations for the local web host (NotebookRepository in production). */
+export interface NotebookService {
+  getOutline(caseId: string): NotebookOutline | null
+  getPage(caseId: string, pageId: string): NotebookPage | null
+  listRevisions(caseId: string, pageId: string): PageRevisionSummary[]
+  getRevision(caseId: string, pageId: string, revisionId: string): PageRevision | null
+  createSection(caseId: string, input: SectionInput): NotebookSectionResult
+  renameSection(caseId: string, sectionId: string, input: SectionInput): NotebookSectionResult
+  moveSection(caseId: string, sectionId: string, toIndex: number): NotebookSectionResult
+  archiveSection(caseId: string, sectionId: string): NotebookSectionResult
+  unarchiveSection(caseId: string, sectionId: string): NotebookSectionResult
+  createPage(caseId: string, sectionId: string, input: PageInput): NotebookPageResult
+  renamePage(caseId: string, pageId: string, input: PageInput): NotebookPageResult
+  movePage(caseId: string, pageId: string, move: PageMove): NotebookPageResult
+  archivePage(caseId: string, pageId: string): NotebookPageResult
+  unarchivePage(caseId: string, pageId: string): NotebookPageResult
+  savePage(caseId: string, pageId: string, save: PageSave): NotebookPageSaveResult
+  restoreRevision(caseId: string, pageId: string, revisionId: string, baseVersion: number): NotebookPageSaveResult
 }
 
 /** Case task operations for the local web host (CaseTaskRepository in production). */

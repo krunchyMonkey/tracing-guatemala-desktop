@@ -221,7 +221,7 @@ describe('request protection', () => {
     const post = (path: string, body: string, extra: Record<string, string> = {}) => send(live, 'POST', path, { ...headers, ...extra }, body)
 
     expect((await post('/api/v1/call/getAppInfo', '{"args":[]}', { 'Content-Type': 'text/plain' })).status).toBe(415)
-    expect((await post('/api/v1/call/getAppInfo', JSON.stringify({ args: ['x'.repeat(300_000)] }))).status).toBe(413)
+    expect((await post('/api/v1/call/getAppInfo', JSON.stringify({ args: ['x'.repeat(1_100_000)] }))).status).toBe(413)
     expect((await post('/api/v1/call/getAppInfo', '{"args":')).status).toBe(400)
     expect((await post('/api/v1/call/getAppInfo', '{"notArgs":[]}')).status).toBe(400)
     expect((await post('/api/v1/call/chooseBackupToRestore', '{"args":[]}')).status).toBe(404)

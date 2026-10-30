@@ -2,6 +2,7 @@ import type { CaseBrief } from '../../../shared/case-brief'
 import type { CaseTask } from '../../../shared/case-tasks'
 import type { ActivityType, TimeEntry } from '../../../shared/case-time'
 import type { JournalEntry } from '../../../shared/case-journal'
+import type { NotebookPage, NotebookSection, PageRevision } from '../../../shared/notebook'
 import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
 import { portfolioCases, portfolioClients } from './portfolioData'
@@ -9,6 +10,12 @@ import { portfolioCases, portfolioClients } from './portfolioData'
 // The fixture shapes, written with the shared model types only. The fixtures must not
 // pull in the runtime (demoApi, demoCases), so the Node-side unit tests can import them.
 type DemoClientFixtures = { clients: Client[]; notes: ClientNote[] }
+export type DemoNotebookFixtures = {
+  notebooks: { id: string; caseId: string }[]
+  sections: NotebookSection[]
+  pages: NotebookPage[]
+  revisions: PageRevision[]
+}
 type DemoCaseFixtures = {
   cases: ResearchCase[]
   events: CaseEvent[]
@@ -16,6 +23,7 @@ type DemoCaseFixtures = {
   journal: JournalEntry[]
   tasks: CaseTask[]
   timeEntries: TimeEntry[]
+  notebook: DemoNotebookFixtures
 }
 
 // Entirely FICTIONAL starter data for the browser demo. Any resemblance to real
@@ -496,6 +504,56 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseFixtures {
     hours(6, caseIds.maternal, 2, 50, 'correspondence', 'Wrote to the municipal archive.')
   ]
 
+  // A small fictional notebook on the first case: one section, one page with a heading, a
+  // paragraph and a checklist. Other cases start without a notebook.
+  const nid = (n: number) => `de600000-0000-4000-8000-6000000000${String(n).padStart(2, '0')}`
+  const run = (text: string) => [{ text }]
+  const notebook: DemoNotebookFixtures = {
+    notebooks: [{ id: nid(1), caseId: caseIds.paternal }],
+    sections: [
+      {
+        id: nid(2),
+        notebookId: nid(1),
+        caseId: caseIds.paternal,
+        title: 'Archive visits',
+        position: 0,
+        archivedAt: null,
+        createdAt: at(12, 9),
+        updatedAt: at(12, 9)
+      }
+    ],
+    pages: [
+      {
+        id: nid(3),
+        sectionId: nid(2),
+        caseId: caseIds.paternal,
+        title: 'Diocesan archive, first visit',
+        position: 0,
+        version: 1,
+        archivedAt: null,
+        createdAt: at(12, 9),
+        updatedAt: at(12, 9),
+        content: {
+          format: 'tg-note',
+          version: 1,
+          blocks: [
+            { id: nid(10), type: 'heading', level: 1, content: run('Diocesan archive, first visit') },
+            {
+              id: nid(11),
+              type: 'paragraph',
+              indent: 0,
+              content: run('Fictional notes: the baptism index for 1880 to 1890 is on open shelves; the registers themselves need a request slip.')
+            },
+            { id: nid(12), type: 'check', indent: 0, checked: true, content: run('Ask for the Ejemplo family baptisms') },
+            { id: nid(13), type: 'check', indent: 0, checked: false, content: run('Copy the index page for the second parish') },
+            { id: nid(14), type: 'check', indent: 0, checked: false, content: run('Ask about opening hours in December') }
+          ]
+        }
+      }
+    ],
+    revisions: []
+  }
+
   const portfolio = buildPortfolioCases(now)
   return {
     cases: [...cases, ...portfolio.cases],
@@ -503,7 +561,8 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseFixtures {
     briefs: [...briefs, ...portfolio.briefs],
     journal: [...journal, ...portfolio.journal],
     tasks: [...tasks, ...portfolio.tasks],
-    timeEntries: [...timeEntries, ...portfolio.timeEntries]
+    timeEntries: [...timeEntries, ...portfolio.timeEntries],
+    notebook
   }
 }
 
@@ -636,7 +695,7 @@ export function buildPortfolioClients(now: Date): { clients: Client[]; notes: Cl
   return { clients, notes }
 }
 
-export function buildPortfolioCases(now: Date): DemoCaseFixtures {
+export function buildPortfolioCases(now: Date): Omit<DemoCaseFixtures, 'notebook'> {
   const at = (daysAgo: number, hour = 15) => {
     const day = new Date(now.getTime() - daysAgo * DAY)
     day.setUTCHours(hour, 0, 0, 0)

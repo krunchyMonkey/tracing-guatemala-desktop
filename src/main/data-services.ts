@@ -1,12 +1,12 @@
 import type { AppData } from './database/app-data'
-import type { BriefService, CaseService, JournalService, TaskService, TimeService, StudioService, ClientService, NoteService } from './ipc'
+import type { BriefService, CaseService, JournalService, NotebookService, TaskService, TimeService, StudioService, ClientService, NoteService } from './ipc'
 
 /**
  * Client, note, case and brief services over the live AppData, shared by the Electron main
  * process and the local web host (#110). They look up the repositories on
  * every call, because a restore replaces the connection and repositories.
  */
-export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService; briefs: BriefService; journal: JournalService; tasks: TaskService; time: TimeService; studio: StudioService } {
+export function createDataServices(current: () => AppData): { clients: ClientService; notes: NoteService; cases: CaseService; briefs: BriefService; journal: JournalService; tasks: TaskService; time: TimeService; notebook: NotebookService; studio: StudioService } {
   return {
     clients: {
       list: (query) => current().clients.list(query),
@@ -60,6 +60,24 @@ export function createDataServices(current: () => AppData): { clients: ClientSer
       heartbeat: (version) => current().time.heartbeat(version),
       stopAndSave: (version, options) => current().time.stopAndSave(version, options),
       discard: (version) => current().time.discard(version)
+    },
+    notebook: {
+      getOutline: (caseId) => current().notebook.getOutline(caseId),
+      getPage: (caseId, pageId) => current().notebook.getPage(caseId, pageId),
+      listRevisions: (caseId, pageId) => current().notebook.listRevisions(caseId, pageId),
+      getRevision: (caseId, pageId, revisionId) => current().notebook.getRevision(caseId, pageId, revisionId),
+      createSection: (caseId, input) => current().notebook.createSection(caseId, input),
+      renameSection: (caseId, sectionId, input) => current().notebook.renameSection(caseId, sectionId, input),
+      moveSection: (caseId, sectionId, toIndex) => current().notebook.moveSection(caseId, sectionId, toIndex),
+      archiveSection: (caseId, sectionId) => current().notebook.archiveSection(caseId, sectionId),
+      unarchiveSection: (caseId, sectionId) => current().notebook.unarchiveSection(caseId, sectionId),
+      createPage: (caseId, sectionId, input) => current().notebook.createPage(caseId, sectionId, input),
+      renamePage: (caseId, pageId, input) => current().notebook.renamePage(caseId, pageId, input),
+      movePage: (caseId, pageId, move) => current().notebook.movePage(caseId, pageId, move),
+      archivePage: (caseId, pageId) => current().notebook.archivePage(caseId, pageId),
+      unarchivePage: (caseId, pageId) => current().notebook.unarchivePage(caseId, pageId),
+      savePage: (caseId, pageId, save) => current().notebook.savePage(caseId, pageId, save),
+      restoreRevision: (caseId, pageId, revisionId, baseVersion) => current().notebook.restoreRevision(caseId, pageId, revisionId, baseVersion)
     },
     studio: {
       summary: () => current().studio.summary()
