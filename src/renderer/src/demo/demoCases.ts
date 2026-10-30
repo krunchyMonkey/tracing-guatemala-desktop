@@ -33,6 +33,7 @@ import {
   type CaseState,
   type ResearchCase
 } from '../../../shared/case-model'
+import { buildStudioSummary } from '../../../shared/studio-summary'
 import type { Client } from '../../../shared/client-model'
 import type { CaseApi } from '../runtime/AppRuntime'
 import type { DemoClock } from './demoApi'
@@ -65,7 +66,8 @@ export interface DemoCaseData {
 export function createDemoCases(
   initial: DemoCaseData,
   getClient: (id: string) => Promise<Client | null>,
-  clock: DemoClock
+  clock: DemoClock,
+  listClients?: () => Promise<Client[]>
 ): CaseApi {
   let cases = structuredClone(initial.cases)
   let events = structuredClone(initial.events)
@@ -353,6 +355,18 @@ export function createDemoCases(
       if ('ok' in found) return found
       timer = null
       return { ok: true, timer: null, entry: null }
+    },
+
+    // Same figures as the host's SQL (studio-summary/v1), from this page's memory; clients are read
+    // through getClient so an archived demo client drops out like it does in Live.
+    async getStudioSummary() {
+      // Active clients come from the demo's client list when given (so clients without cases count);
+      // otherwise from the clients that have cases.
+      const listed = listClients ? await listClients() : null
+      const ids = listed ? [] : [...new Set(cases.map((c) => c.clientId))]
+      const found = listed ?? (await Promise.all(ids.map((id) => getClient(id)))).flatMap((c) => (c ? [c] : []))
+      const clients = found.map((c) => ({ id: c.id, status: c.status, displayName: c.displayName }))
+      return structuredClone(buildStudioSummary({ clients, cases, events, journal, tasks, timeEntries }, clock.now()))
     }
   }
 

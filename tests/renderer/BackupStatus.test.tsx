@@ -8,6 +8,7 @@ import type { AppRuntime } from '../../src/renderer/src/runtime/AppRuntime'
 import { backupIsDue, daysSince, describeAge } from '../../src/renderer/src/runtime/useBackupStatus'
 import type { BackupStatus } from '../../src/shared/ipc'
 import { createFakeApi } from './fakeApi'
+import { emptySummary } from './fixtures/studio'
 
 // Backup status, the Live reminder and the encryption notice (#117). Fictional data only.
 
@@ -31,7 +32,7 @@ function live(statuses: BackupStatus[] | Error = [none]) {
     if (statuses instanceof Error) throw statuses
     return queue.length > 1 ? queue.shift()! : queue[0]!
   })
-  const runtime: AppRuntime = { mode: 'live', data: fake.api, backup: fake.api, cases: {} as never, backupStatus }
+  const runtime: AppRuntime = { mode: 'live', data: fake.api, backup: fake.api, cases: { getStudioSummary: async () => emptySummary() } as never, backupStatus }
   return { fake, backupStatus, runtime }
 }
 

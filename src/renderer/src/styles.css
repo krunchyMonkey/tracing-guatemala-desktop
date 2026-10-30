@@ -1796,3 +1796,243 @@ h1[tabindex='-1']:focus {
     margin: 0;
   }
 }
+
+/* ---------- Research Studio home (#116) ---------- */
+
+.studio {
+  min-width: 0;
+}
+
+.studio-header {
+  margin-bottom: 1.25rem;
+}
+
+.studio-textile {
+  width: 7.5rem;
+  height: 6px;
+  margin-bottom: 0.9rem;
+  border-radius: 999px;
+  background: var(--textile);
+}
+
+.studio-eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent-strong);
+}
+
+.studio-header h1 {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.1;
+  color: var(--color-text);
+}
+
+.studio-date {
+  margin: 0.35rem 0 0;
+  color: var(--color-muted);
+}
+
+.studio-continue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1.5rem;
+  padding: 1.1rem 1.4rem;
+  border: 1px solid var(--color-border);
+  border-left: 5px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-tint);
+}
+
+.studio-continue-button {
+  min-height: 3rem;
+  padding: 0.65rem 1.6rem;
+  font-size: 1.05rem;
+}
+
+.studio-continue-case {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio-metrics {
+  margin-bottom: 1.5rem;
+}
+
+.studio-demo-note {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.15rem 0.75rem;
+  border-radius: 999px;
+  background: var(--color-marigold-soft);
+  color: var(--color-marigold);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.studio-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+  border-top: 4px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.studio-tile-gold {
+  border-top-color: #e3a83b;
+}
+
+.studio-tile-teal {
+  border-top-color: var(--color-teal);
+}
+
+.studio-tile-alert {
+  border-top-color: var(--color-error);
+  background: var(--color-error-soft);
+}
+
+.studio-tile-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.15;
+  color: var(--color-text);
+}
+
+.studio-tile-alert .studio-tile-value {
+  color: var(--color-error);
+}
+
+.studio-tile-label {
+  font-weight: 600;
+}
+
+.studio-tile-hint {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.studio-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.studio-panel {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.studio-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-list li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.studio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.65rem 0.4rem;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.studio-row:hover {
+  background: var(--color-accent-soft);
+}
+
+.studio-row-title {
+  font-weight: 600;
+  color: var(--color-accent-strong);
+}
+
+.studio-row-meta,
+.studio-row-time {
+  font-size: 0.88rem;
+  color: var(--color-muted);
+}
+
+.studio-empty {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .studio-tile {
+    animation: studio-rise 0.45s ease-out both;
+  }
+
+  .studio-tile:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+
+  .studio-tile:nth-child(3) {
+    animation-delay: 0.12s;
+  }
+
+  .studio-tile:nth-child(4) {
+    animation-delay: 0.18s;
+  }
+}
+
+@keyframes studio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 1100px) {
+  .studio-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-columns > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .studio-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .studio-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .studio-continue-button {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+  }
+}

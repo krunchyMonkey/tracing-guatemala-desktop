@@ -1,6 +1,7 @@
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import type { z } from 'zod'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../shared/case-journal'
+import type { StudioSummary } from '../shared/studio-summary'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../shared/case-tasks'
 import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../shared/case-time'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../shared/case-brief'
@@ -125,6 +126,11 @@ export interface TimeService {
   heartbeat(version: number): TimerResult
   stopAndSave(version: number, options: StopOptions): TimerResult
   discard(version: number): TimerResult
+}
+
+/** Research Studio dashboard summary for the local web host (StudioSummaryRepository in production). */
+export interface StudioService {
+  summary(): StudioSummary
 }
 
 /** Backup operations backing the backup:* channels (createBackupService in production). */

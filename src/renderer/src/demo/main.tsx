@@ -21,7 +21,9 @@ const runtime: AppRuntime = {
   data,
   backup: null,
   // Cases read client status through the same demo clients, so archiving a client locks its cases.
-  cases: createDemoCases(buildDemoCases(), data.getClient, defaultClock)
+  cases: createDemoCases(buildDemoCases(), data.getClient, defaultClock, () =>
+    data.listClients({ text: '', status: 'all', sources: [], sort: 'name' })
+  )
 }
 
 const container = document.getElementById('root')
