@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AppInfo, BackupChoice, BackupProblem, BackupStatus } from '../../../shared/ipc'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDateTime } from '../clients/components'
-import { useAppRuntime, type BackupApi } from '../runtime/AppRuntime'
+import { useAppRuntime, type BackupApi, type LanAdminApi, type LanDevice } from '../runtime/AppRuntime'
 import { describeAge, daysSince, useBackupStatus } from '../runtime/useBackupStatus'
 
 // Settings & Backup (#11). On the desktop, backups are made and restored by the
@@ -47,7 +47,9 @@ export function SettingsScreen() {
     <section aria-labelledby="settings-heading" className="settings">
       <h1 id="settings-heading">Settings &amp; Backup</h1>
 
-      {runtime.backup ? (
+      {runtime.mode === 'live' && runtime.remote ? (
+        <RemoteSection signOut={runtime.signOut} />
+      ) : runtime.backup ? (
         <>
           <section aria-labelledby="data-heading">
             <h2 id="data-heading">Your data</h2>
@@ -57,6 +59,7 @@ export function SettingsScreen() {
             </p>
           </section>
           <BackupSection backup={runtime.backup} web={runtime.mode === 'live'} />
+          {runtime.mode === 'live' && runtime.lan && <HomeNetworkDevices lan={runtime.lan} />}
           {runtime.mode === 'live' && <EncryptionNotice />}
         </>
       ) : (
@@ -93,6 +96,157 @@ export function SettingsScreen() {
   )
 }
 
+/** A paired home-network device (#136): backups stay on the researcher's computer. */
+function RemoteSection({ signOut }: { signOut?: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  async function signOutThisDevice() {
+    if (!signOut) return
+    setBusy(true)
+    setFailed(false)
+    try {
+      await signOut()
+      window.location.reload()
+    } catch {
+      setFailed(true)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="remote-heading" className="card">
+      <h2 id="remote-heading">This device</h2>
+      <p>Backups are managed on the researcher’s computer.</p>
+      <p className="muted">
+        This device is paired over the home network, which is not encrypted: anything you open here can be read by someone else on that network.
+      </p>
+      {failed && (
+        <Alert tone="error" title="Not signed out">
+          This device couldn’t be signed out. Please try again.
+        </Alert>
+      )}
+      <div className="button-row">
+        <button type="button" className="button button-secondary" disabled={busy} onClick={() => void signOutThisDevice()}>
+          Sign out this device
+        </button>
+      </div>
+    </section>
+  )
+}
+
+/** Host only, and only while the home-network listener is on. The code is shown, never stored. */
+function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
+  const [enabled, setEnabled] = useState(false)
+  const [devices, setDevices] = useState<LanDevice[]>([])
+  const [code, setCode] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    lan
+      .getLanStatus()
+      .then(async (status) => {
+        if (cancelled || !status.enabled) return
+        setEnabled(true)
+        const list = await lan.listDevices()
+        if (!cancelled) setDevices(list)
+      })
+      .catch(() => {
+        // Without a status the section stays hidden.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [lan])
+
+  if (!enabled) return null
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true)
+    setFailed(false)
+    try {
+      await action()
+      setDevices(await lan.listDevices())
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="devices-heading" className="card">
+      <h2 id="devices-heading">Home-network devices</h2>
+      <p>
+        Pairing controls who can sign in from the home network. It does <strong>not</strong> encrypt anything: the code, sessions and everything a
+        paired device opens travel over unencrypted HTTP.
+      </p>
+      {failed && (
+        <Alert tone="error" title="Not done">
+          Something went wrong. Please try again.
+        </Alert>
+      )}
+      <div className="button-row">
+        <button
+          type="button"
+          className="button button-primary"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              const made = await lan.createPairingCode()
+              setCode(made.code)
+            })
+          }
+        >
+          Show pairing code
+        </button>
+      </div>
+      {code && (
+        <div role="status" aria-live="polite" data-testid="pairing-code">
+          <p>
+            Pairing code: <strong>{code}</strong>
+          </p>
+          <p className="muted">Expires in 5 minutes. It works once.</p>
+        </div>
+      )}
+
+      <h3>Paired devices</h3>
+      {devices.length === 0 ? (
+        <p className="muted">No devices are paired.</p>
+      ) : (
+        <ul>
+          {devices.map((device) => (
+            <li key={device.id}>
+              <strong>{device.name}</strong>, paired {formatDateTime(device.enrolledAt)}, last seen {formatDateTime(device.lastSeenAt)}{' '}
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={busy}
+                aria-label={`Revoke ${device.name}`}
+                onClick={() => void run(async () => void (await lan.revokeDevice(device.id)))}
+              >
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="button-row">
+        <button
+          type="button"
+          className="button button-secondary"
+          disabled={busy || devices.length === 0}
+          onClick={() => void run(async () => void (await lan.revokeAllDevices()))}
+        >
+          Sign out all devices
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function BackupSection({ backup, web }: { backup: BackupApi; web: boolean }) {
   const { reload } = useClientStore()
   const backupStatus = useBackupStatus()
@@ -105,8 +259,15 @@ function BackupSection({ backup, web }: { backup: BackupApi; web: boolean }) {
     setMessage(null)
     try {
       return await call()
-    } catch {
-      setMessage({ tone: 'error', text: problemMessages.failed })
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      setMessage({
+        tone: 'error',
+        text:
+          code === 'restore-disabled-while-lan'
+            ? 'Restoring a backup is turned off while the home-network listener is on, so real records can’t be imported into a profile other devices can reach. Restart without --lan-host to restore.'
+            : problemMessages.failed
+      })
       return null
     } finally {
       setBusy(null)

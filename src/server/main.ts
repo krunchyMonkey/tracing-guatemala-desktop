@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import { DatabaseTooNewError } from '../main/database/migrations'
 import { DataDirInUseError, defaultLiveDataDir } from './data-dir'
 import { LanHostError } from './lan'
+import { initLanTestProfile } from './lan-profile'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
 import { openInBrowser } from './open-browser'
 import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
@@ -16,8 +17,10 @@ import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 // dist-web/client/. Unless --no-demo is given it also serves the fictional demo
 // (dist-demo/) on the next port as http://localhost:<port + 1>/ (#114).
 // --lan-host <private IPv4 address of this computer> adds an opt-in, unencrypted
-// home-network listener that serves the page only and no data (#135). It is a
-// flag and not an environment variable so nothing can switch it on by accident.
+// home-network listener (#135) for paired devices (#136). It is unencrypted, so it
+// only starts on a folder marked as fictional test data, made once with
+// --init-lan-test-profile --data-dir <new folder>. It is a flag and not an
+// environment variable so nothing can switch it on by accident.
 
 declare const __APP_VERSION__: string
 
@@ -27,11 +30,13 @@ const { values } = parseArgs({
     'data-dir': { type: 'string' },
     open: { type: 'boolean', default: false },
     'no-demo': { type: 'boolean' },
-    'lan-host': { type: 'string' }
+    'lan-host': { type: 'string' },
+    'init-lan-test-profile': { type: 'boolean' }
   }
 })
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
 const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? defaultLiveDataDir())
+const lanHost = values['lan-host'] ?? null
 const staticDir = fileURLToPath(new URL('../client/', import.meta.url))
 const demoDir = fileURLToPath(new URL('../../dist-demo/', import.meta.url))
 
@@ -42,6 +47,20 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
 if (!existsSync(join(staticDir, 'index.html'))) {
   console.error('The web app is not built. Run `npm run web:build` first.')
   process.exit(1)
+}
+
+if (values['init-lan-test-profile']) {
+  if (!lanHost || !values['data-dir']) {
+    console.error('--init-lan-test-profile needs both --lan-host <address> and an explicit --data-dir <new folder>. It prepares a profile for fictional test data only.')
+    process.exit(1)
+  }
+  try {
+    initLanTestProfile(dataDir)
+  } catch (error) {
+    console.error(error instanceof LanHostError ? error.message : 'The test profile could not be prepared. Nothing was started.')
+    process.exit(1)
+  }
+  console.log('Prepared a fictional-test-data profile. Use it for fictional data only: HTTP on the home network is unencrypted.')
 }
 
 // The demo is a convenience: whatever goes wrong here, Live still starts without it.
@@ -59,7 +78,6 @@ if (!values['no-demo']) {
   }
 }
 
-const lanHost = values['lan-host'] ?? null
 
 let server: Awaited<ReturnType<typeof startLiveServer>>
 try {
@@ -93,14 +111,15 @@ const lanNote = server.lanOrigin
   ? `
   Home network (opt-in): ${server.lanOrigin}/
     UNENCRYPTED HTTP, trusted home network only. Anyone on this network can read
-    or change the traffic. Devices can't open any data yet: device sign-in isn't
-    available in this version. Never forward this port on your router or expose
-    it to the internet.
+    or change the traffic, including pairing codes and sessions. FICTIONAL TEST
+    DATA ONLY. Pair a device from Settings on this computer: the pairing code is
+    shown there. Pairing controls who can sign in; it does not encrypt anything.
+    Never forward this port on your router or expose it to the internet.
 `
   : ''
 
 console.log(`
-Tracing Guatemala — Live (${server.lanOrigin ? 'your real data; the private link works on this computer only' : 'your real data, this computer only'})
+Tracing Guatemala — Live (${server.lanOrigin ? 'fictional test data; the private link works on this computer only' : 'your real data, this computer only'})
 
   Open this private link in your browser on THIS computer:
     ${server.launchUrl}

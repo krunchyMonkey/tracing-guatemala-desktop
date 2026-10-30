@@ -5,7 +5,8 @@ import type { IncomingMessage } from 'node:http'
 //  1. Bound address: each listener accepts only its own Host header (the
 //     loopback one 127.0.0.1:<port>; the opt-in home-network one, #135, only
 //     <its private address>:<port>), which defeats DNS rebinding. The
-//     home-network listener never reaches steps 2-4: it refuses all data calls.
+//     home-network listener never uses steps 2-4: paired devices (#136, see
+//     devices.ts) have their own enrollment, session cookie and CSRF token.
 //  2. Launch link: the host prints a secret link when it starts. Opening it
 //     gives the browser an HttpOnly, SameSite=Strict session cookie. Other OS
 //     users and other devices never see the link.
@@ -71,6 +72,18 @@ export const sessionCookieName = (port: number) => `tg_live_${port}`
 
 export function sessionCookie(port: number, id: string): string {
   return `${sessionCookieName(port)}=${id}; Path=/; HttpOnly; SameSite=Strict`
+}
+
+/** Home-network device sessions (#136) use their own cookie name, never the loopback one. */
+export const lanCookieName = (port: number) => `tg_lan_${port}`
+
+/** `Secure` is added automatically when the listener's origin is HTTPS. */
+export function lanSessionCookie(port: number, id: string, secure: boolean): string {
+  return `${lanCookieName(port)}=${id}; Path=/; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`
+}
+
+export function lanClearCookie(port: number, secure: boolean): string {
+  return `${lanCookieName(port)}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? '; Secure' : ''}`
 }
 
 export function readCookie(req: IncomingMessage, name: string): string | undefined {

@@ -78,9 +78,40 @@ export interface CaseApi {
  */
 export type BackupStatusApi = () => Promise<BackupStatus>
 
+/** A paired home-network device, as the host lists it (#136). Never carries a session id. */
+export interface LanDevice {
+  id: string
+  name: string
+  enrolledAt: string
+  lastSeenAt: string
+}
+
+/** Host-only home-network administration (#136). Only the loopback (host) session can make these calls. */
+export interface LanAdminApi {
+  getLanStatus(): Promise<{ enabled: boolean; origin: string | null }>
+  createPairingCode(): Promise<{ code: string; expiresAt: string }>
+  listDevices(): Promise<LanDevice[]>
+  revokeDevice(id: string): Promise<{ revoked: boolean }>
+  revokeAllDevices(): Promise<{ revoked: number }>
+}
+
 export type AppRuntime =
   | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null; backupStatus?: null; switcher: ModeSwitch }
-  | { mode: 'live'; data: AppDataApi; backup: BackupApi; cases: CaseApi; backupStatus?: BackupStatusApi | null; switcher: ModeSwitch }
+  | {
+      mode: 'live'
+      data: AppDataApi
+      /** Null on a paired home-network device (#136): backups stay on the researcher's computer. */
+      backup: BackupApi | null
+      cases: CaseApi
+      backupStatus?: BackupStatusApi | null
+      switcher: ModeSwitch
+      /** True on a paired home-network device. */
+      remote?: boolean
+      /** Host (loopback) only. */
+      lan?: LanAdminApi
+      /** Remote only: ends this device's session on the host. */
+      signOut?: () => Promise<void>
+    }
   | { mode: 'demo'; data: AppDataApi; backup: null; cases: CaseApi | null; backupStatus?: null; switcher: ModeSwitch }
 
 /**

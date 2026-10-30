@@ -96,9 +96,82 @@ Off by default. `npm run live -- --lan-host <address>` (or `web:local`) starts a
 - **No wildcard, no UPnP, no port forwarding.** After binding, the bound address must equal the requested one.
 - **Fail closed:** the address is validated before anything is bound or opened. If the second listener cannot start (for example the port is busy on that address) the loopback listener, the database and the folder lock are all released and the command exits with an error.
 - **Host allowlist:** built from the bound address and port: `<address>:<port>` only. `localhost`, `127.0.0.1`, hostnames and other ports get `421 bad-host`. The loopback listener in turn refuses the LAN Host. Origin checks compare against each listener's own configured origin, with the scheme as a parameter so HTTPS can follow.
-- **Data API closed until device sign-in (#136):** the LAN listener serves the static client (same CSP and security headers). `GET /api/v1/session` answers `{ authenticated: false, demoUrl: null, remote: true }` without looking up sessions, and the signed-out page then says Live on the home network cannot open data yet. Every other `/api` path, any method, is `401 not-signed-in`. `/launch` is `404`. No `Set-Cookie`, no CORS headers. Log lines start with `lan ` and hold only method, route label and status.
+- **Data API (#136):** the LAN listener serves the static client (same CSP and security headers) and a device-enrollment and session API for paired household devices; see the next section. Without a device session every other `/api` path is `401 not-signed-in`. `/launch` is `404`. No CORS headers. Log lines start with `lan ` and hold only method, route label and status.
 - **Unencrypted:** traffic is plain HTTP. Anyone on the network can read or change it. The banner says so. Only use a trusted home network; never forward the port on a router.
-- The private launch link, `--open` and sessions stay loopback-only.
+- The private launch link, `--open` and the loopback session stay loopback-only. The listener only starts on a profile marked as fictional test data (#136).
+
+## Household-device enrollment and LAN sessions (#136)
+
+**Plain HTTP does not encrypt anything.** Pairing decides *who may sign in*; it does not protect the pairing code, the session cookie or any record from someone who can see the home network. Nothing in the app or these docs describes pairing as protection against interception.
+
+### Real-data gate (the owner's rule: no real client data over HTTP LAN in this phase)
+
+`--lan-host` is refused with a plain-English `LanHostError`, before anything is bound or opened, when:
+
+- `--data-dir` resolves (symlinks included) to the default profile (`defaultLiveDataDir()`), whatever else is true; or
+- `<data-dir>/lan-test-profile.json` is missing or is not `{ "kind": "fictional-test", ... }`.
+
+`npm run live -- --lan-host <address> --data-dir <new folder> --init-lan-test-profile` writes the marker. It needs both `--lan-host` and an explicit `--data-dir`, and refuses unless the folder does not exist or is empty (so a real profile is never relabelled by this flag), and never for the default profile. While the listener is on, `restoreBackup` and the backup upload on loopback answer `409 restore-disabled-while-lan`, so a real backup cannot be imported into a LAN-exposed profile. Making a backup on the host still works. Real records need the HTTPS phase (#139).
+
+### Enrollment and session model (`src/server/devices.ts`, memory only)
+
+A host restart forgets every code, device and session; devices pair again.
+
+| Item | Rule |
+| --- | --- |
+| Pairing code | 8 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (`crypto.randomInt`), shown `ABCD-EFGH`; input is uppercased and spaces and `-` removed; compared with `timingSafeEqual` after a length check. Valid 5 minutes. One active code: a new one replaces the old. 5 wrong attempts invalidate it. A successful enrollment consumes it. |
+| Enrollment limiter | At most 10 attempts per rolling 60 s across all clients; beyond that `429 too-many-attempts`, without looking at the code. |
+| Device | `{ id, name, enrolledAt, lastSeenAt }`; `id` is 16 random bytes (base64url), public, used only to revoke. At most 10 (`409 too-many-devices`). Name trimmed, 1 to 40 characters, no control characters, default "Device". |
+| Session | One per device: 32 random bytes id, separate CSRF token, looked up with a constant-time compare. Idle expiry 60 min, absolute expiry 12 h; expired sessions are deleted on lookup (and swept on enrollment and listing). Every authorized request refreshes `lastSeenAt`. |
+| Rotation | Enrolling with a LAN session cookie already present drops that old session and device once the new code is accepted. |
+| Cookie | `tg_lan_<port>=<id>; Path=/; HttpOnly; SameSite=Strict`, plus `; Secure` automatically when the listener origin starts with `https:`. Logout clears it with `Max-Age=0`. The loopback cookie is `tg_live_<port>`; neither store ever consults the other. |
+
+The operator sees "A device was paired on the home network." on the console: no name, no code. All LAN log lines carry only method, route template and status.
+
+### Endpoints on the home-network listener
+
+Host check first (`421 bad-host`). `/launch` is `404` and never touches the launch token. No CORS headers anywhere.
+
+| Request | Behaviour |
+| --- | --- |
+| `GET /api/v1/session` | Valid device session: `{ authenticated: true, csrfToken, demoUrl: null, remote: true, device: { name } }`; otherwise `{ authenticated: false, demoUrl: null, remote: true }`. |
+| `POST /api/v1/lan/enroll` | Origin must equal the LAN origin and `Sec-Fetch-Site` be `same-origin` when sent (403 `not-same-origin`); `application/json` (415); body at most 4 KB; strict `{ code: string (max 20), deviceName?: string }` (400); limiter (429); then the code. Wrong, expired and used codes all answer `401 invalid-code`. Success sets the cookie and returns `{ result: { device: { name } } }`. Failures never set a cookie. |
+| `POST /api/v1/lan/logout` | Origin, device session and CSRF header; removes the device and clears the cookie. |
+| `POST /api/v1/call/<name>` | Origin (403), device session (401), CSRF (403), then the name must be in the remote allowlist (403 `host-only`); validation and execution are shared with loopback. |
+| `/api/v1/backup/upload`, `/api/v1/backup/download/*` | `403 host-only`, with no body read. |
+| Other `/api/*` | `401 not-signed-in` when signed out, `404` when signed in. |
+
+### Permission matrix
+
+| Call | Host (loopback session) | Paired device |
+| --- | --- | --- |
+| Clients, notes, cases, briefs, journal, tasks, hours, timer, studio summary, app info | yes | yes |
+| `createBackup`, `restoreBackup`, `getBackupStatus`, backup upload and download | yes (restore and upload are off while the LAN listener is on) | no, `403 host-only` |
+| `getLanStatus`, `createPairingCode` (`409 lan-off` if the listener is off), `listDevices`, `revokeDevice`, `revokeAllDevices` | yes | no, `403 host-only` |
+
+The remote allowlist is `callable` minus the host-only names (`REMOTE_CALL_NAMES` in `live-host.ts`).
+
+### Threat model rows added by #136
+
+| Threat | Protection | Test |
+| --- | --- | --- |
+| Pairing-code brute force | 31^8 code space, 5-failure invalidation, 5-minute life, global 10 per 60 s limiter. A LAN neighbour can still block enrollment for the others by spamming attempts (a denial of service, not a break-in); the host just shows a new code. | `devices.test.ts`, `live-lan.test.ts` |
+| Code replay | Single use; a used, expired or wrong code gives the same `401` | `live-lan.test.ts` |
+| Revocation | Per device and all devices from Settings on the host; takes effect on the next call. Expiry: 60 min idle, 12 h absolute | `devices.test.ts`, `live-lan.test.ts` |
+| Cross-origin or cross-site writes | LAN Origin match, `Sec-Fetch-Site`, `SameSite=Strict`, per-session CSRF header, no CORS | `live-lan.test.ts` |
+| Host-only action by a paired device | Remote allowlist; backups and administration are `403 host-only` | `live-lan.test.ts` |
+| Loopback session reused on LAN, or the reverse | Separate stores and cookie names | `live-lan.test.ts` |
+| Real backup imported into a LAN-exposed profile | Restore and upload refused on loopback while the listener is on | `live-lan.test.ts` |
+| Real data exposed over HTTP | Real-data gate (default profile refused; marker required) | `live-lan.test.ts` |
+| **Session theft, code theft or record sniffing over plaintext HTTP** | **Not mitigated.** Anyone who can observe the network can read the code, the cookie and every record, and can hijack a session. `HttpOnly` and `SameSite` do not help against that. Only HTTPS (#139) does. Use a trusted network and fictional data only. | n/a |
+
+### HTTPS migration contract
+
+The session model is meant to carry over unchanged. The cookie gains `Secure` by itself when the listener origin starts with `https:`; the endpoints, cookie name, CSRF and Origin rules stay as they are (the origin is configuration, not request input). #139 must add TLS and must refuse plain HTTP for real data: the real-data gate is lifted only for an HTTPS listener, never for HTTP.
+
+### Recovery when the LAN IP changes
+
+The listener is bound to one address, so a changed address means the old one no longer works. Stop the host, restart with `--lan-host <new address>`, and pair devices again (the host forgets all devices on restart anyway; the cookie is also bound to the old host name). Nothing is guessed or auto-picked.
 
 ## Demo and Live on the host (#114)
 
