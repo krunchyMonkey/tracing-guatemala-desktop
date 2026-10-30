@@ -35,7 +35,7 @@ export function desktopProfileDir(platform: Platform = currentPlatform()): strin
   return join(appDataRoot(platform), DESKTOP_PROFILE_NAME)
 }
 
-const sameDir = (a: string, b: string, platform: NodeJS.Platform) =>
+export const sameDir = (a: string, b: string, platform: NodeJS.Platform) =>
   platform === 'win32' || platform === 'darwin' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b)
 
 /**

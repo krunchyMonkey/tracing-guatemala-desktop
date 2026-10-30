@@ -1,5 +1,5 @@
 import type { BackupChoice } from '../../../shared/ipc'
-import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi } from '../runtime/AppRuntime'
+import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi, LanAdminApi } from '../runtime/AppRuntime'
 
 // The Live web app's data calls (#110): same-origin fetches to the loopback
 // local web host (src/server/live-host.ts). Every call carries the session's
@@ -11,7 +11,8 @@ const CSRF_HEADER = 'X-TG-CSRF'
 
 /** `demoUrl` is the host's fictional-demo address (#114); untrusted until web/demoLink.ts checks it. */
 export type SessionState =
-  { authenticated: true; csrfToken: string; demoUrl?: unknown } | { authenticated: false; demoUrl?: unknown; remote?: boolean }
+  | { authenticated: true; csrfToken: string; demoUrl?: unknown; remote?: boolean; device?: { name?: unknown } }
+  | { authenticated: false; demoUrl?: unknown; remote?: boolean }
 
 /** Thrown for any failed call; carries only the host's error code. */
 export class LiveApiError extends Error {
@@ -25,6 +26,30 @@ export async function fetchSession(fetchImpl: typeof fetch = fetch): Promise<Ses
   const response = await fetchImpl(`${API_PREFIX}/session`, { credentials: 'same-origin', cache: 'no-store' })
   if (!response.ok) throw new LiveApiError(`http-${response.status}`)
   return (await response.json()) as SessionState
+}
+
+/**
+ * Pairs this browser with the host using the code shown on the researcher's
+ * computer (#136). Resolves on success (the browser now holds the session
+ * cookie); rejects with the host's error code, or `unreachable`.
+ */
+export async function enrollDevice(code: string, deviceName: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  let response: Response
+  try {
+    response = await fetchImpl(`${API_PREFIX}/lan/enroll`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(deviceName.trim() ? { code, deviceName } : { code })
+    })
+  } catch {
+    throw new LiveApiError('unreachable')
+  }
+  if (!response.ok) {
+    const error = (await response.json().catch(() => null)) as { error?: unknown } | null
+    throw new LiveApiError(typeof error?.error === 'string' ? error.error : `http-${response.status}`)
+  }
 }
 
 interface LiveApiOptions {
@@ -65,6 +90,9 @@ export function createLiveApi(options: LiveApiOptions): {
   backup: BackupApi
   backupStatus: BackupStatusApi
   cases: CaseApi
+  lan: LanAdminApi
+  /** Ends this paired device's session (home-network devices only). */
+  signOut: () => Promise<void>
 } {
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init))
   const pickFile = options.pickFile ?? pickBackupFile
@@ -156,5 +184,17 @@ export function createLiveApi(options: LiveApiOptions): {
     getStudioSummary: () => call('getStudioSummary')
   }
 
-  return { data, backup, backupStatus, cases }
+  const lan: LanAdminApi = {
+    getLanStatus: () => call('getLanStatus'),
+    createPairingCode: () => call('createPairingCode'),
+    listDevices: () => call('listDevices'),
+    revokeDevice: (id) => call('revokeDevice', id),
+    revokeAllDevices: () => call('revokeAllDevices')
+  }
+
+  const signOut = async () => {
+    await post('/lan/logout', '{}', { 'Content-Type': 'application/json' })
+  }
+
+  return { data, backup, backupStatus, cases, lan, signOut }
 }

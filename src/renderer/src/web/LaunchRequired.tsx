@@ -6,23 +6,10 @@ export function LaunchRequired({
   reason,
   demoHref = null
 }: {
-  reason: 'signed-out' | 'session-ended' | 'unreachable' | 'remote'
+  reason: 'signed-out' | 'session-ended' | 'unreachable'
   /** A checked address of the fictional demo (#114); never offered when the host is unreachable. */
   demoHref?: string | null
 }) {
-  if (reason === 'remote') {
-    // Reached over the home network (#135): no data and no private-link instructions.
-    return (
-      <main className="launch-required" aria-labelledby="launch-heading">
-        <section className="card">
-          <h1 id="launch-heading">Can’t open data from here yet</h1>
-          <p>
-            Live on the home network can’t open data yet. Device sign-in isn’t available in this version. Use Tracing Guatemala on the researcher’s computer.
-          </p>
-        </section>
-      </main>
-    )
-  }
   const heading = reason === 'unreachable' ? 'Tracing Guatemala isn’t running' : 'Open Tracing Guatemala from its link'
   return (
     <main className="launch-required" aria-labelledby="launch-heading">

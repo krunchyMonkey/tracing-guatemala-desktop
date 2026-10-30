@@ -590,5 +590,26 @@ export const liveContracts = {
       fileName: z.string().min(1).nullable(),
       backupCount: count
     }) satisfies z.ZodType<BackupStatus>
+  },
+  // Host-only home-network device administration (#136): loopback session only, never callable from a paired device.
+  getLanStatus: {
+    args: z.tuple([]),
+    result: z.strictObject({ enabled: z.boolean(), origin: z.string().min(1).max(200).nullable() })
+  },
+  createPairingCode: {
+    args: z.tuple([]),
+    result: z.strictObject({ code: z.string().min(1).max(20), expiresAt: timestamp })
+  },
+  listDevices: {
+    args: z.tuple([]),
+    result: z.array(z.strictObject({ id: z.string().min(1).max(64), name: z.string().min(1).max(80), enrolledAt: timestamp, lastSeenAt: timestamp }))
+  },
+  revokeDevice: {
+    args: z.tuple([z.string().min(1).max(64)]),
+    result: z.strictObject({ revoked: z.boolean() })
+  },
+  revokeAllDevices: {
+    args: z.tuple([]),
+    result: z.strictObject({ revoked: count })
   }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

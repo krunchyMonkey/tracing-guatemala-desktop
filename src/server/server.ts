@@ -5,14 +5,15 @@ import { AppData } from '../main/database/app-data'
 import type { AppInfo } from '../shared/ipc'
 import { acquireDataDirLock, checkLiveDataDir } from './data-dir'
 import { LanHostError, validateLanHost } from './lan'
+import { assertLanDataAllowed } from './lan-profile'
 import { createLiveHost, type LiveHost } from './live-host'
 
 // Starts the Live web host (#110): opens the web profile's database, then
 // serves the API and the built client on 127.0.0.1. By default that is the only
 // listener. With an explicit `lanHost` (#135) a second listener binds to that one
-// validated private IPv4 address; it serves the static client only and refuses
-// every data call until device sign-in exists (#136). Any failure to set it up
-// closes everything and rethrows (fail closed). See
+// validated private IPv4 address; paired devices (#136) may use it, but only on
+// a profile marked as fictional test data (lan-profile.ts). Any failure to set it
+// up closes everything and rethrows (fail closed). See
 // docs/architecture/web-first-runtime.md.
 
 export const LIVE_HOST = '127.0.0.1'
@@ -31,6 +32,8 @@ export interface StartLiveServerOptions {
   /** Test-only: replaces `os.networkInterfaces()` when validating `lanHost`. */
   lanInterfaces?: NodeJS.Dict<NetworkInterfaceInfo[]>
   log?: (line: string) => void
+  /** Test-only: the clock for device and pairing-code expiry. */
+  now?: () => Date
 }
 
 export interface RunningLiveServer {
@@ -103,6 +106,8 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
     const checked = validateLanHost(options.lanHost, options.lanInterfaces)
     if (!checked.ok) throw new LanHostError(checked.error)
     lanAddress = checked.address
+    // Plain HTTP: only a profile marked as fictional test data may be exposed.
+    assertLanDataAllowed(options.dataDir)
   }
 
   // The real port is needed for Host checks, so a free port is found first.

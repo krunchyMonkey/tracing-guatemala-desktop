@@ -98,14 +98,6 @@ describe('LaunchRequired', () => {
     expect(screen.getByText(/private link shown in the Tracing Guatemala window/)).toBeTruthy()
   })
 
-  it('on the home network says data is not available and never shows the private-link instructions', () => {
-    render(<LaunchRequired reason="remote" demoHref="http://localhost:4181/?live=4180" />)
-    expect(screen.getByText(/Live on the home network can’t open data yet/)).toBeTruthy()
-    expect(screen.getByText(/Device sign-in isn’t available in this version/)).toBeTruthy()
-    expect(screen.queryByText(/private link/)).toBeNull()
-    expect(screen.queryByRole('link')).toBeNull()
-  })
-
   it('says nothing was lost after a restart', () => {
     render(<LaunchRequired reason="session-ended" />)
     expect(screen.getByText(/Nothing was lost/)).toBeTruthy()

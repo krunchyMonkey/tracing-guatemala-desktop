@@ -1,6 +1,6 @@
 import { createReadStream, statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { z } from 'zod'
+import { z } from 'zod'
 import { caseContracts, contracts, liveContracts, type CallContract } from '../main/contracts'
 import { createDataServices } from '../main/data-services'
 import type { AppData } from '../main/database/app-data'
@@ -14,12 +14,16 @@ import {
   isNotCrossSite,
   isSameOriginRequest,
   lanAllowedHosts,
+  lanClearCookie,
+  lanCookieName,
+  lanSessionCookie,
   readCookie,
   sessionCookie,
   sessionCookieName,
   SessionStore,
   type Session
 } from './access'
+import { DeviceAccess, type Device, type DeviceSession } from './devices'
 import { createWebBackupService, MAX_UPLOAD_BYTES, UploadTooLargeError } from './backup'
 
 // The Live web host's HTTP handler (#110): a small, versioned, same-origin JSON
@@ -32,6 +36,7 @@ export const API_PREFIX = '/api/v1'
 export const LAUNCH_PATH = '/launch'
 // Room for a full research brief at its raw bound (five sections, up to 4 bytes per character).
 const MAX_JSON_BYTES = 256 * 1024
+const MAX_ENROLL_BYTES = 4 * 1024
 
 /** The data calls the browser may make, by name. Backup file choice is an upload instead. */
 const callable = {
@@ -78,11 +83,34 @@ const callable = {
   heartbeatTimer: caseContracts.heartbeatTimer,
   stopAndSaveTimer: caseContracts.stopAndSaveTimer,
   discardTimer: caseContracts.discardTimer,
-  getStudioSummary: caseContracts.getStudioSummary
+  getStudioSummary: caseContracts.getStudioSummary,
+  // Host-only device administration (#136): never reachable from a paired device.
+  getLanStatus: liveContracts.getLanStatus,
+  createPairingCode: liveContracts.createPairingCode,
+  listDevices: liveContracts.listDevices,
+  revokeDevice: liveContracts.revokeDevice,
+  revokeAllDevices: liveContracts.revokeAllDevices
 } as const
 
 export type CallName = keyof typeof callable
 export const CALL_NAMES = Object.keys(callable) as CallName[]
+
+/** Calls only the loopback (host) session may make: backups and device administration. */
+const HOST_ONLY_CALLS: ReadonlySet<string> = new Set([
+  'createBackup',
+  'restoreBackup',
+  'getBackupStatus',
+  'getLanStatus',
+  'createPairingCode',
+  'listDevices',
+  'revokeDevice',
+  'revokeAllDevices'
+])
+/** What a paired home-network device may call: everything except the host-only calls. */
+export const REMOTE_CALL_NAMES: readonly CallName[] = CALL_NAMES.filter((name) => !HOST_ONLY_CALLS.has(name))
+const remoteCallable: ReadonlySet<string> = new Set(REMOTE_CALL_NAMES)
+
+const enrollBody = z.strictObject({ code: z.string().max(20), deviceName: z.string().max(200).optional() })
 
 /** Error codes the API returns. They never include submitted or stored values. */
 export type ApiErrorCode =
@@ -97,6 +125,12 @@ export type ApiErrorCode =
   | 'not-found'
   | 'method-not-allowed'
   | 'internal-error'
+  | 'host-only'
+  | 'invalid-code'
+  | 'too-many-attempts'
+  | 'too-many-devices'
+  | 'lan-off'
+  | 'restore-disabled-while-lan'
 
 /** What one listener accepts: its Host allowlist and its own origin (scheme included). */
 export interface ListenerPolicy {
@@ -127,7 +161,7 @@ export interface LiveHostOptions {
 export interface LiveHost {
   /** Handles the request and returns true, or returns false to let Vite serve it (dev only). */
   handle(req: IncomingMessage, res: ServerResponse): boolean
-  /** Present only when `options.lan` is set: the static client and nothing else (data is closed until device sign-in, #136). */
+  /** Present only when `options.lan` is set: the static client, device enrollment (#136) and the remote-allowed data calls of paired devices. */
   handleLan?: (req: IncomingMessage, res: ServerResponse) => boolean
   /** Path of the secret launch link, for printing to the person who started the host. */
   launchPath: string
@@ -152,10 +186,10 @@ class RequestError extends Error {
   }
 }
 
-function readJsonBody(req: IncomingMessage): Promise<unknown> {
+function readJsonBody(req: IncomingMessage, maxBytes = MAX_JSON_BYTES): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const announced = Number(req.headers['content-length'] ?? 0)
-    if (announced > MAX_JSON_BYTES) {
+    if (announced > maxBytes) {
       reject(new RequestError(413, 'too-large'))
       return
     }
@@ -165,7 +199,7 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
     req.on('data', (chunk: Buffer) => {
       if (failed) return
       size += chunk.length
-      if (size > MAX_JSON_BYTES) {
+      if (size > maxBytes) {
         failed = true
         reject(new RequestError(413, 'too-large'))
         return
@@ -193,6 +227,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const demoUrl = options.demoUrl ?? null
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
+  const devices = new DeviceAccess({ now: options.now })
   const backup = createWebBackupService(options.dataDir, data, options.now)
   const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
@@ -245,7 +280,15 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     heartbeatTimer: ([version]) => time.heartbeat(version),
     stopAndSaveTimer: ([version, options]) => time.stopAndSave(version, options),
     discardTimer: ([version]) => time.discard(version),
-    getStudioSummary: () => studio.summary()
+    getStudioSummary: () => studio.summary(),
+    getLanStatus: () => ({ enabled: lan !== null, origin: lan?.origin ?? null }),
+    createPairingCode: () => {
+      if (!lan) throw new RequestError(409, 'lan-off')
+      return devices.createCode()
+    },
+    listDevices: () => (lan ? devices.listDevices() : []),
+    revokeDevice: ([id]) => ({ revoked: devices.revokeDevice(id) }),
+    revokeAllDevices: () => ({ revoked: devices.revokeAll() })
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
@@ -271,9 +314,25 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     return session
   }
 
-  async function handleCall(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
-    authorizeWrite(req)
-    if (!Object.hasOwn(callable, name)) throw new RequestError(404, 'not-found')
+  /** Home-network writes: the LAN origin, a paired device's session and its CSRF token. */
+  function authorizeLan(req: IncomingMessage, policy: ListenerPolicy): { session: DeviceSession; device: Device } {
+    if (!isSameOriginRequest(req, policy.origin)) throw new RequestError(403, 'not-same-origin')
+    const found = devices.find(readCookie(req, lanCookieName(port)))
+    if (!found) throw new RequestError(401, 'not-signed-in')
+    if (!devices.checkCsrf(found.session, req.headers[CSRF_HEADER])) throw new RequestError(403, 'bad-csrf-token')
+    return found
+  }
+
+  async function handleCall(req: IncomingMessage, res: ServerResponse, name: string, remote: ListenerPolicy | null = null): Promise<void> {
+    if (remote) {
+      authorizeLan(req, remote)
+      if (!remoteCallable.has(name)) throw new RequestError(403, 'host-only')
+    } else {
+      authorizeWrite(req)
+      if (!Object.hasOwn(callable, name)) throw new RequestError(404, 'not-found')
+      // A real backup must never be importable into a profile the home network can reach.
+      if (lan && name === 'restoreBackup') throw new RequestError(409, 'restore-disabled-while-lan')
+    }
     if (mediaType(req) !== 'application/json') throw new RequestError(415, 'unsupported-media-type')
     const body = await readJsonBody(req)
     if (typeof body !== 'object' || body === null || !Array.isArray((body as { args?: unknown }).args)) {
@@ -288,6 +347,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       const impl = implementations[name as CallName] as (args: unknown) => unknown
       result = contract.result.parse(await impl(parsed.data))
     } catch (error) {
+      if (error instanceof RequestError) throw error
       // Database and schema errors can quote stored values: log only the error name.
       console.error(`API ${name} failed: ${error instanceof Error ? error.name : 'unknown error'}`)
       throw new RequestError(500, 'internal-error')
@@ -297,6 +357,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
 
   async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<void> {
     authorizeWrite(req)
+    if (lan) throw new RequestError(409, 'restore-disabled-while-lan')
     if (mediaType(req) !== 'application/octet-stream') throw new RequestError(415, 'unsupported-media-type')
     const announced = Number(req.headers['content-length'])
     if (!Number.isInteger(announced) || announced < 0) throw new RequestError(400, 'invalid-request')
@@ -408,9 +469,11 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   }
 
   /**
-   * The home-network listener (#135). It serves the static client and answers
-   * the session probe as signed-out; every other /api path is refused before any
-   * body or session is read. No cookie is ever set or read, and there is no CORS.
+   * The home-network listener (#135, #136). It serves the static client, lets a
+   * paired device (enrolled with a pairing code shown on the host) call the
+   * remote-allowed data calls, and refuses everything else. The loopback launch
+   * token and session store are never consulted. There is no CORS. Logs hold
+   * the method, a route template and the status only.
    */
   function handleLanRequest(policy: ListenerPolicy, req: IncomingMessage, res: ServerResponse): boolean {
     const logLan = (line: string) => log(`lan ${line}`)
@@ -424,39 +487,99 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     }
     const path = url.pathname
     const isApi = path === '/api' || path.startsWith('/api/')
-    const finish = (label: string, status: number, code: ApiErrorCode | null) => {
+    const fail = (label: string, status: number, code: ApiErrorCode) => {
       logLan(`${method} ${label} ${status}`)
-      if (code) {
-        if (!req.complete) res.setHeader('Connection', 'close')
-        sendError(res, status, code)
-      }
+      // Don't keep reading a rejected body: answer, then drop the connection.
+      if (!req.complete) res.setHeader('Connection', 'close')
+      sendError(res, status, code)
     }
 
     if (!hostIsAllowed(req, policy.hosts)) {
-      finish(isApi ? 'api' : 'static', 421, 'bad-host')
+      fail(isApi ? 'api' : 'static', 421, 'bad-host')
       return true
     }
     if (path === LAUNCH_PATH) {
-      finish(LAUNCH_PATH, 404, 'not-found')
+      fail(LAUNCH_PATH, 404, 'not-found')
       return true
     }
-    if (path === `${API_PREFIX}/session` && method === 'GET') {
-      send(res, 200, { authenticated: false, demoUrl: null, remote: true })
-      logLan(`${method} ${path} 200`)
-      return true
-    }
-    if (isApi) {
-      finish('api', 401, 'not-signed-in')
-      return true
-    }
-    try {
-      handleStatic(req, res, url)
-      logLan(`${method} static ${res.statusCode}`)
-    } catch (error) {
-      const failure = error instanceof RequestError ? error : new RequestError(500, 'internal-error')
-      finish('static', failure.status, failure.code)
-    }
+    const ctx = { label: isApi ? 'api' : 'static' }
+    void lanRoute(policy, req, res, url, ctx).then(
+      () => logLan(`${method} ${ctx.label} ${res.statusCode}`),
+      (error: unknown) => {
+        const failure = error instanceof RequestError ? error : new RequestError(500, 'internal-error')
+        if (failure.status === 500) console.error(`API request failed: ${error instanceof Error ? error.name : 'unknown error'}`)
+        if (res.headersSent) {
+          logLan(`${method} ${ctx.label} ${failure.status}`)
+          res.destroy()
+          return
+        }
+        fail(ctx.label, failure.status, failure.code)
+      }
+    )
     return true
+  }
+
+  async function lanRoute(policy: ListenerPolicy, req: IncomingMessage, res: ServerResponse, url: URL, ctx: { label: string }): Promise<void> {
+    const path = url.pathname
+    const method = req.method ?? 'GET'
+    const secure = policy.origin.startsWith('https:')
+    const cookieId = () => readCookie(req, lanCookieName(port))
+
+    if (path === `${API_PREFIX}/session` && method === 'GET') {
+      ctx.label = path
+      const found = devices.find(cookieId())
+      send(
+        res,
+        200,
+        found
+          ? { authenticated: true, csrfToken: found.session.csrfToken, demoUrl: null, remote: true, device: { name: found.device.name } }
+          : { authenticated: false, demoUrl: null, remote: true }
+      )
+      return
+    }
+    if (path === `${API_PREFIX}/lan/enroll` && method === 'POST') {
+      ctx.label = path
+      if (!isSameOriginRequest(req, policy.origin)) throw new RequestError(403, 'not-same-origin')
+      if (mediaType(req) !== 'application/json') throw new RequestError(415, 'unsupported-media-type')
+      const parsed = enrollBody.safeParse(await readJsonBody(req, MAX_ENROLL_BYTES))
+      if (!parsed.success) throw new RequestError(400, 'invalid-request')
+      const result = devices.enroll(parsed.data.code, parsed.data.deviceName, cookieId())
+      if (!result.ok) {
+        if (result.reason === 'too-many-attempts') throw new RequestError(429, 'too-many-attempts')
+        if (result.reason === 'too-many-devices') throw new RequestError(409, 'too-many-devices')
+        if (result.reason === 'invalid-name') throw new RequestError(400, 'invalid-request')
+        throw new RequestError(401, 'invalid-code')
+      }
+      log('A device was paired on the home network.')
+      send(res, 200, { result: { device: { name: result.device.name } } }, { 'Set-Cookie': lanSessionCookie(port, result.session.id, secure) })
+      return
+    }
+    if (path === `${API_PREFIX}/lan/logout` && method === 'POST') {
+      ctx.label = path
+      const { session } = authorizeLan(req, policy)
+      devices.logout(session.id)
+      send(res, 200, { result: { ok: true } }, { 'Set-Cookie': lanClearCookie(port, secure) })
+      return
+    }
+    if (path.startsWith(`${API_PREFIX}/call/`) && method === 'POST') {
+      ctx.label = `${API_PREFIX}/call/:name`
+      await handleCall(req, res, path.slice(`${API_PREFIX}/call/`.length), policy)
+      return
+    }
+    // Backups never travel over the home network. Refused before any body is read.
+    if (path === `${API_PREFIX}/backup/upload`) {
+      ctx.label = path
+      throw new RequestError(403, 'host-only')
+    }
+    if (path.startsWith(`${API_PREFIX}/backup/download/`)) {
+      ctx.label = `${API_PREFIX}/backup/download/:file`
+      throw new RequestError(403, 'host-only')
+    }
+    if (path === '/api' || path.startsWith('/api/')) {
+      ctx.label = 'api'
+      throw devices.find(cookieId()) ? new RequestError(404, 'not-found') : new RequestError(401, 'not-signed-in')
+    }
+    handleStatic(req, res, url)
   }
 
   return {
