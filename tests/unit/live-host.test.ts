@@ -221,6 +221,12 @@ describe('demo address (#114)', () => {
 })
 
 describe('request protection', () => {
+  it('answers only to 127.0.0.1, never to localhost (the demo mirror’s site, #114)', async () => {
+    const live = await start()
+    expect((await send(live, 'GET', '/api/v1/session', { Host: `localhost:${live.port}` })).status).toBe(421)
+    expect((await send(live, 'GET', '/', { Host: `LOCALHOST:${live.port}` })).status).toBe(421)
+  })
+
   it('rejects a spoofed Host header (DNS rebinding) on every route', async () => {
     const live = await start()
     const signed = await signIn(live)

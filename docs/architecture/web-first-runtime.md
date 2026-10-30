@@ -61,7 +61,7 @@ Errors are `{ "error": "<code>" }` with codes such as `bad-host` (421), `not-sig
 | --- | --- | --- |
 | Another device on the LAN/Wi-Fi | Listens on `127.0.0.1` only, with no option to change it | `live-host.test.ts`: connecting via this computer's LAN address fails |
 | A malicious website in the same browser (CSRF) | Writes need `Origin` = the host's own origin, `Sec-Fetch-Site` same-origin when sent, `application/json`/`octet-stream` (forces a CORS preflight, which is refused), and the per-session CSRF header. The cookie is `SameSite=Strict`. | Unit tests; E2E "refuses writes from another site" |
-| DNS rebinding | Every route requires `Host` = `127.0.0.1:<port>` or `localhost:<port>` (421 otherwise) | Unit test on every route |
+| DNS rebinding | Every route requires `Host` = `127.0.0.1:<port>` (421 otherwise; `localhost` is refused because it's the demo mirror's site, #114) | Unit test on every route |
 | Other pages on `127.0.0.1` (e.g. the demo on loopback) | Cookies ignore ports, so another loopback port counts as same-site. Origin equality and the CSRF token still block it, and the cookie name includes the port. | Unit test with `Origin: http://127.0.0.1:4173` |
 | Another OS user on the same computer | Data is useless without a session, and sessions start only from the launch link printed in the host's own terminal | Unit tests for wrong tokens and forged cookies |
 | Clickjacking | `frame-ancestors 'none'`, `X-Frame-Options: DENY` | Header test |
@@ -116,7 +116,7 @@ Threat-model rows added by #114:
 | DNS rebinding to the mirror | Host check on every request | `demo-mirror.test.ts` |
 | Clickjacking or script injection on the demo origin | `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `script-src 'self'`, `connect-src 'none'` | `demo-mirror.test.ts` |
 
-Limits: if Live is opened as `localhost:<port>` instead of the printed `127.0.0.1` link, its cookie is host-only on `localhost`, the same site as the demo mirror. The demo page still can't read it (HttpOnly) or use it (no connections; the mirror ignores cookies), but use the printed link: the demo's "Back to Live" points at `127.0.0.1`, where that link signed in. The demo makes no requests, so it can't tell whether the host is running; "Back to Live" may lead to the browser's "can't connect" page.
+Live answers **only** to `127.0.0.1`: opening it as `localhost:<port>` is refused (421), so Live's cookie can never be set on the demo mirror's site. The demo makes no requests, so it can't tell whether the host is running; "Back to Live" may lead to the browser's "can't connect" page.
 
 ```sh
 npm run web:build                # also builds the demo (dist-demo/) that the mirror serves

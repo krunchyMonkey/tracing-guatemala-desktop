@@ -81,9 +81,13 @@ export function readCookie(req: IncomingMessage, name: string): string | undefin
   return undefined
 }
 
-/** Host headers this host answers to: its loopback address and port only. */
+/**
+ * Host headers this host answers to: 127.0.0.1 and its port only. Not `localhost`:
+ * that name is the fictional demo mirror's site (#114), so Live's cookie must never
+ * be set there.
+ */
 export function allowedHosts(port: number): string[] {
-  return [`127.0.0.1:${port}`, `localhost:${port}`]
+  return [`127.0.0.1:${port}`]
 }
 
 export function hostIsAllowed(req: IncomingMessage, port: number): boolean {
