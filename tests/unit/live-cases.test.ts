@@ -95,7 +95,18 @@ describe('case calls', () => {
         'createCaseTask',
         'updateCaseTask',
         'completeCaseTask',
-        'reopenCaseTask'
+        'reopenCaseTask',
+        'listTimeEntries',
+        'createTimeEntry',
+        'updateTimeEntry',
+        'deleteTimeEntry',
+        'getActiveTimer',
+        'startTimer',
+        'pauseTimer',
+        'resumeTimer',
+        'heartbeatTimer',
+        'stopAndSaveTimer',
+        'discardTimer'
       ])
     )
   })

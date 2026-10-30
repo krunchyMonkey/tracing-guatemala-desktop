@@ -1,5 +1,6 @@
 import type { CaseBrief } from '../../../shared/case-brief'
 import type { CaseTask } from '../../../shared/case-tasks'
+import type { ActivityType, TimeEntry } from '../../../shared/case-time'
 import type { JournalEntry } from '../../../shared/case-journal'
 import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
@@ -454,5 +455,34 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseData {
     task(8, caseIds.maternal, 'Try the spelling variants in the online index', 5)
   ]
 
-  return { cases, events, briefs, journal, tasks }
+  // Fictional research hours, dated relative to today (local calendar dates), so the
+  // week and month totals always have something to add up.
+  const hours = (
+    number: number,
+    caseId: string,
+    daysAgo: number,
+    durationMinutes: number,
+    activityType: ActivityType | null,
+    note: string | null = null
+  ): TimeEntry => ({
+    id: `de500000-0000-4000-8000-5000000000${String(number).padStart(2, '0')}`,
+    caseId,
+    workDate: due(-daysAgo),
+    durationMinutes,
+    activityType,
+    note,
+    source: number % 2 === 0 ? 'timer' : 'manual',
+    createdAt: at(daysAgo, 17),
+    updatedAt: at(daysAgo, 17)
+  })
+  const timeEntries: TimeEntry[] = [
+    hours(1, caseIds.paternal, 1, 90, 'research', 'Went through the diocesan baptism index, 1880 to 1890.'),
+    hours(2, caseIds.paternal, 3, 120, 'analysis', 'Compared the two possible baptisms.'),
+    hours(3, caseIds.paternal, 9, 45, 'correspondence'),
+    hours(4, caseIds.paternal, 40, 195, 'research', 'First pass through the family papers.'),
+    hours(5, caseIds.maternal, 6, 60, 'research'),
+    hours(6, caseIds.maternal, 2, 50, 'correspondence', 'Wrote to the municipal archive.')
+  ]
+
+  return { cases, events, briefs, journal, tasks, timeEntries }
 }

@@ -413,3 +413,53 @@ test('exports a fictional case summary as a file under the demo CSP, without con
   expect(text).not.toContain('Maternal grandparents')
   expect(requests.filter((request) => !request.includes(`http://${host}:${port}/`) || !request.startsWith('GET'))).toEqual([])
 })
+
+test('shows seeded fictional research hours, runs an in-memory timer, writes nothing to browser storage, and a refresh resets it', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const hours = page.getByRole('region', { name: 'Research hours' })
+  const entries = hours.getByRole('list', { name: 'Hours entries' }).getByRole('listitem')
+  const pill = page.getByRole('region', { name: 'Research timer' })
+  const total = hours.getByText('Total hours').locator('xpath=following-sibling::dd')
+
+  await expect(entries).toHaveCount(4)
+  await expect(total).toHaveText('7:30')
+  await expect(entries.first()).toContainText('1:30')
+  await expect(entries.first()).toContainText('Research')
+  await expect(hours).toContainText('Nothing here is billed or sent to anyone')
+  await expect(pill).toHaveCount(0)
+
+  // Another case has its own, separate hours.
+  await page.goto(`${server.url}#/cases/${demoIds.maternal}`)
+  await expect(total).toHaveText('1:50')
+  await expect(entries).toHaveCount(2)
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(hours.getByText('No hours recorded yet.')).toBeVisible()
+
+  // The timer runs in memory and follows the person across screens.
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  await hours.getByRole('button', { name: 'Start timer' }).click()
+  await expect(pill.getByText('Running')).toBeVisible()
+  await pill.getByRole('button', { name: /^Pause timer on/ }).click()
+  await expect(pill.getByText('Paused')).toBeVisible()
+  await page.goto(`${server.url}#/clients`)
+  await expect(pill).toBeVisible()
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+
+  // A manual entry works too.
+  const form = hours.getByRole('form', { name: 'Add hours by hand' })
+  await form.getByLabel('Minutes').fill('30')
+  await form.getByRole('button', { name: 'Add entry' }).click()
+  await expect(entries).toHaveCount(5)
+  await expect(total).toHaveText('8:00')
+
+  // Nothing is kept in the browser, and the guidance on the banner stays truthful.
+  expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0)
+  expect(await page.evaluate(async () => (await indexedDB.databases()).length)).toBe(0)
+  await expect(page.getByRole('region', { name: 'Demo mode' })).toContainText('reset when you refresh')
+
+  // Refresh: back to the documented sample set, and no timer.
+  await page.reload()
+  await expect(entries).toHaveCount(4)
+  await expect(total).toHaveText('7:30')
+  await expect(pill).toHaveCount(0)
+})

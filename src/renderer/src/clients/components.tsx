@@ -61,7 +61,7 @@ export function ConfirmDialog({ title, children, confirmLabel, tone = 'default',
       return
     }
     if (event.key !== 'Tab' || !dialogRef.current) return
-    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button')
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input, select, textarea')
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
     if (event.shiftKey && document.activeElement === first) {

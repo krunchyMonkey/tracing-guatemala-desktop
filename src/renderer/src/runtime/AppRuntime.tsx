@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 import type { CaseBrief, CaseBriefInput, CaseBriefMutationResult } from '../../../shared/case-brief'
 import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../../../shared/case-journal'
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../shared/case-tasks'
+import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../../../shared/case-time'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
 import type { BackupStatus, TracingGuatemalaApi } from '../../../shared/ipc'
 
@@ -42,6 +43,20 @@ export interface CaseApi {
   updateCaseTask(caseId: string, taskId: string, input: CaseTaskInput): Promise<CaseTaskMutationResult>
   completeCaseTask(caseId: string, taskId: string): Promise<CaseTaskMutationResult>
   reopenCaseTask(caseId: string, taskId: string): Promise<CaseTaskMutationResult>
+  /** The case's research hours, newest work date first; empty for an unknown case. */
+  listTimeEntries(caseId: string): Promise<TimeEntry[]>
+  createTimeEntry(caseId: string, input: TimeEntryInput): Promise<TimeEntryMutationResult>
+  updateTimeEntry(caseId: string, entryId: string, input: TimeEntryInput): Promise<TimeEntryMutationResult>
+  /** Permanent. The browser asks for confirmation first. */
+  deleteTimeEntry(caseId: string, entryId: string): Promise<TimeEntryMutationResult>
+  /** The one pending timer (any case), or null. The host is the source of truth. */
+  getActiveTimer(): Promise<TimerSnapshot | null>
+  startTimer(caseId: string): Promise<TimerResult>
+  pauseTimer(version: number): Promise<TimerResult>
+  resumeTimer(version: number): Promise<TimerResult>
+  heartbeatTimer(version: number): Promise<TimerResult>
+  stopAndSaveTimer(version: number, options: StopOptions): Promise<TimerResult>
+  discardTimer(version: number): Promise<TimerResult>
 }
 
 /**

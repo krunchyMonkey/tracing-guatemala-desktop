@@ -1,6 +1,16 @@
 import { z } from 'zod'
 import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX, type CaseTask, type CaseTaskInput, type CaseTaskMutationResult } from '../shared/case-tasks'
 import {
+  ACTIVITY_TYPES,
+  TIME_NOTE_MAX,
+  type StopOptions,
+  type TimeEntry,
+  type TimeEntryInput,
+  type TimeEntryMutationResult,
+  type TimerResult,
+  type TimerSnapshot
+} from '../shared/case-time'
+import {
   JOURNAL_ACTIVITY_MAX,
   JOURNAL_BODY_MAX,
   type JournalEntry,
@@ -338,6 +348,67 @@ const taskResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
 ]) satisfies z.ZodType<CaseTaskMutationResult>
 
+const activityTypeSchema = z.enum(ACTIVITY_TYPES)
+
+/** Strict: only the four writable fields. Raw bounds are twice the limits; the repository checks the rules. */
+const timeEntryInputSchema = z.strictObject({
+  workDate: z.string().max(64),
+  durationMinutes: z.number(),
+  activityType: activityTypeSchema.nullable(),
+  note: z.string().max(TIME_NOTE_MAX * 2).nullable()
+}) satisfies z.ZodType<TimeEntryInput>
+
+const timeEntrySchema = z.strictObject({
+  id: idSchema,
+  caseId: idSchema,
+  workDate: z.string(),
+  durationMinutes: z.number().int(),
+  activityType: activityTypeSchema.nullable(),
+  note: z.string().nullable(),
+  source: z.enum(['timer', 'manual']),
+  createdAt: timestamp,
+  updatedAt: timestamp
+}) satisfies z.ZodType<TimeEntry>
+
+const timeIssueSchema = z.strictObject({
+  field: z.enum(['workDate', 'durationMinutes', 'activityType', 'note']),
+  code: z.enum(['required', 'too-long', 'too-short', 'invalid-characters', 'invalid-format', 'invalid-date', 'invalid-value'])
+})
+
+const timeEntryResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), entry: timeEntrySchema }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('invalid'), issues: z.array(timeIssueSchema) }),
+  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
+]) satisfies z.ZodType<TimeEntryMutationResult>
+
+const timerVersionSchema = z.number().int().min(0).max(2_000_000_000)
+
+const stopOptionsSchema = z.strictObject({
+  activityType: activityTypeSchema.nullable(),
+  note: z.string().max(TIME_NOTE_MAX * 2).nullable(),
+  durationMinutesOverride: z.number().nullable()
+}) satisfies z.ZodType<StopOptions>
+
+const timerSnapshotSchema = z.strictObject({
+  caseId: idSchema,
+  state: z.enum(['running', 'paused']),
+  version: z.number().int(),
+  startedAt: timestamp,
+  elapsedSeconds: z.number().int().nonnegative(),
+  needsReview: z.boolean(),
+  reviewReason: z.enum(['heartbeat-gap', 'clock-moved-back', 'too-long']).nullable(),
+  suggestedSeconds: z.number().int().nonnegative().nullable()
+}) satisfies z.ZodType<TimerSnapshot>
+
+const timerResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), timer: timerSnapshotSchema.nullable(), entry: timeEntrySchema.nullable() }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('conflict'), timer: timerSnapshotSchema.nullable() }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('other-case-timer'), timer: timerSnapshotSchema }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('needs-review'), timer: timerSnapshotSchema }),
+  z.strictObject({ ok: z.literal(false), reason: z.literal('invalid'), issues: z.array(timeIssueSchema) }),
+  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status', 'too-short']) })
+]) satisfies z.ZodType<TimerResult>
+
 const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
 const count = z.number().int().nonnegative()
 
@@ -458,7 +529,18 @@ export const caseContracts = {
   createCaseTask: { args: z.tuple([idSchema, taskInputSchema]), result: taskResultSchema },
   updateCaseTask: { args: z.tuple([idSchema, idSchema, taskInputSchema]), result: taskResultSchema },
   completeCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema },
-  reopenCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema }
+  reopenCaseTask: { args: z.tuple([idSchema, idSchema]), result: taskResultSchema },
+  listTimeEntries: { args: z.tuple([idSchema]), result: z.array(timeEntrySchema) },
+  createTimeEntry: { args: z.tuple([idSchema, timeEntryInputSchema]), result: timeEntryResultSchema },
+  updateTimeEntry: { args: z.tuple([idSchema, idSchema, timeEntryInputSchema]), result: timeEntryResultSchema },
+  deleteTimeEntry: { args: z.tuple([idSchema, idSchema]), result: timeEntryResultSchema },
+  getActiveTimer: { args: z.tuple([]), result: timerSnapshotSchema.nullable() },
+  startTimer: { args: z.tuple([idSchema]), result: timerResultSchema },
+  pauseTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
+  resumeTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
+  heartbeatTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
+  stopAndSaveTimer: { args: z.tuple([timerVersionSchema, stopOptionsSchema]), result: timerResultSchema },
+  discardTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>
 
 /** Live-only calls (#117): no IPC channel, because the desktop app is frozen. */

@@ -205,6 +205,50 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'task id and case are immutable');
       END;
     `
+  },
+  {
+    version: 7,
+    name: 'case_time',
+    sql: `
+      CREATE TABLE case_time_entries (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        work_date TEXT NOT NULL CHECK (work_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        duration_minutes INTEGER NOT NULL CHECK (duration_minutes BETWEEN 1 AND 720),
+        activity_type TEXT CHECK (activity_type IS NULL OR activity_type IN ('research', 'correspondence', 'analysis', 'writing', 'other')),
+        note TEXT CHECK (note IS NULL OR length(note) BETWEEN 1 AND 500),
+        source TEXT NOT NULL CHECK (source IN ('timer', 'manual')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX case_time_entries_case_idx ON case_time_entries (case_id, work_date);
+
+      CREATE TRIGGER case_time_entries_client_matches BEFORE INSERT ON case_time_entries
+      WHEN (SELECT client_id FROM research_cases WHERE id = NEW.case_id) IS NOT NEW.client_id
+      BEGIN
+        SELECT RAISE(ABORT, 'time entry client must be the case client');
+      END;
+
+      CREATE TRIGGER case_time_entries_immutable_keys BEFORE UPDATE OF id, case_id, client_id, source ON case_time_entries
+      BEGIN
+        SELECT RAISE(ABORT, 'time entry id, case, client and source are immutable');
+      END;
+
+      CREATE TABLE case_active_timer (
+        id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        state TEXT NOT NULL CHECK (state IN ('running', 'paused')),
+        accumulated_seconds INTEGER NOT NULL CHECK (accumulated_seconds >= 0),
+        segment_started_at TEXT,
+        last_heartbeat_at TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        version INTEGER NOT NULL CHECK (version >= 1),
+        CHECK ((state = 'running') = (segment_started_at IS NOT NULL))
+      ) STRICT;
+    `
   }
 ]
 
