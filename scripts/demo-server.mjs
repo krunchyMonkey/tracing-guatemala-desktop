@@ -1,8 +1,9 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { preview } from 'vite'
+import { createFeedbackBridge } from './demo-feedback.mjs'
 
 // Serves the built browser demo (dist-demo/) over plain HTTP for the trusted home
 // LAN (#100). It binds to one private (or loopback) IPv4 address of this
@@ -82,19 +83,78 @@ function describe(addresses) {
   return addresses.length === 0 ? 'none' : addresses.map((a) => `${a.address} (${a.name})`).join(', ')
 }
 
-/** Starts the HTTP preview of dist-demo/. Resolves to { url, close }. */
-export async function startDemoServer({ host, port = DEFAULT_PORT }) {
+/** The only CSP change feedback mode makes: fetch() may reach this page's own origin. */
+export function allowConnectToSelf(policy) {
+  const plain = "connect-src 'none'"
+  const escaped = 'connect-src &#39;none&#39;'
+  const [needle, replacement] = policy.includes(plain)
+    ? [plain, "connect-src 'self'"]
+    : [escaped, 'connect-src &#39;self&#39;']
+  if (policy.split(needle).length !== 2) throw new Error("The demo policy has no single connect-src 'none' to relax for feedback.")
+  return policy.replace(needle, replacement)
+}
+
+const FEEDBACK_MARKER = '<meta name="tg-feedback" content="available">'
+
+/**
+ * Preview-server plugin for `--feedback`: serves the feedback routes and the page
+ * with its meta CSP relaxed the same single way as the header, plus a marker that
+ * tells the page it may ask /__feedback/status. Without `--feedback` it isn't added.
+ */
+function feedbackPlugin(bridge, html) {
+  return {
+    name: 'tracing-guatemala:demo-feedback',
+    configurePreviewServer(server) {
+      const headers = { ...server.config.preview.headers }
+      headers['Content-Security-Policy'] = allowConnectToSelf(headers['Content-Security-Policy'])
+      bridge.setHeaders(headers)
+      const page = allowConnectToSelf(html).replace('</head>', `  ${FEEDBACK_MARKER}
+  </head>`)
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url ?? '').split('?')[0]
+        if ((path === '/' || path === '/index.html') && (req.method === 'GET' || req.method === 'HEAD')) {
+          res.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8' })
+          res.end(req.method === 'HEAD' ? undefined : page)
+          return
+        }
+        if (!bridge.handle(req, res)) next()
+      })
+    }
+  }
+}
+
+/**
+ * Starts the HTTP preview of dist-demo/. Resolves to { url, close, feedback }.
+ * `feedback` (off by default) is { env, log } for the opt-in private feedback
+ * bridge; without it no feedback route exists and nothing else changes.
+ */
+export async function startDemoServer({ host, port = DEFAULT_PORT, feedback = null }) {
   if (!existsSync(join(demoDir, 'index.html'))) {
     throw new Error('dist-demo/ is missing. Run `npm run demo:build` first.')
+  }
+  let bridge = null
+  const plugins = []
+  if (feedback) {
+    bridge = createFeedbackBridge({
+      env: feedback.env,
+      origin: `http://${host}:${port}`,
+      host: `${host}:${port}`,
+      log: feedback.log,
+      fetchImpl: feedback.fetchImpl
+    })
+    await bridge.init()
+    plugins.push(feedbackPlugin(bridge, readFileSync(join(demoDir, 'index.html'), 'utf8')))
   }
   const server = await preview({
     configFile,
     configLoader: 'runner',
     logLevel: 'warn',
+    plugins,
     preview: { host, port, strictPort: true, open: false }
   })
   return {
     url: `http://${host}:${port}/`,
-    close: () => server.close()
+    close: () => server.close(),
+    feedback: bridge ? { accessCode: bridge.accessCode, enabled: bridge.isEnabled() } : null
   }
 }

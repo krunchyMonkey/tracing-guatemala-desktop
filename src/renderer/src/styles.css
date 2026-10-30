@@ -2036,3 +2036,55 @@ h1[tabindex='-1']:focus {
     white-space: normal;
   }
 }
+
+/* ---------- demo toolbar (#102) ---------- */
+
+.demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.demo-action {
+  min-height: 2.25rem;
+  padding-block: 0.3rem;
+}
+
+.demo-notice {
+  font-size: 0.9rem;
+}
+
+.feedback-dialog {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  width: min(34rem, calc(100vw - 2rem));
+}
+
+.feedback-privacy {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--color-marigold);
+  background: var(--color-marigold-soft);
+}
+
+.feedback-form .field + .field {
+  margin-top: 0.6rem;
+}
+
+.feedback-form textarea,
+.feedback-form input,
+.feedback-form select {
+  width: 100%;
+}
+
+.feedback-copy-box {
+  width: 100%;
+  margin-top: 0.6rem;
+}
+
+.feedback-error {
+  margin: 0.6rem 0 0;
+  font-weight: 600;
+}

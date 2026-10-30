@@ -25,6 +25,7 @@ import { ClientCases } from '../cases/ClientCases'
 import { useAppRuntime } from '../runtime/AppRuntime'
 import { useClientNotes, type NoteSaveResult } from '../clients/useClientNotes'
 import { fromLocalInput, toLocalInput } from '../clients/localTime'
+import { guideAnchor } from '../guidance/anchors'
 
 // Client profile (#3 baseline). Reads the saved client when opened (#8);
 // archive/restore (#6) and notes/contact log (#9) are saved through the main
@@ -100,7 +101,7 @@ export function ClientProfileScreen() {
         </div>
       )}
 
-      <header className="profile-header">
+      <header className="profile-header" {...guideAnchor('client-summary')}>
         <div className="avatar" aria-hidden="true">
           {initials(client.displayName)}
         </div>
@@ -113,7 +114,7 @@ export function ClientProfileScreen() {
             <span className="muted">Client since {formatDate(client.createdAt)}</span>
           </p>
         </div>
-        <div className="profile-actions">
+        <div className="profile-actions" {...guideAnchor('client-archive')}>
           {isArchived ? (
             <button type="button" className="button button-primary" disabled={working} onClick={() => setPending('restore')}>
               Restore client
@@ -262,7 +263,7 @@ function History({ clientId, version, readOnly }: { clientId: string; version: s
   const visible = notes.notes.filter((n) => filter === 'all' || n.kind === filter)
 
   return (
-    <section className="card history" aria-labelledby="history-heading">
+    <section className="card history" aria-labelledby="history-heading" {...guideAnchor('client-history')}>
       <div className="history-header">
         <h2 id="history-heading">Notes &amp; contact history</h2>
         <fieldset className="segmented segmented-small">
