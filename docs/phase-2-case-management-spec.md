@@ -1,7 +1,7 @@
 # Phase 2 — Research Case Management: Claude implementation plan
 
 **Status:** Owner-directed **build-first working specification** (2026-10-29). All model fields and case-state names below are *engineering defaults*, **not** evidence of researcher approval. Preserve unresolved decisions for the Phase 2 integrated pilot (#21).  
-**Repository:** [tracing-guatemala-desktop](https://github.com/krunchyMonkey/tracing-guatemala-desktop) · **Web-first foundation:** [#110](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) · **Issues:** [#13–#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues?q=is%3Aissue+label%3Aphase%3AP02), [#109](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/109).
+**Repository:** [tracing-guatemala-desktop](https://github.com/krunchyMonkey/tracing-guatemala-desktop) · **Web-first foundation:** [#110](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/110) · **Issues:** [all Phase 2 tickets](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues?q=is%3Aissue+label%3Aphase%3AP02), including #102, #109, #110, #112 and #114–#117.
 
 ## Web-first architecture pivot — latest owner direction (2026-10-29)
 
@@ -57,7 +57,29 @@ Unresolved and **not researcher-approved**: actual case state vocabulary, requir
 | 9 | [#20](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/20) | Case summary export and isolation suite | #17–#19; #109 hours totals optional |
 | 10 | [#21](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/21) | **Web-first** integrated pilot kit, tests and actual feedback | #110, #15–#20; include #109 if ready |
 
-**Throughput:** #110 is the first Live Mode prerequisite, while #102 may proceed in parallel as Phase 2 demo polish. #13/#14 are short engineering documents using **reversible defaults** and should not require a new meeting to start coding. #21 is the real researcher acceptance point. #12 (Phase 1 installed desktop researcher pilot) remains OPEN independently until genuine signoff.
+## Added Phase 2 backlog: Live safety + showcase (owner direction, 2026-10-29)
+
+These are **focused, separate** tickets. The local datastore remains `node:sqlite` and the real-data host remains loopback-only; Docker/PostgreSQL, hosted access and multi-researcher sync are out of scope.
+
+| Ticket | Priority | Scope | Dependency / ordering |
+| --- | --- | --- | --- |
+| [#114](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/114) | P0 | Safe Demo/Live entry and switch; isolated origins, session-aware Live, no data crossover | #110; never exposes Live via LAN |
+| [#117](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/117) | P0 | Launch/stop simplicity, backup/recovery verification, storage warnings, Live-readiness checklist | #110, case roundtrip #15/#16 |
+| [#112](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/112) | P1 | Locked and disabled Phase 3–9 navigation with accessible Coming Soon labels | Independent; proposed in open PR #113 |
+| [#102](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/102) | P1 | Driver.js guided fictional-demo tour and opt-in private Project feedback | Independent, moved to Phase 2; not a prerequisite for #110 |
+| [#115](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/115) | P1 | Deterministic fictional portfolio of 48 clients, eventually cases/journals/tasks | Start client fixtures now; extend when #16/#18/#19 land |
+| [#116](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/116) | P1 | Elegant Research Studio Home, truthful API-derived Live stats and fictional-demo metrics | #110, #15/#16, #19 for due-task stats |
+| [#109](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/109) | P1 | Case research hours (manual/timer) | #15/#16; prefer #18; not blocking #20 |
+
+**Safety gate:** Demo is always fictional, ephemeral and safe for trusted LAN. Live is authenticated/session-protected on the local host only; do not implement a client-side mode flag that switches data source on the same LAN origin. Validate SQLite restart, backup/restore, denied external access, and cross-client data isolation before real records are used.
+
+**Showcase target:** present an appealing, busy fictional research studio and gracefully label unreleased features; do not fake delivery of Evidence Library, AI, Reports, Family Trees, Integrations, or Business Tools.
+
+**Acceptance:** #21 is the actual researcher-review gate, with both fictional Demo walkthrough and private Live persistence scenarios. Docs or demo visuals alone are not signoff. Prep PRs must use `Refs #21` rather than `Closes #21`. Preserve #12 as deferred legacy Electron pilot.
+
+**PR coordination:** open docs PR #111 and sidebar PR #113 exist on separate branches. The new queue is owner direction, not evidence those PRs are merged or tests passed. Use worktrees/explicit stacked dependencies and **never auto-merge**.
+
+**Throughput:** #110 is the first Live Mode prerequisite, while #102/#112/#115 can proceed in parallel as Phase 2 demo polish. #13/#14 are short engineering documents using **reversible defaults** and should not require a new meeting to start coding. #21 is the real researcher acceptance point. #12 (Phase 1 installed desktop researcher pilot) remains OPEN independently until genuine signoff.
 
 ## PR policy for an unattended Claude coding session
 
