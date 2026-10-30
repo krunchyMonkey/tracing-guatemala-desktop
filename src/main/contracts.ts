@@ -1,5 +1,13 @@
 import { z } from 'zod'
 import {
+  BRIEF_FIELDS,
+  BRIEF_LIMITS,
+  type BriefField,
+  type CaseBrief,
+  type CaseBriefInput,
+  type CaseBriefMutationResult
+} from '../shared/case-brief'
+import {
   CASE_STATES,
   type CaseEvent,
   type CaseInput,
@@ -216,6 +224,39 @@ const caseResultSchema = z.union([
   })
 ]) satisfies z.ZodType<CaseMutationResult>
 
+/** Strict: only the five sections. Raw bounds are twice the limits; the trimmed-length rule runs in the repository. */
+const briefInputSchema = z.strictObject(
+  Object.fromEntries(BRIEF_FIELDS.map((field) => [field, z.string().max(BRIEF_LIMITS[field] * 2).nullable()])) as Record<
+    BriefField,
+    z.ZodNullable<z.ZodString>
+  >
+) satisfies z.ZodType<CaseBriefInput>
+
+const caseBriefSchema = z.strictObject({
+  caseId: idSchema,
+  objective: z.string().nullable(),
+  facts: z.string().nullable(),
+  people: z.string().nullable(),
+  hypotheses: z.string().nullable(),
+  questions: z.string().nullable(),
+  updatedAt: timestamp.nullable()
+}) satisfies z.ZodType<CaseBrief>
+
+const briefResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), brief: caseBriefSchema }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.literal('invalid'),
+    issues: z.array(
+      z.strictObject({
+        field: z.enum(BRIEF_FIELDS),
+        code: z.enum(['too-long', 'invalid-characters'])
+      })
+    )
+  }),
+  z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status']) })
+]) satisfies z.ZodType<CaseBriefMutationResult>
+
 const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
 const count = z.number().int().nonnegative()
 
@@ -326,5 +367,7 @@ export const caseContracts = {
   updateCase: { args: z.tuple([idSchema, caseInputSchema]), result: caseResultSchema },
   setCaseState: { args: z.tuple([idSchema, caseStateSchema]), result: caseResultSchema },
   archiveCase: { args: z.tuple([idSchema]), result: caseResultSchema },
-  unarchiveCase: { args: z.tuple([idSchema]), result: caseResultSchema }
+  unarchiveCase: { args: z.tuple([idSchema]), result: caseResultSchema },
+  getCaseBrief: { args: z.tuple([idSchema]), result: caseBriefSchema.nullable() },
+  saveCaseBrief: { args: z.tuple([idSchema, briefInputSchema]), result: briefResultSchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

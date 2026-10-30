@@ -209,6 +209,7 @@ const demoIds = {
   daniel: 'de300000-0000-4000-8000-000000000002',
   paternal: 'de300000-0000-4000-8000-200000000001',
   maternal: 'de300000-0000-4000-8000-200000000002',
+  secondBranch: 'de300000-0000-4000-8000-200000000005',
   reunion: 'de300000-0000-4000-8000-200000000006'
 }
 const overflowOf = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
@@ -281,6 +282,7 @@ for (const viewport of viewports) {
       ['cases', '#/cases?state=all'],
       ['case', `#/cases/${demoIds.maternal}`],
       ['case-archived', `#/cases/${demoIds.reunion}`],
+      ['case-brief-form', `#/cases/${demoIds.paternal}/brief`],
       ['case-form', `#/cases/new?client=${demoIds.daniel}`],
       ['profile-cases', `#/clients/${demoIds.lucia}`]
     ] as const
@@ -301,4 +303,28 @@ test('captures the demo case list for the PR', async ({ page }) => {
     await expect(page.locator('.result-count')).toBeVisible()
     await page.screenshot({ path: join(casesShotsDir, `demo-${viewport.name}-case-list.png`), fullPage: true })
   }
+})
+
+test('shows a seeded fictional research brief, lets it be edited, and a refresh resets the edit', async ({ page }) => {
+  await page.goto(`${server.url}#/cases/${demoIds.paternal}`)
+  const brief = page.getByRole('region', { name: 'Research brief' })
+  await expect(brief.getByRole('heading', { name: 'Known facts (as reported)' })).toBeVisible()
+  await expect(brief).toContainText('Teodoro Ejemplo')
+  await expect(brief.locator('.brief-hypotheses')).toContainText('Hypothesis — not established')
+
+  await brief.getByRole('link', { name: 'Edit brief' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Research brief' })).toBeVisible()
+  await page.getByLabel(/^Open questions/).fill('A question added in the demo?')
+  await page.getByRole('button', { name: 'Save brief' }).click()
+  await expect(page.getByText('Brief saved.')).toBeVisible()
+  await expect(brief.locator('.brief-questions .brief-text')).toHaveText('A question added in the demo?')
+
+  // Refresh: back to the documented sample set.
+  await page.reload()
+  await expect(brief.locator('.brief-questions .brief-text')).toContainText('Which parish covered the village')
+  await expect(brief.getByText('A question added in the demo?')).toHaveCount(0)
+
+  // A case without a seeded brief shows the empty state.
+  await page.goto(`${server.url}#/cases/${demoIds.secondBranch}`)
+  await expect(page.getByRole('region', { name: 'Research brief' }).getByText('No research brief yet.')).toBeVisible()
 })

@@ -1361,3 +1361,91 @@ h1[tabindex='-1']:focus {
 .launch-required .card {
   max-width: 34rem;
 }
+
+/* ---------- research brief (#17) ---------- */
+
+.brief-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.brief-header h2 {
+  margin: 0;
+}
+
+.brief h3,
+.brief-requested h3,
+.brief-requested-heading {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.brief-requested {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  background: var(--color-surface-tint);
+  border: 1px solid var(--color-border);
+}
+
+.brief-requested p {
+  margin: 0 0 0.35rem;
+}
+
+.brief-section {
+  margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.brief-section .hint {
+  margin: 0 0 0.35rem;
+}
+
+.brief-text {
+  margin: 0;
+}
+
+.brief-hypotheses,
+.brief-field-hypotheses textarea {
+  border: 2px dashed var(--color-marigold);
+  border-radius: var(--radius);
+  background: var(--color-marigold-soft);
+}
+
+.brief-hypotheses {
+  padding: 0.75rem 1rem;
+}
+
+.brief-hypotheses .brief-text {
+  font-style: italic;
+}
+
+.brief-label {
+  display: inline-block;
+  margin: 0 0 0.35rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-marigold);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.brief-empty {
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-tint);
+}
+
+.brief-empty p {
+  margin: 0 0 0.5rem;
+}
+
+.brief-meta {
+  margin: 0;
+}

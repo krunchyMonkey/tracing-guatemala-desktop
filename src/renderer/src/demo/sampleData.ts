@@ -1,3 +1,4 @@
+import type { CaseBrief } from '../../../shared/case-brief'
 import { localDateString, type CaseEvent, type CaseState, type ResearchCase } from '../../../shared/case-model'
 import type { Client, ClientNote, NoteChannel, NoteDirection } from '../../../shared/client-model'
 import type { DemoCaseData } from './demoCases'
@@ -356,5 +357,41 @@ export function buildDemoCases(now: Date = new Date()): DemoCaseData {
     occurredAt: at(30)
   })
 
-  return { cases, events }
+  // Fictional working material: invented people and places, "as reported" facts only.
+  const briefs: CaseBrief[] = [
+    {
+      caseId: caseIds.paternal,
+      objective:
+        'Identify the birthplace and parents of Teodoro Ejemplo (born about 1884) and test whether the family moved from the highlands before 1900.',
+      facts:
+        'The client says Teodoro was born in a village near Quetzaltenango.\nThe client has a family story that he worked as a muleteer.\nA photograph is said to exist, but the client has not sent it yet.',
+      people:
+        'Teodoro Ejemplo (great-grandfather, about 1884 to unknown).\nHis wife, reported as Rosalía, married in the 1900s.\nThe client’s grandfather, Ismael, was the eldest son.',
+      hypotheses:
+        'Teodoro may be the son of a Julián Ejemplo listed in a fictional parish book.\nThe family may have spelled the surname “Exemplo” before 1900.',
+      questions:
+        'Which parish covered the village in the 1880s?\nIs there a marriage record naming Teodoro’s parents?\nCan the client send the photograph?',
+      updatedAt: at(3)
+    },
+    {
+      caseId: caseIds.maternal,
+      objective: 'Confirm the marriage year and the grandmother’s maiden name for the Totonicapán branch.',
+      facts: 'The client reports the marriage took place around 1931.\nThe grandmother’s name is reported as María Ejemplo.',
+      people: null,
+      hypotheses: 'Her maiden name may be “Sample”, a surname common in the fictional parish.',
+      questions: 'Are civil marriage registers for 1931 available for this municipality?',
+      updatedAt: at(9)
+    },
+    {
+      caseId: caseIds.surname,
+      objective: null,
+      facts: 'Only the surname and a decade (the 1920s) are known, as reported by the client.',
+      people: null,
+      hypotheses: null,
+      questions: 'Which towns record this surname most often? Is there any older relative the client can ask?',
+      updatedAt: at(6)
+    }
+  ]
+
+  return { cases, events, briefs }
 }

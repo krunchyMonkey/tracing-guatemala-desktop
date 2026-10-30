@@ -85,7 +85,9 @@ describe('case calls', () => {
         'updateCase',
         'setCaseState',
         'archiveCase',
-        'unarchiveCase'
+        'unarchiveCase',
+        'getCaseBrief',
+        'saveCaseBrief'
       ])
     )
   })

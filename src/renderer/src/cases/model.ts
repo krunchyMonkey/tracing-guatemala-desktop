@@ -2,6 +2,7 @@
 // labels and sentences the case screens show. Renderer checks are a convenience;
 // the host re-runs every rule.
 
+import type { BriefField, BriefIssue } from '../../../shared/case-brief'
 import type { CaseEvent, CaseIssue, CaseState } from '../../../shared/case-model'
 
 export {
@@ -106,3 +107,54 @@ export const issueMessages: Record<CaseIssue['field'], Partial<Record<CaseIssue[
 
 export const issueMessage = (issue: CaseIssue): string =>
   issueMessages[issue.field][issue.code] ?? 'Check this field and try again.'
+
+// ---------- research brief (#17) ----------
+
+export { BRIEF_FIELDS, BRIEF_LIMITS, briefIsEmpty, checkCaseBrief, emptyBrief } from '../../../shared/case-brief'
+export type {
+  BriefField,
+  BriefIssue,
+  CaseBrief,
+  CaseBriefInput,
+  CaseBriefMutationResult
+} from '../../../shared/case-brief'
+
+/** How each section is named, and the help shown under its label in the form. */
+export const briefSections: Record<BriefField, { label: string; hint: string }> = {
+  objective: {
+    label: 'Working research objective',
+    hint: 'What you are trying to establish, in your own words. This can differ from what the client asked for.'
+  },
+  facts: {
+    label: 'Known facts (as reported)',
+    hint: 'What the client or your sources have said. Treat it as reported, not verified: the app doesn’t check it.'
+  },
+  people: {
+    label: 'Known people and family context',
+    hint: 'Names, relationships, places and dates you already have, one per line works well.'
+  },
+  hypotheses: {
+    label: 'Hypotheses',
+    hint: 'Ideas you haven’t proven yet. Keeping them apart from the facts stops a guess from turning into a finding.'
+  },
+  questions: {
+    label: 'Open questions',
+    hint: 'What you still need to find out or ask the client.'
+  }
+}
+
+const BRIEF_LIMITS_TEXT: Record<BriefField, string> = {
+  objective: '4,000',
+  facts: '10,000',
+  people: '10,000',
+  hypotheses: '10,000',
+  questions: '10,000'
+}
+
+export const briefIssueMessage = (issue: BriefIssue): string => {
+  const name = briefSections[issue.field].label.toLowerCase()
+  const limit = BRIEF_LIMITS_TEXT[issue.field]
+  return issue.code === 'too-long'
+    ? `Keep “${name}” under ${limit} characters.`
+    : `“${name}” has a character that can’t be saved. Remove it and try again.`
+}

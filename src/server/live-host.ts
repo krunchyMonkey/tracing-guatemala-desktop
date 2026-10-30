@@ -28,7 +28,8 @@ import { createWebBackupService, MAX_UPLOAD_BYTES, UploadTooLargeError } from '.
 
 export const API_PREFIX = '/api/v1'
 export const LAUNCH_PATH = '/launch'
-const MAX_JSON_BYTES = 64 * 1024
+// Room for a full research brief at its raw bound (five sections, up to 4 bytes per character).
+const MAX_JSON_BYTES = 256 * 1024
 
 /** The data calls the browser may make, by name. Backup file choice is an upload instead. */
 const callable = {
@@ -52,7 +53,9 @@ const callable = {
   updateCase: caseContracts.updateCase,
   setCaseState: caseContracts.setCaseState,
   archiveCase: caseContracts.archiveCase,
-  unarchiveCase: caseContracts.unarchiveCase
+  unarchiveCase: caseContracts.unarchiveCase,
+  getCaseBrief: caseContracts.getCaseBrief,
+  saveCaseBrief: caseContracts.saveCaseBrief
 } as const
 
 export type CallName = keyof typeof callable
@@ -151,7 +154,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases } = createDataServices(data)
+  const { clients, notes, cases, briefs } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -175,7 +178,9 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     updateCase: ([id, input]) => cases.update(id, input),
     setCaseState: ([id, to]) => cases.setState(id, to),
     archiveCase: ([id]) => cases.archive(id),
-    unarchiveCase: ([id]) => cases.unarchive(id)
+    unarchiveCase: ([id]) => cases.unarchive(id),
+    getCaseBrief: ([caseId]) => briefs.get(caseId),
+    saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
