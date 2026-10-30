@@ -18,6 +18,8 @@ export interface FakeEditorSession extends RichTextEditorSession {
   readonly options: RichTextEditorOptions
   /** Every command passed to run(), honored or not. */
   readonly commands: EditorCommand[]
+  /** Whether the editor currently accepts edits. */
+  readonly editable: boolean
   /** Simulates the user typing at the end of the current block. */
   type(text: string): void
   /** Simulates the user replacing the whole document. */
@@ -87,12 +89,16 @@ export function createFakeEditorAdapter(id = 'fake'): FakeEditorAdapter {
       const session: FakeEditorSession = {
         options,
         commands,
+        get editable() {
+          return editable
+        },
         getContent: () => normalizeNoteContent(content, options.newId),
         setContent(next) {
           content = normalizeNoteContent(next, options.newId)
           past = []
           future = []
           caret = null
+          options.onStateChange?.(state())
         },
         setEditable(next) {
           editable = next

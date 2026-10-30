@@ -275,7 +275,7 @@ test('keeps demo code and sample data out of the desktop bundle', () => {
     .map((f) => readFileSync(join(assets, f), 'utf8'))
     .join('\n')
   expect(bundle).toContain('Settings & Backup')
-  for (const marker of ['Tracing Guatemala browser demo', 'de300000-0000-4000', 'Lucía Fernández', 'getRandomValues']) {
+  for (const marker of ['Tracing Guatemala browser demo', 'de300000-0000-4000', 'Lucía Fernández', 'Web Crypto is unavailable, so the demo cannot create IDs.']) {
     expect(bundle).not.toContain(marker)
   }
 })

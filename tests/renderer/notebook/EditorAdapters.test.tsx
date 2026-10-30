@@ -87,8 +87,8 @@ describe('swapping the editor provider', () => {
     expect(screen.getByLabelText('Characters').textContent).toBe(String(baseline + 5))
   })
 
-  it('has a plain editor and no canvas by default, and refuses to run without a provider', () => {
-    expect(defaultNotebookAdapters.editor).toBe(plainTextAdapter)
+  it('has the rich editor and no canvas by default, and refuses to run without a provider', () => {
+    expect(defaultNotebookAdapters.editor.id).toBe('tiptap')
     expect(defaultNotebookAdapters.canvas).toBeNull()
     expect(() => render(<PageText content={content} />)).toThrow(/NotebookAdaptersProvider/)
   })

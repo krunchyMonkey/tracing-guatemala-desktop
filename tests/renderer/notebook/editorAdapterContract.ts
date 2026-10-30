@@ -10,6 +10,10 @@ export interface EditorContractDriver {
   simulateTyping(session: RichTextEditorSession, element: HTMLElement, text: string): void
   /** Whether toggleMark and setLink are honored (false for a plain-text fallback). */
   supportsMarks: boolean
+  /** Optional: selects the text of the last block, for editors where marks and links need a selection. */
+  selectLastBlockText?(session: RichTextEditorSession, element: HTMLElement): void
+  /** Optional: puts the caret on the divider, for editors whose caret moves past it when one is inserted. */
+  selectDivider?(session: RichTextEditorSession, element: HTMLElement): void
 }
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -180,6 +184,7 @@ export function describeEditorAdapterContract(name: string, makeAdapter: () => R
 
       it('honors marks and links only if the adapter supports them, and says so', () => {
         const session = mount()
+        driver.selectLastBlockText?.(session, element)
         expect(session.run({ type: 'toggleMark', mark: 'bold' })).toBe(driver.supportsMarks)
         expect(session.run({ type: 'setLink', href: 'https://example.org' })).toBe(driver.supportsMarks)
         if (driver.supportsMarks) {
@@ -195,6 +200,7 @@ export function describeEditorAdapterContract(name: string, makeAdapter: () => R
       it('returns false instead of throwing for what it cannot do', () => {
         const session = mount()
         session.run({ type: 'insertDivider' }) // the caret block is now a divider
+        driver.selectDivider?.(session, element)
         expect(session.run({ type: 'setBlock', block: 'heading1' })).toBe(false)
         expect(session.run({ type: 'indent' })).toBe(false)
       })

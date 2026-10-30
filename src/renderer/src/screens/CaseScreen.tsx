@@ -5,6 +5,7 @@ import { Alert, ConfirmDialog, formatDate, formatDateTime } from '../clients/com
 import { BriefCard } from '../cases/BriefCard'
 import { ExportSummaryDialog } from '../cases/ExportSummaryDialog'
 import { JournalCard } from '../cases/JournalCard'
+import { NotebookCard } from '../notebook/NotebookCard'
 import { HoursCard } from '../cases/HoursCard'
 import { TasksCard } from '../cases/TasksCard'
 import { ArchivedBadge, CaseNotFound, CasesLoadError, DueDate, StateBadge } from '../cases/components'
@@ -199,6 +200,8 @@ function CaseOverview({ caseId }: { caseId: string }) {
           </button>
         </div>
       </header>
+
+      <NotebookCard caseId={researchCase.id} readOnly={readOnly} />
 
       <div className="case-grid">
         <section className="card" aria-labelledby="case-details-heading">

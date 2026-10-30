@@ -1,6 +1,6 @@
 # Research notebook architecture
 
-Status: contracts and ports (#146) and storage (#147: migration 8, `NotebookRepository`, host API, demo adapter). There is no notebook UI yet; the screens arrive with #148. Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
+Status: contracts and ports (#146) storage (#147: migration 8, `NotebookRepository`, host API, demo adapter), and the notebook screens with the Tiptap editor (#148, see "Notebook screens and the Tiptap adapter"). Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
 
 The aim: the page content the researcher writes is owned by this app, in a small versioned format, and any editor or canvas library is a replaceable part that only renders and edits it.
 
@@ -59,7 +59,7 @@ No port type mentions a vendor document, node or instance.
 ## Composition root and injection
 
 - `notebook/NotebookAdapters.tsx`: `NotebookAdapters { editor, canvas | null }`, `NotebookAdaptersProvider` and `useNotebookAdapters()`.
-- `notebook/adapters/index.ts`: the composition root, exporting `defaultNotebookAdapters`. It is the only place that names concrete adapters. Today: the plain-text editor and no canvas.
+- `notebook/adapters/index.ts`: the composition root, exporting `defaultNotebookAdapters`. It is the only place that names concrete adapters. Today: the Tiptap editor (`adapters/tiptap`) and no canvas. The plain-text editor stays as a fallback and test double.
 - `App` takes an optional `notebookAdapters` prop (default `defaultNotebookAdapters`) and wraps its tree in the provider, so tests and entries can inject replacements.
 
 ## ESLint boundary
@@ -89,9 +89,18 @@ No port type mentions a vendor document, node or instance.
 
 Test doubles: `tests/renderer/notebook/fakeEditorAdapter.ts` and `fakeCanvasAdapter.ts` implement the full contract in memory and let a test simulate a user edit.
 
+## Notebook screens and the Tiptap adapter (#148)
+
+- **Routes** (only where the runtime has cases): `cases/:caseId/notebook` and `cases/:caseId/notebook/:pageId`; the case page has a "Research notebook" card (`notebook/NotebookCard.tsx`) that links in. `NotebookScreen` loads the outline; `NotebookNav` lists sections (collapsible) and pages and offers create, rename, move up/down, move to another section, archive (with confirmation) and restore from an "Archived" disclosure. Moves are translated from the visible (active) order to the host's index among all siblings (`notebookModel.stepIndex`). Under 1024px the list becomes a "Pages" panel; an archived case or client makes everything read-only.
+- **Page editor** (`PageEditor.tsx`, `EditorToolbar.tsx`): the editor is created once and fed pages through `setContent`; the toolbar only knows `EditorCommand` and `EditorState`. Saving is basic and lives in `usePageDrafts`: unsaved text is kept per page in memory (leaving a page or a failed save never drops it) and saved 800 ms after the last edit, or at once when leaving the page, with `baseVersion`. The status ("Saving…", "Saved", "Not saved" with Retry, "This page changed elsewhere" with Reload page) is an `aria-live` region. Recovery and conflict resolution are #149.
+- **Tiptap adapter** (`adapters/tiptap/`): vanilla `@tiptap/core`, exact-pinned 3.31.4 packages listed one by one (no starter kit, no `@tiptap/react`). `mapping.ts` converts the flat block list to nested ProseMirror lists and back (pure, unit-tested): list runs nest by `indent`, a skipped indent comes back one level at a time, extra paragraphs in a list item flatten to paragraph blocks, headings are levels 1-3, trailing empty paragraphs are dropped. `extensions.ts` holds the app's own parts: a `blockId` attribute (`data-block-id`) with a plugin that gives a new id to any node whose id is missing or repeated (the first holder keeps it), paragraph indent as the class `note-indent-N`, the `noteReference` block (its label, from `describeReference`, is set with `textContent`), and a checklist item without inline styles.
+- **CSP**: production is `style-src 'self'` and `script-src 'self'`. The editor is created with `injectCSS: false`; its base rules and the notebook look are in `styles.css`. No extension renders a `style` attribute (Tiptap's stock task item sets one through CSSOM, so `NoteTaskItem` replaces it). `tests/web/live-notebook.spec.ts` fails on any CSP report.
+- **Paste**: the schema is the defence: unknown elements and attributes are dropped, and images, scripts, frames and styles cannot be represented. A link keeps only an `href` that passes `isSafeHref` (http, https, mailto), does not open on a plain click (Ctrl/Cmd+click opens a new tab with `noopener`), and carries `rel="noopener noreferrer nofollow"`. `quietPastedHtml` removes active markup from the clipboard HTML first, because even parsing `<img onerror>` or `style=` in a detached document makes the browser report a CSP violation. Pasting never applies markdown (typing `**x**` formats, pasting it does not).
+- **Tests**: the adapter runs `describeEditorAdapterContract` under jsdom (`tests/renderer/notebook/TiptapAdapter.test.tsx`, with a test-only `TiptapAdapterHooks` for selection and typing); the screens run against the fake adapter injected through `App`'s `notebookAdapters` prop (`tests/renderer/Notebook.test.tsx`); `tests/web/live-notebook.spec.ts` and `tests/demo/notebook.spec.ts` drive the real editor.
+
 ## Releases
 
-- **Release A** (#146-#149): this contract, then storage (#147), the rich-text scratchpad and navigation (#148), and autosave with the case workflow bridge (#149). The plain-text adapter is the fallback; a richer provider is added as `adapters/<provider>/` and switched in the composition root once it passes the contract.
+- **Release A** (#146-#149): this contract, then storage (#147), the rich-text scratchpad and navigation (#148), and autosave with the case workflow bridge (#149). The plain-text adapter is the fallback; Tiptap (#148) is the default; a richer or different provider is added as `adapters/<provider>/` and switched in the composition root once it passes the contract.
 - **Release B** (#150-#152): the linked canvas, pen and touch ink, and focus interactions, built on `tg-canvas/1` and a `CanvasSurfaceAdapter` (element references to blocks, edges, app-owned ink).
 - **Release C** (#153-#155): the deterministic recap engine, its review and export, and notebook search. These read `NoteContent` (for example through `noteContentToPlainText`), never an editor's document.
 - **Release D** (#156-#157): backup, security and regression tests, and the researcher pilot. No handwritten-text recognition is claimed.
