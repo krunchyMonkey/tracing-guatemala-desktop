@@ -51,7 +51,11 @@ describe('Live API adapter', () => {
   })
 
   it('reads the backup status with a plain call and no arguments', async () => {
-    const status = { lastBackupAt: '2026-10-29T08:05:09.000Z', fileName: 'Tracing Guatemala backup 2026-10-29 08-05-09.tgbackup', backupCount: 2 }
+    const status = {
+      lastBackupAt: '2026-10-29T08:05:09.000Z',
+      fileName: 'Tracing Guatemala backup 2026-10-29 08-05-09.tgbackup',
+      backupCount: 2
+    }
     const { api, fetchImpl } = setup([reply(200, { result: status })])
     await expect(api.backupStatus()).resolves.toEqual(status)
     const [url, init] = fetchImpl.mock.calls[0]!
@@ -92,6 +96,14 @@ describe('LaunchRequired', () => {
     render(<LaunchRequired reason="signed-out" />)
     expect(screen.getByRole('heading', { name: 'Open Tracing Guatemala from its link' })).toBeTruthy()
     expect(screen.getByText(/private link shown in the Tracing Guatemala window/)).toBeTruthy()
+  })
+
+  it('on the home network says data is not available and never shows the private-link instructions', () => {
+    render(<LaunchRequired reason="remote" demoHref="http://localhost:4181/?live=4180" />)
+    expect(screen.getByText(/Live on the home network can’t open data yet/)).toBeTruthy()
+    expect(screen.getByText(/Device sign-in isn’t available in this version/)).toBeTruthy()
+    expect(screen.queryByText(/private link/)).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
   it('says nothing was lost after a restart', () => {

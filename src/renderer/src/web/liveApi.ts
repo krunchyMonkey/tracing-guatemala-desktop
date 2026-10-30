@@ -10,7 +10,8 @@ export const API_PREFIX = '/api/v1'
 const CSRF_HEADER = 'X-TG-CSRF'
 
 /** `demoUrl` is the host's fictional-demo address (#114); untrusted until web/demoLink.ts checks it. */
-export type SessionState = { authenticated: true; csrfToken: string; demoUrl?: unknown } | { authenticated: false; demoUrl?: unknown }
+export type SessionState =
+  { authenticated: true; csrfToken: string; demoUrl?: unknown } | { authenticated: false; demoUrl?: unknown; remote?: boolean }
 
 /** Thrown for any failed call; carries only the host's error code. */
 export class LiveApiError extends Error {

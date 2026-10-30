@@ -31,7 +31,7 @@ try {
     const runtime: AppRuntime = { mode: 'live', ...live, switcher }
     render(<App runtime={runtime} />)
   } else {
-    render(<LaunchRequired reason="signed-out" demoHref={demoHref} />)
+    render(<LaunchRequired reason={session.remote === true ? 'remote' : 'signed-out'} demoHref={demoHref} />)
   }
 } catch {
   render(<LaunchRequired reason="unreachable" />)

@@ -10,8 +10,10 @@ import type { AppInfo } from '../shared/ipc'
 import {
   CSRF_HEADER,
   hostIsAllowed,
+  allowedHosts,
   isNotCrossSite,
   isSameOriginRequest,
+  lanAllowedHosts,
   readCookie,
   sessionCookie,
   sessionCookieName,
@@ -96,6 +98,13 @@ export type ApiErrorCode =
   | 'method-not-allowed'
   | 'internal-error'
 
+/** What one listener accepts: its Host allowlist and its own origin (scheme included). */
+export interface ListenerPolicy {
+  kind: 'loopback' | 'lan'
+  hosts: string[]
+  origin: string
+}
+
 export interface LiveHostOptions {
   /** The port the host listens on, used to check Host headers and name the cookie. */
   port: number
@@ -109,6 +118,8 @@ export interface LiveHostOptions {
    * Reported by `GET /api/v1/session` so the page can offer a link; not a secret.
    */
   demoUrl?: string | null
+  /** Opt-in home-network listener (#135): the validated private address it will be bound to. */
+  lan?: { address: string }
   now?: () => Date
   log?: (line: string) => void
 }
@@ -116,6 +127,8 @@ export interface LiveHostOptions {
 export interface LiveHost {
   /** Handles the request and returns true, or returns false to let Vite serve it (dev only). */
   handle(req: IncomingMessage, res: ServerResponse): boolean
+  /** Present only when `options.lan` is set: the static client and nothing else (data is closed until device sign-in, #136). */
+  handleLan?: (req: IncomingMessage, res: ServerResponse) => boolean
   /** Path of the secret launch link, for printing to the person who started the host. */
   launchPath: string
 }
@@ -182,6 +195,10 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
   const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
+  const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
+  const lan: ListenerPolicy | null = options.lan
+    ? { kind: 'lan', hosts: lanAllowedHosts(options.lan.address, port), origin: `http://${options.lan.address}:${port}` }
+    : null
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -233,12 +250,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
     const json = JSON.stringify(body)
-    res.writeHead(status, {
-      ...securityHeaders,
-      'Content-Type': 'application/json; charset=utf-8',
-      'Content-Length': Buffer.byteLength(json),
-      ...headers
-    })
+    res.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(json), ...headers })
     res.end(json)
   }
 
@@ -252,7 +264,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
 
   /** Writes need a session, the same origin and the session's CSRF token. */
   function authorizeWrite(req: IncomingMessage): Session {
-    if (!isSameOriginRequest(req)) throw new RequestError(403, 'not-same-origin')
+    if (!isSameOriginRequest(req, loopback.origin)) throw new RequestError(403, 'not-same-origin')
     const session = sessionOf(req)
     if (!session) throw new RequestError(401, 'not-signed-in')
     if (!sessions.checkCsrf(session, req.headers[CSRF_HEADER])) throw new RequestError(403, 'bad-csrf-token')
@@ -355,12 +367,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     } catch {
       throw new RequestError(404, 'not-found')
     }
-    res.writeHead(200, {
-      ...securityHeaders,
-      'Content-Type': contentTypeFor(file),
-      'Content-Length': size,
-      'Content-Security-Policy': csp
-    })
+    res.writeHead(200, { ...securityHeaders, 'Content-Type': contentTypeFor(file), 'Content-Length': size, 'Content-Security-Policy': csp })
     if (req.method === 'HEAD') res.end()
     else createReadStream(file).pipe(res)
   }
@@ -400,6 +407,58 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     return 'static'
   }
 
+  /**
+   * The home-network listener (#135). It serves the static client and answers
+   * the session probe as signed-out; every other /api path is refused before any
+   * body or session is read. No cookie is ever set or read, and there is no CORS.
+   */
+  function handleLanRequest(policy: ListenerPolicy, req: IncomingMessage, res: ServerResponse): boolean {
+    const logLan = (line: string) => log(`lan ${line}`)
+    const method = req.method ?? 'GET'
+    let url: URL
+    try {
+      url = new URL(req.url ?? '/', 'http://lan.invalid')
+    } catch {
+      sendError(res, 400, 'invalid-request')
+      return true
+    }
+    const path = url.pathname
+    const isApi = path === '/api' || path.startsWith('/api/')
+    const finish = (label: string, status: number, code: ApiErrorCode | null) => {
+      logLan(`${method} ${label} ${status}`)
+      if (code) {
+        if (!req.complete) res.setHeader('Connection', 'close')
+        sendError(res, status, code)
+      }
+    }
+
+    if (!hostIsAllowed(req, policy.hosts)) {
+      finish(isApi ? 'api' : 'static', 421, 'bad-host')
+      return true
+    }
+    if (path === LAUNCH_PATH) {
+      finish(LAUNCH_PATH, 404, 'not-found')
+      return true
+    }
+    if (path === `${API_PREFIX}/session` && method === 'GET') {
+      send(res, 200, { authenticated: false, demoUrl: null, remote: true })
+      logLan(`${method} ${path} 200`)
+      return true
+    }
+    if (isApi) {
+      finish('api', 401, 'not-signed-in')
+      return true
+    }
+    try {
+      handleStatic(req, res, url)
+      logLan(`${method} static ${res.statusCode}`)
+    } catch (error) {
+      const failure = error instanceof RequestError ? error : new RequestError(500, 'internal-error')
+      finish('static', failure.status, failure.code)
+    }
+    return true
+  }
+
   return {
     launchPath: `${LAUNCH_PATH}?token=${sessions.launchToken}`,
 
@@ -409,7 +468,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       if (!owned && !staticDir) return false
 
       const method = req.method ?? 'GET'
-      if (!hostIsAllowed(req, port)) {
+      if (!hostIsAllowed(req, loopback.hosts)) {
         log(`${method} ${owned ? 'api' : 'static'} 421`)
         sendError(res, 421, 'bad-host')
         return true
@@ -435,6 +494,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
         }
       )
       return true
-    }
+    },
+
+    handleLan: lan ? (req, res) => handleLanRequest(lan, req, res) : undefined
   }
 }
