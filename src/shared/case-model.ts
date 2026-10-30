@@ -179,7 +179,7 @@ export const stateLabels: Record<CaseState, string> = {
   closed: 'Closed'
 }
 
-export function eventSentence(event: CaseEvent): string {
+export function eventSentence(event: Pick<CaseEvent, 'kind' | 'fromState' | 'toState'>): string {
   if (event.kind === 'created') return 'Case created'
   if (event.kind === 'archived') return 'Archived'
   if (event.kind === 'unarchived') return 'Restored from the archive'

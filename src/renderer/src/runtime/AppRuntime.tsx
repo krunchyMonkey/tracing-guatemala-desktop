@@ -4,6 +4,7 @@ import type { JournalEntry, JournalEntryInput, JournalMutationResult } from '../
 import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../shared/case-tasks'
 import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../../../shared/case-time'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
+import type { StudioSummary } from '../../../shared/studio-summary'
 import type { BackupStatus, TracingGuatemalaApi } from '../../../shared/ipc'
 
 // Where the shared React UI gets its data (#100, #110). The desktop app reads and
@@ -57,6 +58,8 @@ export interface CaseApi {
   heartbeatTimer(version: number): Promise<TimerResult>
   stopAndSaveTimer(version: number, options: StopOptions): Promise<TimerResult>
   discardTimer(version: number): Promise<TimerResult>
+  /** The Research Studio dashboard figures in one read (active, non-archived work only). */
+  getStudioSummary(): Promise<StudioSummary>
 }
 
 /**

@@ -75,7 +75,8 @@ const callable = {
   resumeTimer: caseContracts.resumeTimer,
   heartbeatTimer: caseContracts.heartbeatTimer,
   stopAndSaveTimer: caseContracts.stopAndSaveTimer,
-  discardTimer: caseContracts.discardTimer
+  discardTimer: caseContracts.discardTimer,
+  getStudioSummary: caseContracts.getStudioSummary
 } as const
 
 export type CallName = keyof typeof callable
@@ -174,7 +175,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const log = options.log ?? ((line: string) => console.log(line))
   const sessions = new SessionStore()
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs, journal, tasks, time } = createDataServices(data)
+  const { clients, notes, cases, briefs, journal, tasks, time, studio } = createDataServices(data)
   const csp = buildContentSecurityPolicy({ mode: 'production', connectToSelf: true })
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>) => unknown } = {
@@ -220,7 +221,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     resumeTimer: ([version]) => time.resume(version),
     heartbeatTimer: ([version]) => time.heartbeat(version),
     stopAndSaveTimer: ([version, options]) => time.stopAndSave(version, options),
-    discardTimer: ([version]) => time.discard(version)
+    discardTimer: ([version]) => time.discard(version),
+    getStudioSummary: () => studio.summary()
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

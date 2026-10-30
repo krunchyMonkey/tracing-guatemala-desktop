@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX, type CaseTask, type CaseTaskInput, type CaseTaskMutationResult } from '../shared/case-tasks'
+import type { StudioSummary } from '../shared/studio-summary'
 import {
   ACTIVITY_TYPES,
   TIME_NOTE_MAX,
@@ -409,6 +410,42 @@ const timerResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), reason: z.enum(['not-found', 'wrong-status', 'too-short']) })
 ]) satisfies z.ZodType<TimerResult>
 
+const studioRef = {
+  caseId: idSchema,
+  clientId: idSchema,
+  caseTitle: z.string(),
+  clientDisplayName: z.string()
+}
+const studioCaseSchema = z.strictObject({ ...studioRef, state: caseStateSchema, dueDate: z.string().nullable() })
+const studioCounts = z.number().int().nonnegative()
+
+/** Strict, allowlisted fields only (studio-summary/v1): no note, journal or task text, no contacts. */
+const studioSummarySchema = z.strictObject({
+  today: z.string(),
+  counts: z.strictObject({
+    activeClients: studioCounts,
+    openCases: studioCounts,
+    casesByState: z.strictObject({
+      intake: studioCounts,
+      active: studioCounts,
+      waiting: studioCounts,
+      delivered: studioCounts,
+      closed: studioCounts
+    }),
+    overdueTasks: studioCounts,
+    tasksDueSoon: studioCounts
+  }),
+  continueCase: studioCaseSchema.nullable(),
+  activeCases: z.array(studioCaseSchema),
+  upcomingTasks: z.array(
+    z.strictObject({ ...studioRef, taskId: idSchema, title: z.string(), dueDate: z.string(), overdue: z.boolean() })
+  ),
+  recentActivity: z.array(
+    z.strictObject({ ...studioRef, id: z.string(), kind: z.enum(['journal', 'event', 'time']), at: timestamp, label: z.string() })
+  ),
+  hours: z.strictObject({ weekMinutes: studioCounts, monthMinutes: studioCounts })
+}) satisfies z.ZodType<StudioSummary>
+
 const backupProblem = z.enum(['not-a-backup', 'damaged', 'too-new'])
 const count = z.number().int().nonnegative()
 
@@ -540,7 +577,8 @@ export const caseContracts = {
   resumeTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
   heartbeatTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
   stopAndSaveTimer: { args: z.tuple([timerVersionSchema, stopOptionsSchema]), result: timerResultSchema },
-  discardTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema }
+  discardTimer: { args: z.tuple([timerVersionSchema]), result: timerResultSchema },
+  getStudioSummary: { args: z.tuple([]), result: studioSummarySchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>
 
 /** Live-only calls (#117): no IPC channel, because the desktop app is frozen. */

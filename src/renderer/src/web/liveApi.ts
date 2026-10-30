@@ -150,7 +150,8 @@ export function createLiveApi(options: LiveApiOptions): {
     resumeTimer: (version) => call('resumeTimer', version),
     heartbeatTimer: (version) => call('heartbeatTimer', version),
     stopAndSaveTimer: (version, options) => call('stopAndSaveTimer', version, options),
-    discardTimer: (version) => call('discardTimer', version)
+    discardTimer: (version) => call('discardTimer', version),
+    getStudioSummary: () => call('getStudioSummary')
   }
 
   return { data, backup, backupStatus, cases }
