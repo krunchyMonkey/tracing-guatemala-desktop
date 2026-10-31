@@ -41,8 +41,38 @@ It is a command-line flag only. No environment variable switches it on, and it n
 
 Stop the window and start again without `--https-host`. Nothing else is changed; the proxy then gets connection errors, which is fine. Remove or disable the proxy site if you no longer want the name to answer.
 
+### Home-network deployment (fictional pilot, 2026-10-31)
+
+Host steps, all outside the repository and approved by the owner:
+
+- **Caddy** started with `-BindHost <host private IPv4> -Upstream 127.0.0.1:<port + 2>`: it listens on that one address, **TCP 443 only** (`protocols h1 h2`, no HTTP/3 UDP), admin API on localhost.
+- **Windows Firewall:** one inbound allow rule for `caddy.exe`, TCP 443, limited to the Ethernet interface, the host's own address as destination and the home (Deco) subnet as source, edge traversal blocked. The network category was left unchanged, because switching it to Private would also enable File and Printer Sharing, Network Discovery and other Windows rules. A pilot DNS resolver had two similar rules for port 53 while it was in use.
+- **Live** started with `--port 4190 --https-host tg.krunchymonkey.dev` on a fresh fictional profile (the default port was taken by a plain-HTTP LAN test host). Node listened on `127.0.0.1` only.
+- **DNS:** a public "DNS only" A record to the private address ([https-lan-dns.md](https-lan-dns.md)).
+
+Verified from the host through the real LAN path (statuses only; no tokens, cookies or codes recorded):
+
+| Check | Result |
+| --- | --- |
+| Certificate | trusted by Windows and Node (`tg.krunchymonkey.dev`, Let's Encrypt, valid to 2027-01-28) |
+| Bare IP / other SNI | no certificate, handshake fails |
+| Port 80, loopback 443 | closed |
+| Unpaired data call | 401 |
+| Pair over HTTPS | 200, cookie `Path=/; HttpOnly; SameSite=Strict; Secure` |
+| Create and list a fictional client as a paired device | 200 |
+| Missing CSRF / Origin `http://…` / foreign Origin | 403 / 403 / 403 |
+| Host-only calls and backup download from a device; `/launch` | 403; 404 |
+| Forged `X-Forwarded-*` / `Forwarded` | no effect |
+| Host revokes the device; device logs out | next call 401 in both cases |
+| Live restarted | fictional client still stored; paired devices forgotten (memory only, by design) |
+| Two household devices on the Deco Wi-Fi | opened the site with automatic DNS and a trusted certificate |
+
+The pairing page first showed the Phase 2.5 "Unencrypted HTTP" warning over HTTPS; fixed in #174 (labels now follow the page's scheme).
+
+Still to do in the pilot: pair both devices and save fictional records on them, revoke one, confirm a phone on mobile data cannot load the page, and run Caddy persistently so renewal can be observed (#166).
+
 ### Not done yet
 
-- Real-data enablement and further session hardening for the HTTPS name (the name is publicly registered but resolves only on the home network): **#168**, after the owner's approval.
-- Validation on real devices: **#169**.
-- Making the proxy reachable from the home network (binding it to a LAN address, firewall rules, router and DNS) is a host step outside this repository. Never forward router ports to this computer.
+- Real-data enablement and further session hardening for the HTTPS name: **#168**, after the owner's approval. Includes the same-site GitHub Pages apex (see [https-lan-dns.md](https-lan-dns.md)).
+- Final validation and the owner's privacy approval: **#169**.
+- Never forward router ports to this computer.

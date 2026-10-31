@@ -45,6 +45,10 @@ describe('deploy/caddy/Caddyfile', () => {
     expect(directives).toContain('admin localhost:2019')
   })
 
+  it('serves over TCP only, with no HTTP/3 UDP listener', () => {
+    expect(directives).toContain('protocols h1 h2')
+  })
+
   it('contains no LAN address and nothing token-shaped', () => {
     for (const text of [caddyfile, launcher, build]) {
       expect(text).not.toMatch(/\b(10|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+(\.\d+)?\b/)
@@ -133,8 +137,9 @@ describe.skipIf(!caddyBin || !existsSync(caddyBin))('Caddyfile with the real cad
 
   it('listens on loopback 443 only and issues through DNS-01 only', () => {
     const { config } = adapt()
-    const servers = Object.values(config.apps.http.servers) as { listen: string[] }[]
+    const servers = Object.values(config.apps.http.servers) as { listen: string[]; protocols?: string[] }[]
     expect(servers.flatMap((s) => s.listen)).toEqual(['127.0.0.1:443'])
+    expect(servers.every((s) => s.protocols?.join(',') === 'h1,h2')).toBe(true)
     const issuer = config.apps.tls.automation.policies[0].issuers[0]
     expect(issuer.challenges.http.disabled).toBe(true)
     expect(issuer.challenges['tls-alpn'].disabled).toBe(true)
