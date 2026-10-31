@@ -25,6 +25,8 @@ Give the researcher a OneNote-like workspace that supports rich notes, organized
 | D | [P03-12 #157](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/157) | Researcher pilot and signoff |
 | Deferred | [P03-F01 #158](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/158) | Optional AI formalization design |
 
+**Status (2026-10-30):** Release A merged — #146 (PR #160), #147 (PR #161), #148 (PR #162), #149 (PR #163); integrated engineering verification in `docs/pilot/phase-3-release-a-verification.md`. Next: #150. Researcher acceptance remains #157.
+
 ## Dependency graph
 
 ```mermaid

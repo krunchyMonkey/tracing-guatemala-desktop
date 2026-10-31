@@ -17,7 +17,16 @@ GitHub is the source of status and the code is the truth; re-check both before a
   - #135, #136 and #137 are closed.
   - **#138 is open:** its owner manual checklist in `docs/pilot/phase-2.5-lan-validation.md` is NOT RUN, and the owner has not approved engineering readiness.
   - #134 is open until #138 closes.
-- **Next:** #139 (Phase 2.6, HTTPS LAN). Not authorized for autonomous merge.
+- **Phase 3 Release A — Research Notebook foundation (#145):** merged under the standing merge-on-completion instruction (squash PRs, local gate each time):
+  - #146 → PR #160: app-owned `tg-note/1` content and `tg-canvas/1` contract (`src/shared/note-content.ts`, `notebook.ts`, `notebook-canvas.ts`), editor/canvas ports (`src/renderer/src/notebook/ports.ts`), DI via `NotebookAdaptersProvider` and the composition root `notebook/adapters/index.ts`, plain-text adapter, ESLint vendor boundary.
+  - #147 → PR #161: migration 8 (`case_notebooks`, `notebook_sections`, `notebook_pages`, append-only `notebook_page_revisions`), `NotebookRepository`, 16 typed API calls, demo implementation with demo/SQLite parity script, backup restore verifies page count. JSON body limit is 1 MiB.
+  - #148 → PR #162: Tiptap **3.31.4** (MIT, exact pins, vanilla core) only in `notebook/adapters/tiptap/`; notebook routes `cases/:caseId/notebook[/:pageId]`, sections/pages UI, toolbar, responsive Pages drawer.
+  - #149 → PR #163: in-memory `NotebookDraftStore` (no browser storage of notes), retry/backoff, conflict banner + `keepPrevious`, history dialog with `NoteContentView`, links to journal/task/hours records (never copies), explicit confirmed "create task / add to journal", notebook timer via `TimerContext`.
+  - Integrated verification: `tests/web/live-notebook-release-a.spec.ts`, `tests/renderer/NotebookReleaseA.test.tsx`, checklist `docs/pilot/phase-3-release-a-verification.md` (manual items NOT RUN), screenshots `docs/screenshots/release-a/`.
+  - Architecture and extension points: `docs/architecture/research-notebook.md`. Replacing the editor = new folder under `notebook/adapters/<provider>/` passing `describeEditorAdapterContract`, then switch the composition root; no domain/SQLite/API change.
+  - **#145 stays OPEN**: Releases B–D remain, and researcher acceptance is #157. Never claim researcher approval of the notebook.
+  - Known limitations: revisions are snapshotted at most every 5 minutes (plus restore points) and never pruned; any non-refusal save error is retried (a permanently rejected payload keeps "retrying"); clicking a reference chip in the editor opens its record; cancelling the web-address Link dialog can collapse the selection; wrapped toolbar row shows a stray separator; lint warning in `notebook/ModalDialog.tsx` (exhaustive-deps); occasional flakes `live-lan.spec.ts:245` (timeout) and `live-notebook.test.ts` 413 case (`ECONNRESET` under load) — both pass on rerun.
+- **Next implementation issue:** #150 (Release B, P03-05 draggable linked canvas) through the existing `CanvasSurfaceAdapter` port and `tg-canvas/1` contract. #139 (Phase 2.6, HTTPS LAN) is independent and **not** authorized for autonomous merge.
 - **Open, not in scope:** docs PR #111.
 - **Gate:** `npm run check` (lint, typecheck, Vitest, Playwright electron + browser-demo + web-live), plus `smoke:live`, `pilot:rehearsal`, `lan:rehearsal` and `demo:build`. This repo has **no GitHub CI and no branch protection**, so record local results and never claim CI.
 
