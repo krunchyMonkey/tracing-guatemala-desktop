@@ -15,6 +15,10 @@
 	# DNS-01 only: no HTTP->HTTPS redirect listener on :80, no inbound challenge ports.
 	auto_https disable_redirects
 	default_bind {$TG_BIND_HOST:127.0.0.1}
+	# TCP only (HTTP/1.1 and HTTP/2): no HTTP/3 UDP listener for the firewall to cover.
+	servers {
+		protocols h1 h2
+	}
 	log {
 		output file {$TG_LOG_DIR:logs}/caddy.log {
 			roll_size 10MiB
