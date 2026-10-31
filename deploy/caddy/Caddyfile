@@ -1,0 +1,46 @@
+# Tracing Guatemala Live - private home-network HTTPS front (Phase 2.6, #166/#167).
+# Copy to the host next to start-tg-caddy.ps1 (see docs/operations/https-lan-tls.md).
+# Contains no secrets, LAN addresses or client data.
+#
+# Portable: every host-specific value comes from an environment variable set by
+# start-tg-caddy.ps1, so moving to another computer changes only the launcher's
+# parameters, never the domain.
+#
+# The Cloudflare token is read at RUNTIME via {env.CLOUDFLARE_API_TOKEN}. Never
+# change it to {$CLOUDFLARE_API_TOKEN}: that form is substituted at parse time and
+# would put the token into the adapted JSON config that the admin API serves.
+
+{
+	admin localhost:2019
+	# DNS-01 only: no HTTP->HTTPS redirect listener on :80, no inbound challenge ports.
+	auto_https disable_redirects
+	default_bind {$TG_BIND_HOST:127.0.0.1}
+	log {
+		output file {$TG_LOG_DIR:logs}/caddy.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		level INFO
+	}
+}
+
+{$TG_HOSTNAME:tg.krunchymonkey.dev}:{$TG_HTTPS_PORT:443} {
+	bind {$TG_BIND_HOST:127.0.0.1}
+
+	tls {
+		issuer acme {
+			dir {$TG_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+			dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+			# Public resolvers for the TXT propagation check, so split-horizon home
+			# DNS can never hide the authoritative Cloudflare zone.
+			resolvers 1.1.1.1 1.0.0.1
+			propagation_timeout 5m
+			disable_http_challenge
+			disable_tlsalpn_challenge
+		}
+	}
+
+	# The Live host's loopback-only proxy listener (#167, --https-host): port + 2.
+	# Caddy replaces client-sent X-Forwarded-* headers; the Live host ignores them anyway.
+	reverse_proxy {$TG_UPSTREAM:127.0.0.1:4182}
+}
