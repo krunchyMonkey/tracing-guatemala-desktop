@@ -33,9 +33,11 @@ interface EditorToolbarProps {
   disabled: boolean
   onCommand(command: EditorCommand): void
   onLink(): void
+  /** The workflow bridge (#149); left out where the case can't be changed. */
+  bridge?: { onLinkRecord(): void; onCreateTask(): void; onCreateJournal(): void }
 }
 
-export function EditorToolbar({ state, disabled, onCommand, onLink }: EditorToolbarProps) {
+export function EditorToolbar({ state, disabled, onCommand, onLink, bridge }: EditorToolbarProps) {
   const barRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const blockLabelId = useId()
@@ -159,6 +161,20 @@ export function EditorToolbar({ state, disabled, onCommand, onLink }: EditorTool
           <span aria-hidden="true">―</span>
         </button>
       </div>
+
+      {bridge && (
+        <div className="note-tool-group" role="group" aria-label="Case records">
+          <button type="button" className="note-tool note-tool-wide" aria-label="Link record" title="Link a journal entry, task or hours entry of this case" disabled={disabled} onClick={bridge.onLinkRecord} {...keepSelection} {...tool()}>
+            <span aria-hidden="true">Link record</span>
+          </button>
+          <button type="button" className="note-tool note-tool-wide" aria-label="Create task from selection" title="Create a task from the selected text (you confirm first)" disabled={disabled} onClick={bridge.onCreateTask} {...keepSelection} {...tool()}>
+            <span aria-hidden="true">+ Task</span>
+          </button>
+          <button type="button" className="note-tool note-tool-wide" aria-label="Add to journal from selection" title="Add the selected text to the research journal (you confirm first)" disabled={disabled} onClick={bridge.onCreateJournal} {...keepSelection} {...tool()}>
+            <span aria-hidden="true">+ Journal</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

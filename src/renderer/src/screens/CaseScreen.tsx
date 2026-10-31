@@ -51,6 +51,7 @@ function CaseOverview({ caseId }: { caseId: string }) {
   const store = useClientStore()
   const location = useLocation()
   const flash = (location.state as { flash?: string } | null)?.flash
+  const focusRecord = (location.state as { focusRecord?: string } | null)?.focusRecord
   const loaded = useLoad(() => api.getCase(caseId), caseId)
   const [current, setCurrent] = useState<ResearchCase | null | undefined>(undefined)
   const [version, setVersion] = useState(0)
@@ -66,6 +67,23 @@ function CaseOverview({ caseId }: { caseId: string }) {
   useEffect(() => {
     if (loaded.data !== undefined) setCurrent(loaded.data)
   }, [loaded.data])
+
+  // Coming from a notebook reference: bring that journal entry, task or hours entry into view
+  // (the cards load on their own, so look for it for a few seconds).
+  useEffect(() => {
+    if (!focusRecord || !/^(journal|task|time)-[a-f0-9-]+$/.test(focusRecord)) return
+    let tries = 0
+    const timer = window.setInterval(() => {
+      const target = document.getElementById(focusRecord)
+      tries += 1
+      if (target) {
+        target.scrollIntoView?.({ block: 'center' })
+        target.focus({ preventScroll: true })
+      }
+      if (target || tries >= 20) window.clearInterval(timer)
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [focusRecord])
 
   const clientId = current?.clientId
   useEffect(() => {

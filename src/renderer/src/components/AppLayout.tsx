@@ -5,6 +5,7 @@ import { DemoBanner } from './DemoBanner'
 import { HttpRiskBanner } from './HttpRiskBanner'
 import { ModeSwitcher } from './ModeSwitcher'
 import { TimerPill } from './TimerPill'
+import { UnsavedPagesIndicator } from '../notebook/UnsavedPagesIndicator'
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
@@ -93,6 +94,7 @@ export function AppLayout() {
             </ul>
           </section>
         </nav>
+        <UnsavedPagesIndicator />
         <TimerPill />
       </aside>
       <main id="main-content" className="content" tabIndex={-1}>

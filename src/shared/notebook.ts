@@ -131,6 +131,8 @@ export interface PageMove {
 export interface PageSave {
   baseVersion: number
   content: NoteContent
+  /** Keep the content being replaced in the history first (a `restore-point`); used after a conflict. */
+  keepPrevious?: boolean
 }
 
 /** A rule outcome. Carries only a field and a code (and a block position), never submitted values. */

@@ -79,6 +79,50 @@ describe('tiptap adapter', () => {
     expect(label.children).toHaveLength(0)
   })
 
+  it('refreshes reference labels when they change later, as text only', () => {
+    let label = 'Journal entry'
+    const element = document.createElement('div')
+    const onChange = vi.fn()
+    session = makeAdapter().create({
+      element,
+      content: contractContent(),
+      editable: true,
+      label: 'x',
+      newId: () => id(counter++),
+      onChange,
+      describeReference: () => label
+    })
+    expect(element.querySelector('.note-reference-label')?.textContent).toBe('Journal entry')
+    label = '<b>Journal · 12 Oct 2026</b>'
+    session.refreshReferences()
+    const shown = element.querySelector('.note-reference-label')!
+    expect(shown.textContent).toBe('<b>Journal · 12 Oct 2026</b>')
+    expect(shown.children).toHaveLength(0)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('reports a reference being activated by click or Enter, and makes it keyboard reachable', () => {
+    const element = document.createElement('div')
+    const onReferenceActivate = vi.fn()
+    session = makeAdapter().create({ element, content: contractContent(), editable: false, label: 'x', newId: () => id(counter++), onChange: () => undefined, onReferenceActivate })
+    const reference = element.querySelector<HTMLElement>('.note-reference')!
+    expect(reference.tabIndex).toBe(0)
+    expect(reference.getAttribute('role')).toBe('link')
+    reference.click()
+    reference.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    reference.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }))
+    expect(onReferenceActivate).toHaveBeenCalledTimes(2)
+    expect(onReferenceActivate).toHaveBeenCalledWith({ kind: 'journal', id: id(100) })
+  })
+
+  it('inserts a reference after the selected block without replacing the selected text', () => {
+    const { element, session: s } = mount({ format: 'tg-note', version: 1, blocks: [{ id: id(1), type: 'paragraph', indent: 0, content: [{ text: 'Closing words' }] }] })
+    handles.get(element)!.selectLastBlockText()
+    expect(s.run({ type: 'insertReference', target: { kind: 'task', id: id(200) } })).toBe(true)
+    expect(s.getContent().blocks.map((b) => b.type)).toEqual(['paragraph', 'reference'])
+    expect(noteContentToPlainText(s.getContent())).toContain('Closing words')
+  })
+
   it('gives new blocks ids once, so they are stable across getContent calls', () => {
     const { element, session: s, onChange } = mount()
     handles.get(element)!.typeAtEnd('First line')

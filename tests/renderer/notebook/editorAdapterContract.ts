@@ -172,6 +172,16 @@ export function describeEditorAdapterContract(name: string, makeAdapter: () => R
         expect(session.run({ type: 'indent' })).toBe(false)
       })
 
+      it('refreshReferences changes nothing: no content change, no onChange, no throw', () => {
+        const session = mount()
+        session.run({ type: 'insertReference', target: { kind: 'task', id: id(200) } })
+        onChange.mockClear()
+        const before = session.getContent()
+        expect(() => session.refreshReferences()).not.toThrow()
+        expect(session.getContent()).toEqual(before)
+        expect(onChange).not.toHaveBeenCalled()
+      })
+
       it('inserts a divider and a reference after the current block', () => {
         const session = mount()
         expect(session.run({ type: 'insertDivider' })).toBe(true)

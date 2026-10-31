@@ -311,6 +311,7 @@ export function createDemoNotebook(initial: DemoNotebookData, cases: DemoNoteboo
       const now = clock.now()
       const at = now.toISOString()
       const version = page.version + 1
+      if (raw.keepPrevious === true) addRevision(page, page.version, 'restore-point', at)
       patchPage(pageId, { content, version, updatedAt: at })
       const newest = revisionsOf(caseId, pageId)[0]
       if (shouldSnapshot(newest?.createdAt ?? null, now)) addRevision(findPage(caseId, pageId)!, version, 'autosave', at)

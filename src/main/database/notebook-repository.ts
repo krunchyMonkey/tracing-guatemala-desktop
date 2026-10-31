@@ -352,6 +352,8 @@ export class NotebookRepository {
       const now = this.clock.now()
       const at = now.toISOString()
       const version = page.version + 1
+      // "Keep my version" after a conflict: the other window's content stays in the history.
+      if (raw.keepPrevious === true) this.addRevision(caseId, pageId, page.version, page.title, page.content, 'restore-point', at)
       this.db
         .prepare('UPDATE notebook_pages SET content = ?, content_version = ?, version = ?, updated_at = ? WHERE id = ? AND case_id = ?')
         .run(serialized, NOTE_VERSION, version, at, pageId, caseId)

@@ -112,14 +112,21 @@ export const ParagraphIndent = Extension.create({
 const RECORD_KIND_LIST: readonly string[] = ['journal', 'task', 'time']
 
 /** A block that points at a journal entry, task or hours entry. It shows a label, never a copy. */
-export const NoteReference = Node.create<{ describe: (ref: RecordRef) => string }>({
+export interface NoteReferenceOptions {
+  describe: (ref: RecordRef) => string
+  /** Shown reference views register a function here that sets their label again (see refreshReferences). */
+  views: Set<() => void>
+  onActivate?: (ref: RecordRef) => void
+}
+
+export const NoteReference = Node.create<NoteReferenceOptions>({
   name: 'noteReference',
   group: 'block',
   atom: true,
   selectable: true,
   draggable: false,
   addOptions() {
-    return { describe: (ref) => DEFAULT_REFERENCE_LABELS[ref.kind] }
+    return { describe: (ref) => DEFAULT_REFERENCE_LABELS[ref.kind], views: new Set<() => void>() }
   },
   addAttributes() {
     return {
@@ -151,20 +158,42 @@ export const NoteReference = Node.create<{ describe: (ref: RecordRef) => string 
     ]
   },
   addNodeView() {
-    const { describe } = this.options
+    const { describe, views, onActivate } = this.options
     return ({ node }) => {
       const dom = document.createElement('div')
       dom.className = 'note-reference'
       dom.contentEditable = 'false'
+      // A link-like control: reachable by keyboard, activated by click or Enter.
+      dom.tabIndex = 0
+      dom.setAttribute('role', 'link')
+      const ref = referenceOf(node.attrs)
+      const activate = (event: Event) => {
+        event.preventDefault()
+        onActivate?.(ref)
+      }
+      dom.addEventListener('click', activate)
+      dom.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') activate(event)
+      })
       dom.setAttribute('data-note-reference', String(node.attrs['kind']))
       const blockId: unknown = node.attrs['blockId']
       if (typeof blockId === 'string') dom.setAttribute('data-block-id', blockId)
       const label = document.createElement('span')
       label.className = 'note-reference-label'
       // The label is the record's own text: shown as text only, never as markup.
-      label.textContent = describe(referenceOf(node.attrs))
+      label.textContent = describe(ref)
       dom.append(label)
-      return { dom }
+      const refresh = () => {
+        label.textContent = describe(ref)
+      }
+      views.add(refresh)
+      return {
+        dom,
+        stopEvent: (event) => event.type === 'click' || (event.type === 'keydown' && (event as KeyboardEvent).key === 'Enter'),
+        destroy: () => {
+          views.delete(refresh)
+        }
+      }
     }
   }
 })

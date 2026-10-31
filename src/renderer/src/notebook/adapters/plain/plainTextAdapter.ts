@@ -224,6 +224,8 @@ function createSession(options: RichTextEditorOptions): RichTextEditorSession {
       textarea.readOnly = !next
     },
     focus: () => textarea.focus(),
+    // A reference shows as its opaque "@ref:" line here, so there is no label to refresh.
+    refreshReferences() {},
     getState,
     run(command: EditorCommand): boolean {
       if (destroyed || !editable) return false

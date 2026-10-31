@@ -145,9 +145,15 @@ async function script(api: NotebookApi, clock: { advance: (ms: number) => void }
   await log(api.restorePageRevision(caseId, p1.id, otherCaseId, 5))
   await log(api.listPageRevisions(caseId, p1.id))
 
+  // "Keep my version" after a conflict: the replaced content is kept as a restore point.
+  await log(api.saveNotebookPage(caseId, p1.id, { baseVersion: 4, content: doc(paragraph(1, 'Mine.')), keepPrevious: true }))
+  await log(api.saveNotebookPage(caseId, p1.id, { baseVersion: 5, content: doc(paragraph(1, 'Mine.')), keepPrevious: true }))
+  await log(api.saveNotebookPage(caseId, p1.id, { baseVersion: 5, content: doc(paragraph(1, 'Mine again.')), keepPrevious: false }))
+  await log(api.listPageRevisions(caseId, p1.id))
+
   await log(api.archiveNotebookPage(caseId, p1.id))
   await log(api.archiveNotebookPage(caseId, p1.id))
-  await log(api.saveNotebookPage(caseId, p1.id, { baseVersion: 5, content: doc() }))
+  await log(api.saveNotebookPage(caseId, p1.id, { baseVersion: 6, content: doc() }))
   await log(api.renameNotebookPage(caseId, p1.id, { title: 'nope' }))
   await log(api.unarchiveNotebookPage(caseId, p1.id))
   await log(api.unarchiveNotebookPage(caseId, p1.id))

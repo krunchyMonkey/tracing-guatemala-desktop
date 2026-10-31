@@ -182,7 +182,7 @@ export function HoursCard({ caseId, caseTitle, readOnly, readOnlyReason }: Hours
       ) : (
         <ul className="hours-list" aria-label="Hours entries">
           {entries.map((entry) => (
-            <li key={entry.id} className="hours-item">
+            <li key={entry.id} id={`time-${entry.id}`} tabIndex={-1} className="hours-item">
               {editingId === entry.id ? (
                 <EntryForm
                   entry={entry}
