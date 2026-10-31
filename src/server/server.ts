@@ -208,7 +208,7 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
       ...(httpsName ? { lan: { address: LIVE_HOST, httpsName } } : {}),
       onDisableLan: () => {
         lanClosed = closeLanSockets()
-        log('Home-network access was turned off. Paired devices were signed out. Restart with --lan-host to turn it on again.')
+        log(`Home-network access was turned off. Paired devices were signed out. Restart with ${httpsName ? '--https-host' : '--lan-host'} to turn it on again.`)
       }
     })
   } catch (error) {

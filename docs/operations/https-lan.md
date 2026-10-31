@@ -2,7 +2,7 @@
 
 ## #167 HTTPS through the local reverse proxy
 
-An opt-in way to reach Live from a phone or tablet over **HTTPS**, using a reverse proxy that runs on the same computer (the owner uses Caddy with a Let's Encrypt certificate for `https://tg.krunchymonkey.dev`). The proxy is a host step and is not part of this repository.
+An opt-in way to reach Live from a phone or tablet over **HTTPS**, using a reverse proxy that runs on the same computer (the owner uses Caddy with a Let's Encrypt certificate for `https://tg.krunchymonkey.dev`). The proxy runs on the host, outside the app: its config, launcher and pinned build are in [`deploy/caddy/`](../../deploy/caddy/) and [https-lan-tls.md](https-lan-tls.md) (#166); the private DNS name is [https-lan-dns.md](https-lan-dns.md) (#165).
 
 **Fictional test data only.** The same gate as `--lan-host` applies: the host refuses to start this mode on the default data folder or any folder not marked as a fictional test profile. Real client records stay refused until the HTTPS security review (#168) and the owner's explicit approval. There is no way around the gate.
 
@@ -43,6 +43,6 @@ Stop the window and start again without `--https-host`. Nothing else is changed;
 
 ### Not done yet
 
-- Real-data enablement, session and header hardening for the internet-facing name: **#168**.
+- Real-data enablement and further session hardening for the HTTPS name (the name is publicly registered but resolves only on the home network): **#168**, after the owner's approval.
 - Validation on real devices: **#169**.
 - Making the proxy reachable from the home network (binding it to a LAN address, firewall rules, router and DNS) is a host step outside this repository. Never forward router ports to this computer.
