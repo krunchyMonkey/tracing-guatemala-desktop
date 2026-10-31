@@ -115,3 +115,18 @@ export async function checkLanDemoResolves(name: string, address: string, resolv
   }
   return null
 }
+
+/**
+ * The DNS name a local reverse proxy serves over HTTPS (#167). Syntax only: the proxy
+ * and its certificate are the host's business. Lower-case, trimmed; never an IP or localhost.
+ */
+export function validateHttpsHost(requested: string): { ok: true; name: string } | { ok: false; error: string } {
+  const name = requested.trim().toLowerCase()
+  if (!isDemoHostname(name)) {
+    return {
+      ok: false,
+      error: `"${requested.slice(0, 80)}" can't be used as an HTTPS name. Use the host name your reverse proxy serves, such as tg.example.com (letters, digits and hyphens, at least one dot; not an IP address, not localhost). Nothing was started.`
+    }
+  }
+  return { ok: true, name }
+}

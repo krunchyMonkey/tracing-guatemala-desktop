@@ -10,6 +10,9 @@ import { LanHostError } from './lan'
 
 export const LAN_TEST_MARKER = 'lan-test-profile.json'
 
+// #167: the HTTPS reverse-proxy mode (--https-host) uses the same gate. The proxy
+// encrypts the traffic, but real data stays refused until the HTTPS review (#168).
+
 const WHY =
   'Home-network access over plain HTTP is for fictional test data only: HTTP is unencrypted, so anyone on the network could read what is sent. Real client records need the HTTPS phase.'
 
@@ -30,7 +33,7 @@ function isDefaultProfile(dataDir: string): boolean {
 /** Throws LanHostError unless `dataDir` is a marked fictional-test profile that is not the default one. */
 export function assertLanDataAllowed(dataDir: string): void {
   if (isDefaultProfile(dataDir)) {
-    throw new LanHostError(`--lan-host can't be used with your default data folder. ${WHY} Use --init-lan-test-profile with an explicit --data-dir for a test profile.`)
+    throw new LanHostError(`--lan-host and --https-host can't be used with your default data folder. ${WHY} Use --init-lan-test-profile with an explicit --data-dir for a test profile.`)
   }
   const file = join(dataDir, LAN_TEST_MARKER)
   let ok: boolean

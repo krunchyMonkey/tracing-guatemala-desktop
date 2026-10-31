@@ -33,6 +33,7 @@ A plain `node:http` server with no framework:
 | --- | --- |
 | `server.ts` | Opens the data folder (lock + `AppData`) and listens on **`127.0.0.1`**, plus, only with an explicit `lanHost`, one validated private address that serves the static client and no data (#135). Failure to set up the second listener closes everything. |
 | `demo-mirror.ts` | Static-only listener for the fictional demo on `127.0.0.1:<port + 1>` (#114); with `bindAddress`/`hosts`/`liveUrl` it is also the LAN demo (#137). |
+| `server.ts` (#167) | With an explicit `httpsHost` (`--https-host`), instead of the LAN listener, a second listener on **`127.0.0.1:<port + 2>`** for a local reverse proxy that terminates TLS. Host must equal the bare configured name, Origin `https://<name>`, cookies `Secure`; `Forwarded`/`X-Forwarded-*` are never read; same fictional-profile gate; exclusive with `--lan-host`. See `docs/operations/https-lan.md`. |
 | `lan.ts` | Strict IPv4 parsing and `validateLanHost` for the opt-in home-network address (#135); `validateLanDemoName` and the DNS check for `--lan-demo-name` (#137). |
 | `live-host.ts` | Request handlers: `handle` (loopback: launch link, `/api/v1/*`, static client) and `handleLan` (static client only; data refused), each with its own Host/origin policy. |
 | `access.ts` | Launch token, sessions, CSRF tokens, Host allowlists and Origin checks against the listener's own origin. |
