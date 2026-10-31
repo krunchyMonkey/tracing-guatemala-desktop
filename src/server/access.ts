@@ -14,6 +14,13 @@ import type { IncomingMessage } from 'node:http'
 //     (and Sec-Fetch-Site same-origin when the browser sends it).
 //  4. CSRF token: per session, readable only by same-origin script, sent as a
 //     header on every write.
+// Trusted-proxy HTTPS (#167, --https-host): a third kind of listener on
+//     127.0.0.1:<port + 2> for a local reverse proxy that terminates TLS. Host must
+//     equal the configured bare DNS name, Origin must equal https://<name> and
+//     cookies are Secure, all from configuration. `Forwarded`, `X-Forwarded-*` and
+//     `X-Real-IP` are never read: the proxy is trusted only because it is what can
+//     reach that loopback port. Any local process of the same OS user can reach it
+//     too and could send the right Host (see the note below).
 // Loopback is not OS-user isolation: any process of the same OS user can read
 // the launch link from the terminal. See docs/architecture/web-first-runtime.md.
 

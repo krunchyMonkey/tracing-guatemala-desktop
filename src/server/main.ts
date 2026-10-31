@@ -25,6 +25,10 @@ import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 // serves the fictional demo on the LAN address at port + 1, reached by that name
 // (which must resolve to the LAN address) so Live and the demo are different
 // sites. If it can't be served, Live still starts and the console says why.
+// --https-host <DNS name> (#167) instead adds a listener on 127.0.0.1 at port + 2 for
+// a local reverse proxy (e.g. Caddy) that serves that name over HTTPS. Exclusive with
+// --lan-host, same fictional-profile gate, and Forwarded / X-Forwarded-* headers are
+// never trusted. It is a flag only; --init-lan-test-profile works with it too.
 // Test only: TG_TEST_HOOKS=1 with TG_TEST_RESOLVE=<name>=<address> makes that
 // name resolve server-side without touching DNS; it does nothing otherwise.
 
@@ -37,6 +41,7 @@ const { values } = parseArgs({
     open: { type: 'boolean', default: false },
     'no-demo': { type: 'boolean' },
     'lan-host': { type: 'string' },
+    'https-host': { type: 'string' },
     'lan-demo-name': { type: 'string' },
     'init-lan-test-profile': { type: 'boolean' }
   }
@@ -44,6 +49,7 @@ const { values } = parseArgs({
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
 const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? defaultLiveDataDir())
 const lanHost = values['lan-host'] ?? null
+const httpsHost = values['https-host'] ?? null
 const lanDemoName = values['lan-demo-name'] ?? null
 const staticDir = fileURLToPath(new URL('../client/', import.meta.url))
 const demoDir = fileURLToPath(new URL('../../dist-demo/', import.meta.url))
@@ -57,6 +63,10 @@ if (!existsSync(join(staticDir, 'index.html'))) {
   process.exit(1)
 }
 
+if (httpsHost !== null && lanHost !== null) {
+  console.error("--https-host and --lan-host can't be used together. Choose one. Nothing was started.")
+  process.exit(1)
+}
 if (lanDemoName !== null && !lanHost) {
   console.error('--lan-demo-name needs --lan-host <address>: the demo is served on that home-network address.')
   process.exit(1)
@@ -76,8 +86,8 @@ if (process.env['TG_TEST_HOOKS'] === '1' && process.env['TG_TEST_RESOLVE']) {
 }
 
 if (values['init-lan-test-profile']) {
-  if (!lanHost || !values['data-dir']) {
-    console.error('--init-lan-test-profile needs both --lan-host <address> and an explicit --data-dir <new folder>. It prepares a profile for fictional test data only.')
+  if ((!lanHost && !httpsHost) || !values['data-dir']) {
+    console.error('--init-lan-test-profile needs both --lan-host <address> (or --https-host <name>) and an explicit --data-dir <new folder>. It prepares a profile for fictional test data only.')
     process.exit(1)
   }
   try {
@@ -86,7 +96,7 @@ if (values['init-lan-test-profile']) {
     console.error(error instanceof LanHostError ? error.message : 'The test profile could not be prepared. Nothing was started.')
     process.exit(1)
   }
-  console.log('Prepared a fictional-test-data profile. Use it for fictional data only: HTTP on the home network is unencrypted.')
+  console.log('Prepared a fictional-test-data profile. Use it for fictional data only: it is not approved for real records yet.')
 }
 
 // The demo is a convenience: whatever goes wrong here, Live still starts without it.
@@ -112,6 +122,7 @@ try {
     port,
     staticDir,
     lanHost,
+    httpsHost,
     lanDemoName: values['no-demo'] ? null : lanDemoName,
     demoDir,
     ...(lanDemoResolve ? { lanDemoResolve } : {}),
@@ -138,7 +149,19 @@ try {
   process.exit(1)
 }
 
-const lanNote = server.lanOrigin
+const proxyNote = `
+  HTTPS home network (opt-in, through the local reverse proxy): ${server.lanOrigin}/
+    Encrypted by your reverse proxy, which must forward to 127.0.0.1:${port + 2}
+    (this window only listens there, on this computer). FICTIONAL TEST DATA ONLY
+    until the HTTPS security review and the owner's approval. Pair a device from
+    Settings on this computer: the pairing code is shown there. This window never
+    trusts forwarded-address headers. Never forward router ports to this computer.
+    Turn it off from Settings on this computer, or stop this window. Restart with
+    --https-host to turn it on again.
+`
+const lanNote = server.lanOrigin && httpsHost
+  ? proxyNote
+  : server.lanOrigin
   ? `
   Home network (opt-in): ${server.lanOrigin}/
     UNENCRYPTED HTTP, trusted home network only. Anyone on this network can read

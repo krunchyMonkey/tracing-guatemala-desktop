@@ -153,7 +153,7 @@ export type ApiErrorCode =
 
 /** What one listener accepts: its Host allowlist and its own origin (scheme included). */
 export interface ListenerPolicy {
-  kind: 'loopback' | 'lan'
+  kind: 'loopback' | 'lan' | 'proxy'
   hosts: string[]
   origin: string
 }
@@ -174,8 +174,11 @@ export interface LiveHostOptions {
   /**
    * Opt-in home-network listener (#135): the validated private address it will be bound to.
    * `demoUrl` (#137) is where the LAN demo is served (a different host name), or null.
+   * `httpsName` (#167) makes it the trusted-proxy listener instead: `address` is then
+   * 127.0.0.1, Host must be exactly that bare DNS name and the origin is `https://<name>`
+   * (cookies get `Secure`). The scheme comes from this setting, never from a request header.
    */
-  lan?: { address: string; demoUrl?: string | null }
+  lan?: { address: string; demoUrl?: string | null; httpsName?: string | null }
   /** Called once when the host turns the home-network listener off (#137); closes the sockets. */
   onDisableLan?: () => void
   now?: () => Date
@@ -257,12 +260,15 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const backup = createWebBackupService(options.dataDir, data, options.now)
   const { clients, notes, cases, briefs, journal, notebook, tasks, time, studio } = createDataServices(data)
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
-  let lan: ListenerPolicy | null = options.lan
-    ? { kind: 'lan', hosts: lanAllowedHosts(options.lan.address, port), origin: `http://${options.lan.address}:${port}` }
-    : null
+  let lan: ListenerPolicy | null = !options.lan
+    ? null
+    : options.lan.httpsName
+      ? // Trusted reverse proxy (#167): browsers omit :443, so the Host is the bare name.
+        { kind: 'proxy', hosts: [options.lan.httpsName], origin: `https://${options.lan.httpsName}` }
+      : { kind: 'lan', hosts: lanAllowedHosts(options.lan.address, port), origin: `http://${options.lan.address}:${port}` }
   const lanDemoUrl = options.lan?.demoUrl ?? null
 
-  /** One-way: after this the host serves loopback only until it is restarted with --lan-host. */
+  /** One-way: after this the host serves loopback only until it is restarted with --lan-host or --https-host. */
   function disableLan(): boolean {
     if (!lan) return false
     lan = null
