@@ -126,7 +126,7 @@ export function JournalCard({ caseId, readOnly, readOnlyReason }: JournalCardPro
       ) : (
         <ol className="timeline journal-list" aria-label="Journal entries, newest first">
           {entries.map((entry) => (
-            <li key={entry.id} className="timeline-item kind-journal">
+            <li key={entry.id} id={`journal-${entry.id}`} tabIndex={-1} className="timeline-item kind-journal">
               {editingId === entry.id ? (
                 <JournalEditor
                   entry={entry}

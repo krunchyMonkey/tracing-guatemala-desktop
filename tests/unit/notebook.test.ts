@@ -303,6 +303,28 @@ describe('NotebookRepository', () => {
       expect(nb.listRevisions(caseId, pageId)).toHaveLength(1)
     })
 
+    it('keepPrevious keeps the replaced content as a restore point, only when the content changes', () => {
+      page(nb.savePage(caseId, pageId, { baseVersion: 1, content: one }))
+      clock.advance(1000)
+      // Same content: nothing happens, not even a restore point.
+      page(nb.savePage(caseId, pageId, { baseVersion: 2, content: one, keepPrevious: true }))
+      expect(nb.listRevisions(caseId, pageId)).toHaveLength(1)
+      // A stale base is still a conflict, with or without the flag.
+      expect(nb.savePage(caseId, pageId, { baseVersion: 1, content: two, keepPrevious: true })).toMatchObject({ ok: false, reason: 'conflict' })
+      expect(nb.listRevisions(caseId, pageId)).toHaveLength(1)
+
+      const saved = page(nb.savePage(caseId, pageId, { baseVersion: 2, content: two, keepPrevious: true }))
+      expect(saved).toMatchObject({ version: 3, content: two })
+      const revisions = nb.listRevisions(caseId, pageId)
+      const kept = revisions.find((r) => r.reason === 'restore-point')!
+      expect(kept).toMatchObject({ version: 2 })
+      expect(nb.getRevision(caseId, pageId, kept.id)!.content).toEqual(one)
+      // Without the flag, no restore point.
+      clock.advance(1000)
+      page(nb.savePage(caseId, pageId, { baseVersion: 3, content: one }))
+      expect(nb.listRevisions(caseId, pageId).filter((r) => r.reason === 'restore-point')).toHaveLength(1)
+    })
+
     it('treats identical content as a no-op: no version, no revision, no update time', () => {
       const first = page(nb.savePage(caseId, pageId, { baseVersion: 1, content: one }))
       clock.advance(10 * REVISION_INTERVAL_MS)

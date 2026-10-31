@@ -1,6 +1,6 @@
 # Research notebook architecture
 
-Status: contracts and ports (#146) storage (#147: migration 8, `NotebookRepository`, host API, demo adapter), and the notebook screens with the Tiptap editor (#148, see "Notebook screens and the Tiptap adapter"). Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
+Status: contracts and ports (#146) storage (#147: migration 8, `NotebookRepository`, host API, demo adapter), the notebook screens with the Tiptap editor (#148, see "Notebook screens and the Tiptap adapter"), and resilient autosave, history and the case workflow bridge (#149, see "Autosave, conflicts, history and the case bridge"). Product scope is in [phase-3-research-notebook-spec.md](../phase-3-research-notebook-spec.md).
 
 The aim: the page content the researcher writes is owned by this app, in a small versioned format, and any editor or canvas library is a replaceable part that only renders and edits it.
 
@@ -50,7 +50,7 @@ If a canvas library ever needs its own scene state for full fidelity, that goes 
 `src/renderer/src/notebook/ports.ts`. Screens depend only on these and on `shared/` types.
 
 - `RichTextEditorAdapter.create(options)` returns a `RichTextEditorSession`. Options: the mount `element`, the `NoteContent`, `editable`, an accessible `label`, `newId`, `onChange` (every user edit; the app debounces and saves), `onStateChange`, `describeReference`.
-- Session: `getContent()` (always normalized, valid), `setContent()` (replaces content, clears undo, does not call `onChange`), `setEditable`, `focus`, `run(command)`, `getState`, `destroy`.
+- Session: `getContent()` (always normalized, valid), `setContent()` (replaces content, clears undo, does not call `onChange`), `setEditable`, `focus`, `run(command)`, `getState`, `refreshReferences()` (asks `describeReference` again for every reference block; no `onChange`), `destroy`. An optional `onReferenceActivate(ref)` option reports a click or Enter on a reference block.
 - `EditorCommand`s: `toggleMark`, `setBlock`, `indent`, `outdent`, `setLink`, `insertDivider`, `insertReference`, `undo`, `redo`. `run` returns `true` when honored and `false` when the adapter cannot do it or the editor is read-only; it never throws for that.
 - `CanvasSurfaceAdapter` / `CanvasSurfaceSession`: the same shape for a canvas (`scene`, `resolveBlock`, `onChange`; `getScene`, `setScene`, `setEditable`, `destroy`).
 
@@ -92,11 +92,46 @@ Test doubles: `tests/renderer/notebook/fakeEditorAdapter.ts` and `fakeCanvasAdap
 ## Notebook screens and the Tiptap adapter (#148)
 
 - **Routes** (only where the runtime has cases): `cases/:caseId/notebook` and `cases/:caseId/notebook/:pageId`; the case page has a "Research notebook" card (`notebook/NotebookCard.tsx`) that links in. `NotebookScreen` loads the outline; `NotebookNav` lists sections (collapsible) and pages and offers create, rename, move up/down, move to another section, archive (with confirmation) and restore from an "Archived" disclosure. Moves are translated from the visible (active) order to the host's index among all siblings (`notebookModel.stepIndex`). Under 1024px the list becomes a "Pages" panel; an archived case or client makes everything read-only.
-- **Page editor** (`PageEditor.tsx`, `EditorToolbar.tsx`): the editor is created once and fed pages through `setContent`; the toolbar only knows `EditorCommand` and `EditorState`. Saving is basic and lives in `usePageDrafts`: unsaved text is kept per page in memory (leaving a page or a failed save never drops it) and saved 800 ms after the last edit, or at once when leaving the page, with `baseVersion`. The status ("Saving…", "Saved", "Not saved" with Retry, "This page changed elsewhere" with Reload page) is an `aria-live` region. Recovery and conflict resolution are #149.
+- **Page editor** (`PageEditor.tsx`, `EditorToolbar.tsx`): the editor is created once and fed pages through `setContent`; the toolbar only knows `EditorCommand` and `EditorState`. Saving, recovery and conflicts are covered in the next section (#149).
 - **Tiptap adapter** (`adapters/tiptap/`): vanilla `@tiptap/core`, exact-pinned 3.31.4 packages listed one by one (no starter kit, no `@tiptap/react`). `mapping.ts` converts the flat block list to nested ProseMirror lists and back (pure, unit-tested): list runs nest by `indent`, a skipped indent comes back one level at a time, extra paragraphs in a list item flatten to paragraph blocks, headings are levels 1-3, trailing empty paragraphs are dropped. `extensions.ts` holds the app's own parts: a `blockId` attribute (`data-block-id`) with a plugin that gives a new id to any node whose id is missing or repeated (the first holder keeps it), paragraph indent as the class `note-indent-N`, the `noteReference` block (its label, from `describeReference`, is set with `textContent`), and a checklist item without inline styles.
 - **CSP**: production is `style-src 'self'` and `script-src 'self'`. The editor is created with `injectCSS: false`; its base rules and the notebook look are in `styles.css`. No extension renders a `style` attribute (Tiptap's stock task item sets one through CSSOM, so `NoteTaskItem` replaces it). `tests/web/live-notebook.spec.ts` fails on any CSP report.
 - **Paste**: the schema is the defence: unknown elements and attributes are dropped, and images, scripts, frames and styles cannot be represented. A link keeps only an `href` that passes `isSafeHref` (http, https, mailto), does not open on a plain click (Ctrl/Cmd+click opens a new tab with `noopener`), and carries `rel="noopener noreferrer nofollow"`. `quietPastedHtml` removes active markup from the clipboard HTML first, because even parsing `<img onerror>` or `style=` in a detached document makes the browser report a CSP violation. Pasting never applies markdown (typing `**x**` formats, pasting it does not).
 - **Tests**: the adapter runs `describeEditorAdapterContract` under jsdom (`tests/renderer/notebook/TiptapAdapter.test.tsx`, with a test-only `TiptapAdapterHooks` for selection and typing); the screens run against the fake adapter injected through `App`'s `notebookAdapters` prop (`tests/renderer/Notebook.test.tsx`); `tests/web/live-notebook.spec.ts` and `tests/demo/notebook.spec.ts` drive the real editor.
+
+## Autosave, conflicts, history and the case bridge (#149)
+
+### Drafts and autosave
+
+- **One draft store per browser tab** (`notebook/draftStore.ts`, provided above the router by `DraftStoreContext.tsx`). Unsaved text lives there, not in the editor or in a screen, so it survives leaving the notebook, opening another case and coming back; saving carries on in the background while the app is open.
+- **Drafts are in memory only.** Decision: real client notes are never written to `localStorage`, `sessionStorage`, IndexedDB or cookies, so there is no second copy of private research on the device outside the host's database. The cost is that closing or reloading the tab loses text that was not saved yet, so `beforeunload` asks first, but only while some page is unsaved or saving (and a failed save keeps retrying so that window is short).
+- **Rules.** Saved 800 ms after the last edit, or at once when leaving the page. One save per page is in flight; edits made meanwhile are saved afterwards on the version the previous save returned. The host's answer decides the state:
+  - network error, host error or a thrown call: the draft is kept, status "Not saved — retrying", retried after 1 s, 2 s, 5 s, 10 s, then every 30 s, plus a manual "Retry now";
+  - `invalid`: "Couldn't save: …" with the issue code mapped to plain words (never the code, never the text); not retried until the text changes or the person presses "Try saving again";
+  - `wrong-status` / `not-found`: the page turns read-only with a notice; the text stays on screen and can be copied;
+  - `conflict`: autosave for that page pauses (below).
+- **Status line** (`aria-live`): "Saving…", "Saved at 14:05" (local time), "Not saved — retrying". When other pages still hold unsaved text, the sidebar shows "N pages not saved yet" (a link to the first one). Returning to a page that has a draft shows the draft and its status, not the server copy.
+
+### Conflicts
+
+A save carries the `baseVersion` it started from. If another tab or device saved first the host answers `conflict` with its current page. The page then goes read-only and shows "This page was changed in another window." with three actions; nothing is overwritten without a choice:
+
+- **Keep my version** re-saves the draft on top of the host's current version with `keepPrevious: true`: when that save changes the content, the repository (and the demo) first append a `restore-point` revision holding the other window's content, so it stays in the history. The flag is kept until a keep-mine save succeeds.
+- **Use the saved version** drops the draft and shows the host's page.
+- **Copy my text** copies `noteContentToPlainText` of the draft to the clipboard; available before choosing.
+
+`PageSave` gained the optional strict boolean `keepPrevious`; identical content is still a no-op and creates no revision.
+
+### History
+
+The page header's **History** button opens a dialog listing `listPageRevisions` (local date and time, "Autosave", "Before restore" or "Restored", version). Choosing one previews it in `NoteContentView`, a read-only renderer made only of React elements (no `innerHTML`; links only for safe addresses, with `rel="noopener noreferrer nofollow"`; references show the same labels as the editor). "Restore this version" asks first, then calls `restorePageRevision` with the page's current base version and the editor shows the restored content. It is disabled while the page has unsaved text (explained in the dialog) and on archived pages. If the page changed elsewhere meanwhile, nothing is restored: the dialog says so and the page shows the host's current version (there is no local draft to keep when restoring is allowed).
+
+### Workflow bridge: links, never copies
+
+- **Link record** (toolbar) lists this case's journal entries, tasks and research-hours entries with a filter and inserts `insertReference`. The screen loads those records (`useCaseRecords`) to label references: "Task · Order microfilm (pending)", "Journal · 12 Oct 2026 · Archive search", "Hours · 1 h 30 m on 12 Oct 2026", or "Linked record not available". Labels that arrive after a block was shown are pushed with the session's `refreshReferences()`. Adapters render labels as text only. Activating a reference (click or Enter; `onReferenceActivate` option) opens the case screen and scrolls to the record (cards carry ids `task-<id>`, `journal-<id>`, `time-<id>`).
+- **Create task from selection** and **Add to journal from selection** open a dialog prefilled with the selected text (the same limits as the task and journal forms: `checkCaseTask`, `checkJournalEntry`; the journal time defaults to now). Nothing is created until the person presses Create task / Add to journal; then a reference to the new record is inserted after the selection and a confirmation is shown. Notes are never converted automatically.
+- **Research hours**: a compact control in the notebook header over the existing `TimerContext` (start, pause, resume; stopping opens the existing "Save this time?" dialog). No timer logic is duplicated.
+- An archived case or client hides all bridge actions and the timer control.
+- `insertReference` inserts after the block holding the selection's end (an empty paragraph under the caret is used up), so selected text is never replaced or split.
 
 ## Releases
 

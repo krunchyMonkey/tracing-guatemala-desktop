@@ -191,7 +191,7 @@ test('writes, formats and organizes a notebook, and finds it all after a reload 
   await expect(firstTask.getByRole('checkbox')).toHaveAccessibleName('Task: Order microfilm')
   await firstTask.getByRole('checkbox').check()
   await expect(firstTask).toHaveAttribute('data-checked', 'true')
-  await expect(status(page)).toHaveText('Saved')
+  await expect(status(page)).toHaveText(/^Saved at \d\d:\d\d$/)
 
   // The toolbar reflects the caret: bold is pressed inside the bold word.
   await editor(page).locator('strong').click()
@@ -251,7 +251,7 @@ test('writes, formats and organizes a notebook, and finds it all after a reload 
   await expect(editor(page).locator('a')).toHaveAttribute('href', 'https://example.org/ok')
   await expect(editor(page).locator('a')).toHaveAttribute('rel', 'noopener noreferrer nofollow')
   expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined()
-  await expect(status(page)).toHaveText('Saved')
+  await expect(status(page)).toHaveText(/^Saved at \d\d:\d\d$/)
 
   // Reload: everything persists, still without hostile markup.
   await page.reload()
@@ -282,7 +282,7 @@ test('archives and restores pages and sections, keeps their content, and goes re
   await startNotebook(page)
   await editor(page).click()
   await page.keyboard.type('Kept while archived.')
-  await expect(status(page)).toHaveText('Saved')
+  await expect(status(page)).toHaveText(/^Saved at \d\d:\d\d$/)
 
   await nav(page).getByRole('button', { name: '+ Add a page' }).click()
   await expect(page.getByLabel('Page title')).toBeFocused()
@@ -337,7 +337,7 @@ test('never breaks the content security policy and fits phone, tablet and deskto
   await renameOpenPage(page, 'Archive visit notes')
   await writeSamplePage(page)
   await editor(page).locator('li[data-type="taskItem"]').first().getByRole('checkbox').check()
-  await expect(status(page)).toHaveText('Saved')
+  await expect(status(page)).toHaveText(/^Saved at \d\d:\d\d$/)
   // A second page with a very long title and one unbroken word, to prove nothing scrolls sideways.
   await nav(page).getByRole('button', { name: '+ Add a page' }).click()
   await expect(page.getByLabel('Page title')).toBeFocused()
@@ -345,7 +345,7 @@ test('never breaks the content security policy and fits phone, tablet and deskto
   await page.keyboard.press('Enter')
   await editor(page).click()
   await paste(page, `<p>${'Ejemplo'.repeat(30)}</p>`, '')
-  await expect(status(page)).toHaveText('Saved')
+  await expect(status(page)).toHaveText(/^Saved at \d\d:\d\d$/)
   await nav(page).getByRole('button', { name: '+ New section' }).click()
   await nav(page).getByLabel('New section name').fill('Letters')
   await nav(page).getByRole('button', { name: 'Add section' }).click()

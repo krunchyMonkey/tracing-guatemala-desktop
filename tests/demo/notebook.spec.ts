@@ -57,7 +57,7 @@ test('opens the seeded notebook, edits it with the real editor, and starts again
   await page.keyboard.press('Enter')
   await page.keyboard.type('Added during the demo.')
   await editor.locator('li[data-type="taskItem"]').nth(1).getByRole('checkbox').check()
-  await expect(page.locator('.note-save-status')).toHaveText('Saved')
+  await expect(page.locator('.note-save-status')).toHaveText(/^Saved at \d\d:\d\d$/)
   await nav.getByRole('button', { name: '+ Add a page' }).click()
   await expect(page.getByLabel('Page title')).toBeFocused()
   await page.keyboard.type('Second visit')

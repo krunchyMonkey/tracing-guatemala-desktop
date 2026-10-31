@@ -142,6 +142,33 @@ describe('notebook calls', () => {
     expect(await call(live, signed, 'getNotebookPage', id, p.id)).toEqual(current)
   })
 
+  it('keepPrevious keeps the other window content in the history over HTTP', async () => {
+    const live = await start()
+    const signed = await signIn(live)
+    const researchCase = await newCase(live, signed, 'Ana Ejemplo', 'Case A')
+    const id = researchCase.id
+    const s = await newSection(live, signed, id, 'S')
+    const p = await newPage(live, signed, id, s.id, 'P')
+    // Window A saves; window B (still on version 1) loses, then keeps its text on top of version 2.
+    await call(live, signed, 'saveNotebookPage', id, p.id, { baseVersion: 1, content: doc(paragraph(1, 'From window A')) })
+    const lost = await call<{ ok: false; reason: string; page: NotebookPage }>(live, signed, 'saveNotebookPage', id, p.id, {
+      baseVersion: 1,
+      content: doc(paragraph(1, 'From window B')),
+      keepPrevious: true
+    })
+    expect(lost).toMatchObject({ ok: false, reason: 'conflict', page: { version: 2 } })
+    expect(await call<PageRevisionSummary[]>(live, signed, 'listPageRevisions', id, p.id)).toHaveLength(1)
+    const kept = pageOf(
+      await call<PageReply>(live, signed, 'saveNotebookPage', id, p.id, { baseVersion: lost.page.version, content: doc(paragraph(1, 'From window B')), keepPrevious: true })
+    )
+    expect(kept).toMatchObject({ version: 3, content: doc(paragraph(1, 'From window B')) })
+    const history = await call<PageRevisionSummary[]>(live, signed, 'listPageRevisions', id, p.id)
+    const point = history.find((r) => r.reason === 'restore-point')!
+    expect(point).toMatchObject({ version: 2 })
+    expect(await call(live, signed, 'getPageRevision', id, p.id, point.id)).toMatchObject({ content: doc(paragraph(1, 'From window A')) })
+    expect((await post(live, signed, 'saveNotebookPage', [id, p.id, { baseVersion: 3, content: doc(), keepPrevious: 'yes' }])).status).toBe(400)
+  })
+
   it('keeps notebooks of cases and clients apart', async () => {
     const live = await start()
     const signed = await signIn(live)

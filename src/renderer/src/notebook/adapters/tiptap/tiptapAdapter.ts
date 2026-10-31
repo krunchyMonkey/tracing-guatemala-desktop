@@ -71,7 +71,7 @@ export function quietPastedHtml(html: string): string {
     .replace(/<[a-z][^>]*>/gi, (tag) => tag.replace(ACTIVE_ATTRIBUTES, ''))
 }
 
-function buildExtensions(options: RichTextEditorOptions): Extensions {
+function buildExtensions(options: RichTextEditorOptions, views: Set<() => void>): Extensions {
   const describe = options.describeReference ?? ((ref) => DEFAULT_REFERENCE_LABELS[ref.kind])
   return [
     Document,
@@ -100,7 +100,7 @@ function buildExtensions(options: RichTextEditorOptions): Extensions {
     Placeholder.configure({ placeholder: options.placeholder ?? '' }),
     BlockId.configure({ newId: options.newId }),
     ParagraphIndent,
-    NoteReference.configure({ describe })
+    NoteReference.configure({ describe, views, ...(options.onReferenceActivate ? { onActivate: options.onReferenceActivate } : {}) })
   ]
 }
 
@@ -123,10 +123,11 @@ function createSession(options: RichTextEditorOptions, hooks: TiptapAdapterHooks
   let lastState: string | null = null
   let editable = options.editable
 
+  const referenceViews = new Set<() => void>()
   element.replaceChildren()
   const editor = new Editor({
     element,
-    extensions: buildExtensions(options),
+    extensions: buildExtensions(options, referenceViews),
     content: toProseMirror(normalizeNoteContent(options.content, newId)),
     editable,
     injectCSS: false,
@@ -306,6 +307,9 @@ function createSession(options: RichTextEditorOptions, hooks: TiptapAdapterHooks
       lastState = null
       publishState()
     },
+    refreshReferences() {
+      for (const refresh of referenceViews) refresh()
+    },
     setEditable(next) {
       editable = next
       editor.setEditable(next, false)
@@ -331,8 +335,19 @@ function createSession(options: RichTextEditorOptions, hooks: TiptapAdapterHooks
           return setLink(command.href)
         case 'insertDivider':
           return editor.chain().focus().setHorizontalRule().run()
-        case 'insertReference':
-          return editor.chain().focus().insertContent({ type: 'noteReference', attrs: { kind: command.target.kind, id: command.target.id } }).run()
+        case 'insertReference': {
+          // After the block holding the selection's end, so selected text is never replaced or
+          // split; an empty paragraph under the caret is used up instead of left behind.
+          const { selection } = editor.state
+          const { $to } = selection
+          const emptyLine = selection.empty && $to.depth === 1 && $to.parent.type.name === 'paragraph' && $to.parent.content.size === 0
+          const at = $to.depth === 0 ? $to.pos : emptyLine ? { from: $to.before(1), to: $to.after(1) } : $to.after(1)
+          return editor
+            .chain()
+            .focus()
+            .insertContentAt(at, { type: 'noteReference', attrs: { kind: command.target.kind, id: command.target.id } })
+            .run()
+        }
         case 'undo':
           return editor.chain().focus().undo().run()
         case 'redo':

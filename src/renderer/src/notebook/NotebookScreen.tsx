@@ -21,7 +21,8 @@ import {
   stepIndex,
   type OutlineSection
 } from './notebookModel'
-import { usePageDrafts } from './usePageDrafts'
+import { NotebookTimer } from './NotebookTimer'
+import { useCaseRecords } from './useCaseRecords'
 
 // The research notebook of one case (#148): a list of sections and pages beside the
 // page being written. Everything it shows comes from the NotebookApi and the editor
@@ -50,7 +51,7 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
   const loadedCase = useLoad(() => api.getCase(caseId), caseId)
   const [outlineVersion, setOutlineVersion] = useState(0)
   const outlineLoad = useLoad(() => api.getNotebook(caseId), `${caseId}:${outlineVersion}`)
-  const drafts = usePageDrafts(caseId, api)
+  const records = useCaseRecords(caseId)
   const [failure, setFailure] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
@@ -64,15 +65,6 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
   useEffect(() => {
     if (clientId !== undefined) void refreshClient(clientId)
   }, [clientId, refreshClient])
-
-  // Leaving the browser tab with unsaved text asks first.
-  useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => {
-      if (drafts.hasUnsaved()) event.preventDefault()
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [drafts])
 
   const refresh = () => setOutlineVersion((n) => n + 1)
 
@@ -224,6 +216,7 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
         <h1 id="notebook-heading" ref={headingRef} tabIndex={-1}>
           Research notebook
         </h1>
+        {!readOnly && !noSections && <NotebookTimer caseId={caseId} caseTitle={researchCase.title} />}
         {!noSections && (
           <button type="button" className="button button-secondary note-nav-toggle" aria-expanded={navOpen} aria-controls="notebook-nav" onClick={() => setNavOpen((open) => !open)}>
             Pages
@@ -259,7 +252,7 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
                 caseId={caseId}
                 pageId={pageId}
                 lockedReason={pageLockedReason}
-                drafts={drafts}
+                records={records}
                 onRenamed={refresh}
                 onFailure={(reason) => {
                   setFailure(reason)

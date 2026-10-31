@@ -130,7 +130,7 @@ export function TasksCard({ caseId, readOnly, readOnlyReason }: TasksCardProps) 
   const completed = tasks.filter((t) => t.status === 'completed')
 
   const renderTask = (task: CaseTask) => (
-    <li key={task.id} className={`task-item task-${task.status}`}>
+    <li key={task.id} id={`task-${task.id}`} tabIndex={-1} className={`task-item task-${task.status}`}>
       {editingId === task.id ? (
         <TaskEditor
           task={task}

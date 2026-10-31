@@ -382,7 +382,7 @@ const notebookVersion = z.number().int().min(1).max(2_000_000_000)
 const sectionInputSchema = z.strictObject({ title: z.string().max(SECTION_TITLE_MAX * 2) }) satisfies z.ZodType<SectionInput>
 const pageInputSchema = z.strictObject({ title: z.string().max(PAGE_TITLE_MAX * 2) }) satisfies z.ZodType<PageInput>
 const pageMoveSchema = z.strictObject({ sectionId: idSchema, toIndex: notebookIndex }) satisfies z.ZodType<PageMove>
-const pageSaveSchema = z.strictObject({ baseVersion: notebookVersion, content: noteContentSchema }) satisfies z.ZodType<PageSave>
+const pageSaveSchema = z.strictObject({ baseVersion: notebookVersion, content: noteContentSchema, keepPrevious: z.boolean().optional() }) satisfies z.ZodType<PageSave>
 
 const notebookSectionSchema = z.strictObject({
   id: idSchema,

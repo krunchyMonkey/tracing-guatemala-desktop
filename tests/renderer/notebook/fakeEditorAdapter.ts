@@ -6,6 +6,7 @@ import {
   type NoteContent,
   type TextRun
 } from '../../../src/shared/note-content'
+import type { RecordRef } from '../../../src/shared/note-content'
 import type { BlockKind, EditorCommand, EditorState, RichTextEditorAdapter, RichTextEditorOptions, RichTextEditorSession } from '../../../src/renderer/src/notebook/ports'
 
 // An in-memory editor double: no DOM editing, full contract. Tests drive "user edits"
@@ -26,6 +27,12 @@ export interface FakeEditorSession extends RichTextEditorSession {
   emit(content: NoteContent): void
   /** Moves the caret to a block (default: the last one). */
   select(blockIndex: number): void
+  /** Sets the text the editor reports as selected. */
+  selectText(text: string): void
+  /** How many times the app asked for reference labels to be refreshed. */
+  readonly refreshes: number
+  /** Simulates the person activating a reference block. */
+  activateReference(ref: RecordRef): void
 }
 
 export interface FakeEditorAdapter extends RichTextEditorAdapter {
@@ -59,6 +66,8 @@ export function createFakeEditorAdapter(id = 'fake'): FakeEditorAdapter {
       let content = normalizeNoteContent(options.content, options.newId)
       let editable = options.editable
       let caret: number | null = null
+      let selected = ''
+      let refreshes = 0
       let destroyed = false
       let past: NoteContent[] = []
       let future: NoteContent[] = []
@@ -73,7 +82,7 @@ export function createFakeEditorAdapter(id = 'fake'): FakeEditorAdapter {
         const block = content.blocks[at()]
         const kind = block && hasText(block) ? (block.type === 'heading' ? (`heading${block.level}` as BlockKind) : (block.type as BlockKind)) : null
         const marks = block && hasText(block) && block.content.length > 0 ? (block.content[0]!.marks ?? []) : []
-        return { canUndo: past.length > 0, canRedo: future.length > 0, activeMarks: [...marks], activeBlock: kind, selectedText: '', focused: false }
+        return { canUndo: past.length > 0, canRedo: future.length > 0, activeMarks: [...marks], activeBlock: kind, selectedText: selected, focused: false }
       }
       const report = (): void => {
         options.onChange(normalizeNoteContent(content, options.newId))
@@ -89,6 +98,19 @@ export function createFakeEditorAdapter(id = 'fake'): FakeEditorAdapter {
       const session: FakeEditorSession = {
         options,
         commands,
+        get refreshes() {
+          return refreshes
+        },
+        refreshReferences() {
+          refreshes += 1
+        },
+        selectText(text) {
+          selected = text
+          options.onStateChange?.(state())
+        },
+        activateReference(ref) {
+          options.onReferenceActivate?.(ref)
+        },
         get editable() {
           return editable
         },

@@ -348,12 +348,12 @@ describe('saving', () => {
     return { ...ctx, first: first.page, second: second.page }
   }
 
-  it('saves after a pause: Saving…, then Saved, with the host holding the new version', async () => {
+  it('saves after a pause: Saving…, then Saved at HH:MM, with the host holding the new version', async () => {
     const { editor, cases, first } = await open()
     expect(document.querySelector('.note-save-status')?.getAttribute('aria-live')).toBe('polite')
     session(editor).type('Searched the index.')
     await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toBe('Saving…'))
-    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toBe('Saved'), { timeout: 4000 })
+    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toMatch(/^Saved at \d\d:\d\d$/), { timeout: 4000 })
     const saved = (await cases.getNotebookPage(demoCaseIds.maternal, first.id))!
     expect(saved.version).toBe(2)
     expect(JSON.stringify(saved.content)).toContain('Searched the index.')
@@ -383,16 +383,16 @@ describe('saving', () => {
     // Back on the first page, the draft is shown, and it is flagged as not saved.
     fireEvent.click(nav().getByRole('link', { name: 'Baptisms' }))
     await waitFor(() => expect(textOf(session(editor))).toContain('Precious words.'))
-    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toBe('Not saved'), { timeout: 4000 })
+    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toBe('Not saved — retrying'), { timeout: 4000 })
     expect(screen.getByText(/Your text is still here/)).toBeTruthy()
 
     failing = false
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toBe('Saved'))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry now' }))
+    await waitFor(() => expect(document.querySelector('.note-save-status')?.textContent).toMatch(/^Saved at \d\d:\d\d$/))
     expect(JSON.stringify((await cases.getNotebookPage(demoCaseIds.maternal, first.id))!.content)).toContain('Precious words.')
   })
 
-  it('says the page changed elsewhere on a conflict and reloads the saved version on request', async () => {
+  it('says the page changed in another window on a conflict and shows the saved version on request', async () => {
     const { editor, cases, first } = await open()
     // Another window saves first.
     const current = (await cases.getNotebookPage(demoCaseIds.maternal, first.id))!
@@ -401,9 +401,9 @@ describe('saving', () => {
       content: { format: 'tg-note', version: 1, blocks: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', type: 'paragraph', indent: 0, content: [{ text: 'Saved elsewhere.' }] }] }
     })
     session(editor).type('Local words.')
-    const reload = await screen.findByRole('button', { name: 'Reload page' }, { timeout: 4000 })
-    expect(document.querySelector('.note-save-status')?.textContent).toBe('This page changed elsewhere')
-    fireEvent.click(reload)
+    const useSaved = await screen.findByRole('button', { name: 'Use the saved version' }, { timeout: 4000 })
+    expect(screen.getByRole('alert').textContent).toContain('This page was changed in another window.')
+    fireEvent.click(useSaved)
     await waitFor(() => expect(textOf(session(editor))).toContain('Saved elsewhere.'))
     expect(textOf(session(editor))).not.toContain('Local words.')
   })

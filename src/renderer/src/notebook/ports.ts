@@ -43,6 +43,8 @@ export interface RichTextEditorOptions {
   onStateChange?: (state: EditorState) => void
   /** Display label for a reference block. Adapters render it as text, never HTML. */
   describeReference?: (ref: RecordRef) => string
+  /** The person activated a reference block (click or Enter). The app decides where that goes. */
+  onReferenceActivate?: (ref: RecordRef) => void
 }
 
 export interface RichTextEditorSession {
@@ -52,6 +54,8 @@ export interface RichTextEditorSession {
   setContent(content: NoteContent): void
   setEditable(editable: boolean): void
   focus(): void
+  /** Asks `describeReference` again for every reference block (its labels may have loaded after the block was shown). Does not call onChange. */
+  refreshReferences(): void
   /** True when the command was honored; false when the adapter cannot, or the editor is read-only. */
   run(command: EditorCommand): boolean
   getState(): EditorState
