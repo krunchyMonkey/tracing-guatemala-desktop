@@ -219,10 +219,17 @@ function HomeNetworkDevices({ lan }: { lan: LanAdminApi }) {
   return (
     <section aria-labelledby="devices-heading" className="card">
       <h2 id="devices-heading">Home-network devices</h2>
-      <p>
-        <strong>Unencrypted HTTP — trusted home network only.</strong> Pairing controls who can sign in from the home network. It does{' '}
-        <strong>not</strong> encrypt anything: the code, sessions and everything a paired device opens travel over unencrypted HTTP.
-      </p>
+      {address?.startsWith('https://') ? (
+        <p>
+          <strong>HTTPS — home network only.</strong> Pairing controls who can sign in from the home network; the connection is encrypted by the
+          local reverse proxy. Fictional test data only until the owner approves real records.
+        </p>
+      ) : (
+        <p>
+          <strong>Unencrypted HTTP — trusted home network only.</strong> Pairing controls who can sign in from the home network. It does{' '}
+          <strong>not</strong> encrypt anything: the code, sessions and everything a paired device opens travel over unencrypted HTTP.
+        </p>
+      )}
       {address && (
         <div>
           <p>

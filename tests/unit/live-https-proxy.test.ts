@@ -353,8 +353,12 @@ describe('turning it off and restore', () => {
 
   it('does not start any proxy listener without the flag', async () => {
     initLanTestProfile(dataDir)
+    // Count this process's own TCP listeners: probing port + 2 could hit an
+    // unrelated process that happens to hold that port during a full run.
+    const listeners = () => process.getActiveResourcesInfo().filter((kind) => kind === 'TCPServerWrap').length
+    const before = listeners()
     running = await startLiveServer({ dataDir, port: 0, staticDir, appInfo })
     expect(running.lanOrigin).toBeNull()
-    expect(await connects(running.port + 2)).toBe(false)
+    expect(listeners() - before).toBe(1)
   })
 })

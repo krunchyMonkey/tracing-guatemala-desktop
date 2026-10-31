@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Alert } from '../clients/components'
 import { enrollDevice, LiveApiError } from './liveApi'
+import { isEncryptedTransport } from '../runtime/transport'
 
 // Shown on a phone, tablet or computer that opens Live over the home network
 // without a session (#136). The person types the pairing code that Settings
@@ -56,9 +57,15 @@ export function EnrollDevice({
           </Alert>
         )}
         <p>Enter the pairing code shown in Settings on the researcher’s computer.</p>
-        <Alert tone="warning" title="Unencrypted">
-          Unencrypted HTTP — trusted home network only. The pairing code, your session and everything you open travel unencrypted.
-        </Alert>
+        {isEncryptedTransport() ? (
+          <Alert tone="info" title="Encrypted connection">
+            HTTPS — home network only. The pairing code and your session are encrypted in transit. This profile holds fictional test data only.
+          </Alert>
+        ) : (
+          <Alert tone="warning" title="Unencrypted">
+            Unencrypted HTTP — trusted home network only. The pairing code, your session and everything you open travel unencrypted.
+          </Alert>
+        )}
         <form onSubmit={(event) => void submit(event)}>
           <div className="field">
             <label htmlFor="pairing-code">Pairing code</label>
