@@ -9,3 +9,25 @@ test-results/
 playwright-report/
 *.log
 .DS_Store
+
+# Sensitive local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local databases and backups (never commit live research records)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+*.bak
+*.backup
