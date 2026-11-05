@@ -40,7 +40,7 @@ try {
     })
     const runtime: AppRuntime = remote
       ? { mode: 'live', data: live.data, backup: null, backupStatus: null, cases: live.cases, switcher, remote: true, signOut: live.signOut }
-      : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan }
+      : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users }
     render(<App runtime={runtime} />)
   } else {
     render(remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AppUser, SignInRequest, UserMutationResult } from '../shared/users'
 import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX, type CaseTask, type CaseTaskInput, type CaseTaskMutationResult } from '../shared/case-tasks'
 import {
   INLINE_MARKS,
@@ -744,6 +745,40 @@ export const caseContracts = {
   getStudioSummary: { args: z.tuple([]), result: studioSummarySchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>
 
+const userRoleSchema = z.enum(['owner', 'researcher'])
+const versionNumber = z.number().int().min(1)
+const appUserSchema = z.strictObject({
+  id: idSchema,
+  displayName: z.string().min(1).max(120),
+  role: userRoleSchema,
+  status: z.enum(['pending', 'active', 'disabled']),
+  contactEmail: z.string().max(254).nullable(),
+  identity: z
+    .strictObject({ provider: z.literal('google'), email: z.string().max(254).nullable(), emailAuthoritative: z.boolean(), boundAt: timestamp })
+    .nullable(),
+  authVersion: versionNumber,
+  version: versionNumber,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  lastSignInAt: timestamp.nullable()
+}) satisfies z.ZodType<AppUser>
+const signInRequestSchema = z.strictObject({
+  id: idSchema,
+  email: z.string().max(254).nullable(),
+  emailAuthoritative: z.boolean(),
+  name: z.string().max(200).nullable(),
+  firstSeenAt: timestamp,
+  lastSeenAt: timestamp,
+  attempts: versionNumber
+}) satisfies z.ZodType<SignInRequest>
+const userResultSchema = z.union([
+  z.strictObject({ ok: z.literal(true), user: appUserSchema }),
+  z.strictObject({
+    ok: z.literal(false),
+    reason: z.enum(['not-found', 'invalid', 'stale', 'last-owner', 'identity-in-use', 'already-bound', 'request-not-found', 'full'])
+  })
+]) satisfies z.ZodType<UserMutationResult>
+
 /** Live-only calls (#117): no IPC channel, because the desktop app is frozen. */
 export const liveContracts = {
   getBackupStatus: {
@@ -778,5 +813,24 @@ export const liveContracts = {
   disableLan: {
     args: z.tuple([]),
     result: z.strictObject({ disabled: z.boolean() })
-  }
+  },
+  // Host-only user directory administration (#179): loopback session only. Results never carry an identity subject.
+  listUsers: { args: z.tuple([]), result: z.array(appUserSchema) },
+  listSignInRequests: { args: z.tuple([]), result: z.array(signInRequestSchema) },
+  createUser: {
+    args: z.tuple([z.strictObject({ displayName: z.string().max(400), role: userRoleSchema, contactEmail: z.string().max(400).nullable().optional() })]),
+    result: userResultSchema
+  },
+  approveSignInRequest: {
+    args: z.tuple([
+      idSchema,
+      z.union([z.strictObject({ userId: idSchema }), z.strictObject({ displayName: z.string().max(400), role: userRoleSchema })]),
+      versionNumber.optional()
+    ]),
+    result: userResultSchema
+  },
+  dismissSignInRequest: { args: z.tuple([idSchema]), result: z.strictObject({ dismissed: z.boolean() }) },
+  setUserRole: { args: z.tuple([idSchema, userRoleSchema, versionNumber]), result: userResultSchema },
+  setUserStatus: { args: z.tuple([idSchema, z.enum(['active', 'disabled']), versionNumber]), result: userResultSchema },
+  revokeUserSessions: { args: z.tuple([idSchema]), result: userResultSchema }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

@@ -1,5 +1,5 @@
 import type { BackupChoice } from '../../../shared/ipc'
-import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi, LanAdminApi } from '../runtime/AppRuntime'
+import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi, LanAdminApi, UserAdminApi } from '../runtime/AppRuntime'
 
 // The Live web app's data calls (#110): same-origin fetches to the loopback
 // local web host (src/server/live-host.ts). Every call carries the session's
@@ -93,6 +93,7 @@ export function createLiveApi(options: LiveApiOptions): {
   backupStatus: BackupStatusApi
   cases: CaseApi
   lan: LanAdminApi
+  users: UserAdminApi
   /** Ends this paired device's session (home-network devices only). */
   signOut: () => Promise<void>
 } {
@@ -217,9 +218,21 @@ export function createLiveApi(options: LiveApiOptions): {
     disableLan: () => call('disableLan')
   }
 
+  const users: UserAdminApi = {
+    listUsers: () => call('listUsers'),
+    listSignInRequests: () => call('listSignInRequests'),
+    createUser: (input) => call('createUser', input),
+    approveSignInRequest: (requestId, target, expectedVersion) =>
+      call('approveSignInRequest', requestId, target, ...(expectedVersion === undefined ? [] : [expectedVersion])),
+    dismissSignInRequest: (requestId) => call('dismissSignInRequest', requestId),
+    setUserRole: (id, role, expectedVersion) => call('setUserRole', id, role, expectedVersion),
+    setUserStatus: (id, status, expectedVersion) => call('setUserStatus', id, status, expectedVersion),
+    revokeUserSessions: (id) => call('revokeUserSessions', id)
+  }
+
   const signOut = async () => {
     await post('/lan/logout', '{}', { 'Content-Type': 'application/json' })
   }
 
-  return { data, backup, backupStatus, cases, lan, signOut }
+  return { data, backup, backupStatus, cases, lan, users, signOut }
 }

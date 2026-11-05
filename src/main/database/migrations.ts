@@ -378,6 +378,87 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'revisions are append-only');
       END;
     `
+  },
+  {
+    version: 9,
+    name: 'app_users',
+    sql: `
+      CREATE TABLE app_users (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 120),
+        role TEXT NOT NULL CHECK (role IN ('owner', 'researcher')),
+        status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'disabled')),
+        contact_email TEXT CHECK (contact_email IS NULL OR length(contact_email) BETWEEN 3 AND 254),
+        auth_version INTEGER NOT NULL DEFAULT 1 CHECK (auth_version >= 1),
+        version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_sign_in_at TEXT,
+        disabled_at TEXT,
+        CHECK ((status = 'disabled') = (disabled_at IS NOT NULL))
+      ) STRICT;
+
+      CREATE TRIGGER app_users_no_delete BEFORE DELETE ON app_users
+      BEGIN
+        SELECT RAISE(ABORT, 'users are never deleted; disable them instead');
+      END;
+
+      CREATE TRIGGER app_users_immutable_id BEFORE UPDATE OF id ON app_users
+      BEGIN
+        SELECT RAISE(ABORT, 'user id is immutable');
+      END;
+
+      CREATE TABLE user_identities (
+        provider TEXT NOT NULL CHECK (provider IN ('google')),
+        subject TEXT NOT NULL CHECK (length(subject) BETWEEN 1 AND 255),
+        user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        email TEXT CHECK (email IS NULL OR length(email) <= 254),
+        email_authoritative INTEGER NOT NULL CHECK (email_authoritative IN (0, 1)),
+        name TEXT CHECK (name IS NULL OR length(name) <= 200),
+        bound_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        PRIMARY KEY (provider, subject),
+        UNIQUE (user_id, provider)
+      ) STRICT;
+
+      CREATE TRIGGER user_identities_immutable_keys BEFORE UPDATE OF provider, subject, user_id ON user_identities
+      BEGIN
+        SELECT RAISE(ABORT, 'an identity binding is never moved');
+      END;
+
+      CREATE TABLE sign_in_requests (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        provider TEXT NOT NULL CHECK (provider IN ('google')),
+        subject TEXT NOT NULL CHECK (length(subject) BETWEEN 1 AND 255),
+        email TEXT CHECK (email IS NULL OR length(email) <= 254),
+        email_authoritative INTEGER NOT NULL CHECK (email_authoritative IN (0, 1)),
+        name TEXT CHECK (name IS NULL OR length(name) <= 200),
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL CHECK (attempts >= 1),
+        UNIQUE (provider, subject)
+      ) STRICT;
+
+      CREATE TABLE user_events (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        at TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('created', 'identity-bound', 'role-changed', 'activated', 'disabled', 'sessions-revoked')),
+        actor TEXT NOT NULL CHECK (length(actor) BETWEEN 1 AND 36)
+      ) STRICT;
+
+      CREATE INDEX user_events_user_idx ON user_events (user_id, at);
+
+      CREATE TRIGGER user_events_no_update BEFORE UPDATE ON user_events
+      BEGIN
+        SELECT RAISE(ABORT, 'user events are append-only');
+      END;
+
+      CREATE TRIGGER user_events_no_delete BEFORE DELETE ON user_events
+      BEGIN
+        SELECT RAISE(ABORT, 'user events are append-only');
+      END;
+    `
   }
 ]
 

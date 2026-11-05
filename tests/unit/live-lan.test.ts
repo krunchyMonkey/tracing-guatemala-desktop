@@ -437,6 +437,14 @@ describe('device enrollment and sessions', () => {
       'revokeDevice',
       'revokeAllDevices',
       'disableLan',
+      'listUsers',
+      'listSignInRequests',
+      'createUser',
+      'approveSignInRequest',
+      'dismissSignInRequest',
+      'setUserRole',
+      'setUserStatus',
+      'revokeUserSessions',
       'noSuchCall'
     ]
     for (const name of hostOnly) {

@@ -107,7 +107,16 @@ const callable = {
   listDevices: liveContracts.listDevices,
   revokeDevice: liveContracts.revokeDevice,
   revokeAllDevices: liveContracts.revokeAllDevices,
-  disableLan: liveContracts.disableLan
+  disableLan: liveContracts.disableLan,
+  // Host-only user directory (#179).
+  listUsers: liveContracts.listUsers,
+  listSignInRequests: liveContracts.listSignInRequests,
+  createUser: liveContracts.createUser,
+  approveSignInRequest: liveContracts.approveSignInRequest,
+  dismissSignInRequest: liveContracts.dismissSignInRequest,
+  setUserRole: liveContracts.setUserRole,
+  setUserStatus: liveContracts.setUserStatus,
+  revokeUserSessions: liveContracts.revokeUserSessions
 } as const
 
 export type CallName = keyof typeof callable
@@ -123,11 +132,22 @@ const HOST_ONLY_CALLS: ReadonlySet<string> = new Set([
   'listDevices',
   'revokeDevice',
   'revokeAllDevices',
-  'disableLan'
+  'disableLan',
+  'listUsers',
+  'listSignInRequests',
+  'createUser',
+  'approveSignInRequest',
+  'dismissSignInRequest',
+  'setUserRole',
+  'setUserStatus',
+  'revokeUserSessions'
 ])
 /** What a paired home-network device may call: everything except the host-only calls. */
 export const REMOTE_CALL_NAMES: readonly CallName[] = CALL_NAMES.filter((name) => !HOST_ONLY_CALLS.has(name))
 const remoteCallable: ReadonlySet<string> = new Set(REMOTE_CALL_NAMES)
+
+/** The recorded actor for user changes made from the loopback (host) session. */
+const HOST_ACTOR = 'host'
 
 const enrollBody = z.strictObject({ code: z.string().max(20), deviceName: z.string().max(200).optional() })
 
@@ -348,7 +368,16 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     listDevices: () => (lan ? devices.listDevices() : []),
     revokeDevice: ([id]) => ({ revoked: devices.revokeDevice(id) }),
     revokeAllDevices: () => ({ revoked: devices.revokeAll() }),
-    disableLan: () => ({ disabled: disableLan() })
+    disableLan: () => ({ disabled: disableLan() }),
+    listUsers: () => data().users.list(),
+    listSignInRequests: () => data().users.listSignInRequests(),
+    createUser: ([input]) => data().users.create(input, HOST_ACTOR),
+    approveSignInRequest: ([requestId, target, expectedVersion]) =>
+      data().users.approveSignInRequest(requestId, target, HOST_ACTOR, expectedVersion),
+    dismissSignInRequest: ([id]) => ({ dismissed: data().users.dismissSignInRequest(id) }),
+    setUserRole: ([id, role, version]) => data().users.setRole(id, role, HOST_ACTOR, version),
+    setUserStatus: ([id, status, version]) => data().users.setStatus(id, status, HOST_ACTOR, version),
+    revokeUserSessions: ([id]) => data().users.revokeSessions(id, HOST_ACTOR)
   }
 
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {

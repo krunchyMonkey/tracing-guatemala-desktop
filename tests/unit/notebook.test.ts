@@ -610,7 +610,7 @@ describe('on disk', () => {
       const first = openAppDatabase(userData)
       first.db.close()
       const db = new DatabaseSync(first.file)
-      db.exec('DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; PRAGMA user_version = 7;')
+      db.exec('DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; PRAGMA user_version = 7;')
       const clients = new ClientRepository(db)
       const client = clients.create(clientInput)
       if (!client.ok) throw new Error('fixture client invalid')

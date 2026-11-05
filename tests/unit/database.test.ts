@@ -53,6 +53,7 @@ describe('migrate', () => {
     const db = memoryDb()
     expect(migrate(db)).toEqual({ from: 0, to: migrations.length })
     expect(tableNames(db)).toEqual([
+      'app_users',
       'case_active_timer',
       'case_briefs',
       'case_events',
@@ -65,7 +66,10 @@ describe('migrate', () => {
       'notebook_page_revisions',
       'notebook_pages',
       'notebook_sections',
-      'research_cases'
+      'research_cases',
+      'sign_in_requests',
+      'user_events',
+      'user_identities'
     ])
     expect(migrate(db)).toEqual({ from: migrations.length, to: migrations.length })
   })
@@ -131,7 +135,7 @@ describe('openAppDatabase', () => {
     first.db.close()
     // Simulate a database left by an app version that only knew migration 1.
     const old = new DatabaseSync(first.file)
-    old.exec('DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; DROP TABLE case_active_timer; DROP TABLE case_time_entries; DROP TABLE case_tasks; DROP TABLE case_journal_entries; DROP TABLE case_briefs; DROP TABLE case_events; DROP TABLE research_cases; DROP TABLE client_notes; PRAGMA user_version = 1;')
+    old.exec('DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; DROP TABLE case_active_timer; DROP TABLE case_time_entries; DROP TABLE case_tasks; DROP TABLE case_journal_entries; DROP TABLE case_briefs; DROP TABLE case_events; DROP TABLE research_cases; DROP TABLE client_notes; PRAGMA user_version = 1;')
     old
       .prepare(
         `INSERT INTO clients (id, display_name, source, created_at, updated_at)
