@@ -44,7 +44,7 @@ Phase 2.7 has **no per-user partitioning**. Every approved person, owner or rese
 - A role change ends the person's existing session at once (401), and they sign in again with the new role.
 - Each role change is logged with the acting owner's id as the actor, never the affected person.
 
-**Accepted risk, not fixed in Phase 2.7:** with two people working at once, a client, case or other non-notebook record can silently lose an edit when both change it from stale screens. Notebook pages are protected. Adding version checks to those records is a separate change and wasn't part of #176. Raise it with the owner if two people will edit the same records.
+**Accepted risk, not fixed in Phase 2.7:** with two people working at once, an edit can be silently lost when both change the same record from stale screens. This was tested for clients. `updateCase`, `saveCaseBrief`, `updateJournalEntry`, `updateCaseTask` and `updateTimeEntry` carry no version argument either, so by construction they are last-write-wins too (not separately tested). Notebook pages are protected by version checks. Adding version checks to the other records is a separate change and wasn't part of #176. Raise it with the owner if two people will edit the same records.
 
 ### Not tested (be honest about these)
 
