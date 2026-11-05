@@ -274,8 +274,13 @@ describe('pairing and use through the proxy', () => {
     const paired = await pair(live, host)
     const list = await proxyCall(live, paired, 'listClients', listQuery)
     expect(list.status, list.text).toBe(200)
-    for (const name of ['createBackup', 'restoreBackup', 'getBackupStatus', 'createPairingCode', 'disableLan']) {
-      expect((await proxyCall(live, paired, name)).status, name).toBe(403)
+    const hostOnly = ['createBackup', 'restoreBackup', 'getBackupStatus', 'createPairingCode', 'disableLan']
+    // The user directory (#179) is host-only until #180 adds per-user sessions and roles.
+    const userAdmin = ['listUsers', 'listSignInRequests', 'createUser', 'approveSignInRequest', 'dismissSignInRequest', 'setUserRole', 'setUserStatus', 'revokeUserSessions']
+    for (const name of [...hostOnly, ...userAdmin]) {
+      const reply = await proxyCall(live, paired, name)
+      expect(reply.status, name).toBe(403)
+      expect(reply.text, name).toContain('host-only')
     }
     // A write without the CSRF token or with the wrong Origin is refused.
     const noCsrf = await viaProxy(live, 'POST', '/api/v1/call/listClients', json({ Origin: ORIGIN, Cookie: paired.cookie }), JSON.stringify({ args: [listQuery] }))
