@@ -11,8 +11,22 @@ const CSRF_HEADER = 'X-TG-CSRF'
 
 /** `demoUrl` is the host's fictional-demo address (#114); untrusted until web/demoLink.ts checks it. */
 export type SessionState =
-  | { authenticated: true; csrfToken: string; demoUrl?: unknown; remote?: boolean; device?: { name?: unknown } }
-  | { authenticated: false; demoUrl?: unknown; remote?: boolean }
+  | {
+      authenticated: true
+      csrfToken: string
+      demoUrl?: unknown
+      remote?: boolean
+      /** 'google' on the HTTPS listener with per-user sessions (#180); otherwise device pairing. */
+      auth?: 'device' | 'google'
+      device?: { name?: unknown }
+      user?: { displayName?: unknown; role?: unknown; email?: unknown }
+    }
+  | {
+      authenticated: false
+      demoUrl?: unknown
+      remote?: boolean
+      auth?: 'device' | 'google'
+    }
 
 /** Thrown for any failed call; carries only the host's error code. */
 export class LiveApiError extends Error {
@@ -59,6 +73,8 @@ interface LiveApiOptions {
   /** Called when the host can't be reached at all (paired devices only, #137). */
   onUnreachable?: () => void
   fetchImpl?: typeof fetch
+  /** 'google' signs out through /auth/logout instead of ending a paired device (#180). */
+  auth?: 'device' | 'google'
   /** Lets the person pick a backup file; resolves null if they cancel. */
   pickFile?: () => Promise<File | null>
   /** Starts a browser download of `url`. */
@@ -231,7 +247,7 @@ export function createLiveApi(options: LiveApiOptions): {
   }
 
   const signOut = async () => {
-    await post('/lan/logout', '{}', { 'Content-Type': 'application/json' })
+    await post(options.auth === 'google' ? '/auth/logout' : '/lan/logout', '{}', { 'Content-Type': 'application/json' })
   }
 
   return { data, backup, backupStatus, cases, lan, users, signOut }

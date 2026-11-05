@@ -133,7 +133,48 @@ Transport-independent modules under `src/server/auth/`; no routes, sessions or d
 - `google-config.ts`: reads Google's `{ web: {...} }` client file and derives the redirect URI from the HTTPS name; errors never include file content.
 - `fake-provider.ts`: deterministic fake for tests only.
 
-Still for #180: routes (`/api/v1/auth/google/start` and `/callback`), the login-id cookie, session issuance, wiring the account store (#179) into the gate, unifying `VerifiedIdentity` with #179's claims type, and gating the fake provider behind `TG_TEST_HOOKS=1`.
+Routes, sessions, the account gate and the fake-provider gate landed in #180 (next section).
+
+## Sessions and authorization (#180)
+
+**Turning it on.** `--google-client <path to the Google client JSON>` together with `--https-host <name>` (and the existing fictional-profile gate; #168/#169 are untouched). Without `--https-host` the flag is refused and nothing starts; an unreadable or mismatching client file prints a fixed message (never file content) and nothing starts. With it, the HTTPS proxy listener signs people in with Google and uses app sessions; **device pairing and `tg_lan_*` cookies do not exist on it** (`/api/v1/lan/enroll` is 404, a device cookie is ignored). Without `--google-client`, `--https-host` keeps fictional pairing, and `--lan-host` (plain HTTP) is pairing only, never Google. The loopback launch-link session is unchanged and is the operator/recovery path. **Rollback:** restart without `--google-client`.
+
+**Test hook.** Only with both `TG_TEST_HOOKS=1` and `TG_TEST_FAKE_IDENTITY=1` does the CLI use a fake provider (sign in with `code=alex` or `code=bea`); it prints a loud warning. Never set them outside automated tests.
+
+**Routes (proxy listener, Google mode).** All keep the exact Host check; `Forwarded`/`X-Forwarded-*` are never read.
+
+| Route | Rule |
+|---|---|
+| `GET /api/v1/session` | `{ authenticated, csrfToken, remote: true, auth: 'google', user }` |
+| `POST /api/v1/auth/google/start` | top-level form POST; `Origin` must equal `https://<name>`, `Sec-Fetch-Site` absent or `same-origin`, body at most 1 KiB; 303 to Google with the login cookie |
+| `GET /api/v1/auth/google/callback` | GET only; `Sec-Fetch-Mode` (if sent) `navigate`, `Sec-Fetch-Dest` (if sent) `document`; query at most 4 KiB; verified via the login cookie, state, nonce and PKCE (#178); 303 to `/` or `/?signin=<reason>` |
+| `POST /api/v1/auth/logout` | exact Origin and CSRF; deletes the session |
+| `POST /api/v1/call/:name` | exact Origin, `Sec-Fetch-Site` same-origin or absent, session, CSRF, then the policy below |
+| backups upload/download | always 403 `host-only` |
+
+`/?signin=` values: `not-approved`, `disabled`, `unavailable`, `expired`, `cancelled`, `busy`, `failed`. A stranger who completes Google sign-in gets no session and no account; one pending request is recorded for the owner (`recordSignInRequest`). Codes, tokens, emails and cookies are never logged; logs hold method, route template and status.
+
+**Cookies.** Session: `__Host-tg_session=<id>; Path=/; Secure; HttpOnly; SameSite=Strict`. Login state: `__Host-tg_login=<id>; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600` (Lax because Google's redirect back is a cross-site top-level GET). No `Domain`, no port in the name. A cookie name that appears twice in a request is treated as absent (cookie tossing). Each sign-in issues a new session and ends any session the browser already held (rotation).
+
+**Session lifetime.** 32-byte random id, in memory. Idle 8 hours, absolute 7 days, at most 10 per user and 200 in total (oldest evicted). **A host restart ends every session** (fail closed; people sign in again). Turning LAN access off and restoring a backup also end every session.
+
+**Revocation semantics.** A session holds only `userId` and the `auth_version` it was created at. **Every request** re-reads `status`, `role` and `auth_version` from the user directory and requires `active` and an equal version; otherwise the session is deleted and the answer is 401 `not-signed-in`. Role change, disable, re-enable and "revoke sessions" all bump `auth_version`, so they take effect on the very next request. The role always comes from the database, never from the session, so this also holds on a second host sharing the database. After a user-admin call the server also drops that user's sessions.
+
+**Authorization (server side, `src/server/auth/policy.ts`).**
+
+| Call group | host (loopback) | paired device | researcher | owner |
+|---|---|---|---|---|
+| Clients, cases, notebook, tasks, time, studio, `getAppInfo` | yes | yes | yes | yes |
+| User directory (8 calls: `listUsers` ... `revokeUserSessions`) | yes | no (`host-only`) | no (`forbidden`) | yes (actor = own user id) |
+| Backups, restore, `getBackupStatus`, device admin, pairing code, `getLanStatus`, `disableLan` | yes | no | no | **no** (`host-only`) |
+| `getMyAccount` | null | no | yes | yes |
+| `revokeMySessions` (sign out everywhere) | no | no | yes | yes |
+
+Unknown call names are 404 for users. Backups, restore, device administration and LAN/network actions are never available to any remote principal, including an owner; they stay with the loopback host session.
+
+**Same-site defences.** The public apex and `www` (`krunchymonkey.dev`) are the same site as `tg` but a different origin: their `Origin` fails the exact check, `Sec-Fetch-Site: same-site` is refused, the `__Host-` prefix stops a sibling from planting or shadowing a cookie, and the session cookie is `SameSite=Strict`. Nothing on the public site may run scripts that talk to `tg`.
+
+**Phase 2.8 seam (#187).** Sessions sit behind `UserSessionStore` (`src/server/auth/user-sessions.ts`), injectable into `createLiveHost`/`startLiveServer`. It is synchronous because the only implementation is in memory; a store shared by several backend nodes will need an async variant of the same interface. The per-request database check above is what makes role revocation correct across nodes, so keep it when the store changes. Do not route a second node until a shared store exists and revocation across nodes has been tested.
 
 ## Owner checklist (#177)
 

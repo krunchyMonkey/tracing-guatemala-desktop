@@ -7,6 +7,7 @@ import { DataDirInUseError, defaultLiveDataDir } from './data-dir'
 import { LanHostError } from './lan'
 import { initLanTestProfile } from './lan-profile'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
+import { testFakeProvider } from './auth/provider-selection'
 import { openInBrowser } from './open-browser'
 import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 
@@ -29,6 +30,10 @@ import { DEFAULT_LIVE_PORT, startLiveServer } from './server'
 // a local reverse proxy (e.g. Caddy) that serves that name over HTTPS. Exclusive with
 // --lan-host, same fictional-profile gate, and Forwarded / X-Forwarded-* headers are
 // never trusted. It is a flag only; --init-lan-test-profile works with it too.
+// --google-client <Google OAuth client JSON> (#180, needs --https-host) turns the HTTPS listener
+// into Google per-user sign-in with app sessions and roles instead of device pairing; see
+// docs/operations/google-identity.md. Restart without it to roll back to pairing.
+// Test only: TG_TEST_HOOKS=1 with TG_TEST_FAKE_IDENTITY=1 replaces Google with a fake provider.
 // Test only: TG_TEST_HOOKS=1 with TG_TEST_RESOLVE=<name>=<address> makes that
 // name resolve server-side without touching DNS; it does nothing otherwise.
 
@@ -42,6 +47,7 @@ const { values } = parseArgs({
     'no-demo': { type: 'boolean' },
     'lan-host': { type: 'string' },
     'https-host': { type: 'string' },
+    'google-client': { type: 'string' },
     'lan-demo-name': { type: 'string' },
     'init-lan-test-profile': { type: 'boolean' }
   }
@@ -51,6 +57,7 @@ const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? 
 const lanHost = values['lan-host'] ?? null
 const httpsHost = values['https-host'] ?? null
 const lanDemoName = values['lan-demo-name'] ?? null
+const googleClientFile = values['google-client'] ?? null
 const staticDir = fileURLToPath(new URL('../client/', import.meta.url))
 const demoDir = fileURLToPath(new URL('../../dist-demo/', import.meta.url))
 
@@ -65,6 +72,10 @@ if (!existsSync(join(staticDir, 'index.html'))) {
 
 if (httpsHost !== null && lanHost !== null) {
   console.error("--https-host and --lan-host can't be used together. Choose one. Nothing was started.")
+  process.exit(1)
+}
+if (googleClientFile !== null && httpsHost === null) {
+  console.error('--google-client needs --https-host <name>. Google sign-in is only offered on the HTTPS listener. Nothing was started.')
   process.exit(1)
 }
 if (lanDemoName !== null && !lanHost) {
@@ -83,6 +94,13 @@ if (process.env['TG_TEST_HOOKS'] === '1' && process.env['TG_TEST_RESOLVE']) {
       return [testAddress]
     }
   }
+}
+
+const fakeIdentity = googleClientFile !== null ? testFakeProvider(process.env) : null
+if (fakeIdentity) {
+  console.warn(
+    'TEST HOOK ACTIVE: sign-in uses a FAKE identity provider that verifies nothing. Never set TG_TEST_HOOKS or TG_TEST_FAKE_IDENTITY outside automated tests.'
+  )
 }
 
 if (values['init-lan-test-profile']) {
@@ -123,6 +141,8 @@ try {
     staticDir,
     lanHost,
     httpsHost,
+    googleClientFile,
+    ...(fakeIdentity ? { identity: fakeIdentity } : {}),
     lanDemoName: values['no-demo'] ? null : lanDemoName,
     demoDir,
     ...(lanDemoResolve ? { lanDemoResolve } : {}),
@@ -149,6 +169,15 @@ try {
   process.exit(1)
 }
 
+const googleNote = `
+  HTTPS with Google sign-in (opt-in, through the local reverse proxy): ${server.lanOrigin}/
+    People approved in the user directory sign in with Google; there is no device
+    pairing here. The proxy must forward to 127.0.0.1:${port + 2}. FICTIONAL TEST
+    DATA ONLY until the HTTPS security review and the owner's approval. Sessions
+    last in memory only: restarting this window signs everyone out. This window
+    never trusts forwarded-address headers. Backups and network settings stay on
+    this computer. Restart without --google-client to go back to pairing.
+`
 const proxyNote = `
   HTTPS home network (opt-in, through the local reverse proxy): ${server.lanOrigin}/
     Encrypted by your reverse proxy, which must forward to 127.0.0.1:${port + 2}
@@ -160,7 +189,9 @@ const proxyNote = `
     --https-host to turn it on again.
 `
 const lanNote = server.lanOrigin && httpsHost
-  ? proxyNote
+  ? googleClientFile !== null
+    ? googleNote
+    : proxyNote
   : server.lanOrigin
   ? `
   Home network (opt-in): ${server.lanOrigin}/

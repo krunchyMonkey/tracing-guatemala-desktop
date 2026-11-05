@@ -7,6 +7,7 @@ import { liveModeSwitch, validDemoHref } from './demoLink'
 import { EnrollDevice } from './EnrollDevice'
 import { HostUnreachable } from './HostUnreachable'
 import { LaunchRequired } from './LaunchRequired'
+import { GoogleSignIn } from './GoogleSignIn'
 import { createLiveApi, fetchSession } from './liveApi'
 
 // Entry point of the Live web app (#110, vite.web.config.ts): the shared UI
@@ -32,10 +33,12 @@ try {
   const switcher = liveModeSwitch(session.demoUrl, window.location)
   const demoHref = validDemoHref(session.demoUrl, window.location)
   const remote = session.remote === true
+  const google = remote && session.auth === 'google'
   if (session.authenticated) {
     const live = createLiveApi({
       csrfToken: session.csrfToken,
-      onSessionLost: () => render(remote ? <EnrollDevice sessionEnded /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />),
+      ...(google ? { auth: 'google' as const } : {}),
+      onSessionLost: () => render(google ? <GoogleSignIn /> : remote ? <EnrollDevice sessionEnded /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />),
       ...(remote ? { onUnreachable: () => render(<HostUnreachable />) } : {})
     })
     const runtime: AppRuntime = remote
@@ -43,7 +46,7 @@ try {
       : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users }
     render(<App runtime={runtime} />)
   } else {
-    render(remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)
+    render(google ? <GoogleSignIn reason={new URLSearchParams(window.location.search).get('signin')} /> : remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)
   }
 } catch {
   render(onRemotePage ? <HostUnreachable /> : <LaunchRequired reason="unreachable" />)
