@@ -122,6 +122,19 @@ Publishing it is a public-site change, so the owner approves it; engineering doe
 >
 > *Last updated: `<date of publication>`.*
 
+## Google identity verification (#178)
+
+Transport-independent modules under `src/server/auth/`; no routes, sessions or database yet.
+
+- `identity.ts`: the provider-neutral port (`IdentityProvider`, `VerifiedIdentity`, `IdentityFailure`) and `signIn(provider, gate, loginId, params)`. The `AccountGate` only looks up an existing account: unknown, pending and disabled accounts are denied; it never registers anyone or grants a role.
+- `google-provider.ts`: authorization code + PKCE (`S256`), scopes exactly `openid email profile`, `prompt=select_account`, no `access_type`. Random `state`, `nonce` and verifier per login; pending logins are in memory (10 min, at most 50, single use), with limits on begins (30/min) and failed completions (20/10 min). Only `id_token` is read from the token response; the access token is discarded.
+- `google-id-token.ts`: RS256 only, `kid` lookup, signature, `iss`, `aud` (exactly the client id), `azp`, `exp`/`iat` with 60 s skew, `nonce`, `sub`, `email_verified === true`. `emailAuthoritative` is true for Gmail addresses or a non-empty `hd`. Results carry only a failure code, never the token or claims.
+- `google-keys.ts`: JWKS cache honouring `Cache-Control: max-age` (5 min to 24 h), one refetch per minute on unknown `kid`, 5 s timeout, fails closed as `provider-unavailable`.
+- `google-config.ts`: reads Google's `{ web: {...} }` client file and derives the redirect URI from the HTTPS name; errors never include file content.
+- `fake-provider.ts`: deterministic fake for tests only.
+
+Still for #180: routes (`/api/v1/auth/google/start` and `/callback`), the login-id cookie, session issuance, wiring the account store (#179) into the gate, unifying `VerifiedIdentity` with #179's claims type, and gating the fake provider behind `TG_TEST_HOOKS=1`.
+
 ## Owner checklist (#177)
 
 - [ ] Google Cloud project, Branding and Audience configured as above (Testing status is fine for the pilot).
