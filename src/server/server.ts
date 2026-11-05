@@ -7,6 +7,10 @@ import { acquireDataDirLock, checkLiveDataDir } from './data-dir'
 import { checkLanDemoResolves, LanHostError, validateHttpsHost, validateLanDemoName, validateLanHost, type LanDemoResolve } from './lan'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
 import { assertLanDataAllowed } from './lan-profile'
+import { createGoogleProvider } from './auth/google-provider'
+import { readGoogleClientFile } from './auth/google-config'
+import type { IdentityProvider } from './auth/identity'
+import type { UserSessionStore } from './auth/user-sessions'
 import { createLiveHost, type LiveHost } from './live-host'
 
 // Starts the Live web host (#110): opens the web profile's database, then
@@ -39,6 +43,16 @@ export interface StartLiveServerOptions {
    * TLS. A listener on 127.0.0.1:<port + 2> answers only that Host. Exclusive with `lanHost`.
    */
   httpsHost?: string | null
+  /**
+   * Google user sessions (#180): path of the Google OAuth client JSON. Needs `httpsHost`. The HTTPS
+   * listener then signs people in with Google and refuses device pairing; without it, `httpsHost`
+   * keeps fictional device pairing. Read at startup; any problem refuses to start.
+   */
+  googleClientFile?: string | null
+  /** Test-only: an identity provider used instead of reading `googleClientFile` (the CLI allows the fake only with TG_TEST_HOOKS and TG_TEST_FAKE_IDENTITY). */
+  identity?: IdentityProvider
+  /** Injectable session store (#187). */
+  userSessions?: UserSessionStore
   /** Test-only: replaces `os.networkInterfaces()` when validating `lanHost`. */
   lanInterfaces?: NodeJS.Dict<NetworkInterfaceInfo[]>
   /**
@@ -139,6 +153,18 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
     // The proxy encrypts, but real data waits for the HTTPS review (#168): fictional profiles only.
     assertLanDataAllowed(options.dataDir)
   }
+  let identity: IdentityProvider | null = options.identity ?? null
+  if (!httpsName && (identity || (options.googleClientFile !== undefined && options.googleClientFile !== null))) {
+    throw new LanHostError('--google-client needs --https-host <name>. Google sign-in is only offered on the HTTPS listener. Nothing was started.')
+  }
+  if (httpsName && !identity && options.googleClientFile) {
+    try {
+      identity = createGoogleProvider(readGoogleClientFile(options.googleClientFile, httpsName))
+    } catch (error) {
+      // Fixed messages from readGoogleClientFile: never the file's content.
+      throw new LanHostError(`${error instanceof Error ? error.message : 'Google client file could not be used.'} Nothing was started.`)
+    }
+  }
   if (options.lanHost !== undefined && options.lanHost !== null) {
     const checked = validateLanHost(options.lanHost, options.lanInterfaces)
     if (!checked.ok) throw new LanHostError(checked.error)
@@ -206,6 +232,7 @@ export async function startLiveServer(options: StartLiveServerOptions): Promise<
       port,
       ...(lanAddress ? { lan: { address: lanAddress, demoUrl: lanDemoUrl } } : {}),
       ...(httpsName ? { lan: { address: LIVE_HOST, httpsName } } : {}),
+      ...(identity ? { identity } : {}),
       onDisableLan: () => {
         lanClosed = closeLanSockets()
         log(`Home-network access was turned off. Paired devices were signed out. Restart with ${httpsName ? '--https-host' : '--lan-host'} to turn it on again.`)

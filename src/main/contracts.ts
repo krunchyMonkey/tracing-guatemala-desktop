@@ -832,5 +832,8 @@ export const liveContracts = {
   dismissSignInRequest: { args: z.tuple([idSchema]), result: z.strictObject({ dismissed: z.boolean() }) },
   setUserRole: { args: z.tuple([idSchema, userRoleSchema, versionNumber]), result: userResultSchema },
   setUserStatus: { args: z.tuple([idSchema, z.enum(['active', 'disabled']), versionNumber]), result: userResultSchema },
-  revokeUserSessions: { args: z.tuple([idSchema]), result: userResultSchema }
+  revokeUserSessions: { args: z.tuple([idSchema]), result: userResultSchema },
+  // Own-account calls (#180): meaningful only for a signed-in user. The host session gets null from getMyAccount.
+  getMyAccount: { args: z.tuple([]), result: appUserSchema.nullable() },
+  revokeMySessions: { args: z.tuple([]), result: z.strictObject({ ok: z.literal(true) }) }
 } as const satisfies Record<string, CallContract<z.ZodTuple, z.ZodType>>

@@ -311,6 +311,10 @@ Cases arrive as storage and API only; the screens belong to #16. The rules, stat
 - **The file is not encrypted.** The dialog says so and asks the researcher to keep it private. The file name is `case-summary-<slug>-<YYYY-MM-DD>.md` (ASCII slug, at most 50 characters, no separators).
 - **Where it goes is the browser's business.** The app cannot know whether the browser saved the file or where, so the copy says "Your browser will save it or ask where to save it" and never claims more. Archived cases can be exported (it is read-only).
 
+## Google user sessions on the HTTPS listener (#180)
+
+With `--google-client <file>` and `--https-host <name>` the proxy listener (port + 2) replaces device pairing with Google sign-in and per-user app sessions (`__Host-tg_session`, in memory, idle 8 h, absolute 7 d, ended by restart). Every request re-reads the user's status, role and `auth_version`, so role changes, disabling and revoke-all apply on the next request. The server-side policy (`src/server/auth/policy.ts`) gives owners the user directory and keeps backups, device and LAN administration with the loopback host session only. The loopback launch-link path is unchanged; the plain-HTTP LAN listener stays pairing-only. Full runbook, route rules and policy table: `docs/operations/google-identity.md`. Sessions sit behind an injectable store (#187).
+
 ## Users and roles (#179)
 
 The user directory is application-owned and provider-neutral (`src/shared/users.ts`); Google is only the first identity provider (#178 verifies tokens and hands over `VerifiedIdentityClaims`). Phase 2.7 #178 and #180 build on these names.
