@@ -1,0 +1,7 @@
+{
+  "web": {
+    "client_id": "000000000000-example.apps.googleusercontent.com",
+    "client_secret": "NOT-A-REAL-SECRET-host-local-only",
+    "redirect_uris": ["https://tg.example.com/api/v1/auth/google/callback"]
+  }
+}

@@ -19,6 +19,11 @@ playwright-report/
 *.pfx
 *.p12
 
+# Google OAuth client downloads (host-local only, #177)
+client_secret*.json
+google-client*.json
+!deploy/google/google-client.example.json
+
 # Local databases and backups (never commit live research records)
 *.db
 *.db-shm
