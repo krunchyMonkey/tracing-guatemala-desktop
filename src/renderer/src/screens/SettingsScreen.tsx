@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import type { AppInfo, BackupChoice, BackupProblem, BackupStatus } from '../../../shared/ipc'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, ConfirmDialog, formatDateTime } from '../clients/components'
-import { useAppRuntime, type BackupApi, type LanAdminApi, type LanDevice } from '../runtime/AppRuntime'
+import { useAppRuntime, type BackupApi, type LanAdminApi, type LanDevice, type UserAdminApi } from '../runtime/AppRuntime'
+import { AccountSection } from './AccountSection'
+import { UsersAdmin } from './UsersAdmin'
 import { describeAge, daysSince, useBackupStatus } from '../runtime/useBackupStatus'
 
 // Settings & Backup (#11). On the desktop, backups are made and restored by the
@@ -48,7 +50,14 @@ export function SettingsScreen() {
       <h1 id="settings-heading">Settings &amp; Backup</h1>
 
       {runtime.mode === 'live' && runtime.remote ? (
-        <RemoteSection signOut={runtime.signOut} />
+        runtime.account && runtime.person ? (
+          <>
+            <AccountSection account={runtime.account} person={runtime.person} {...(runtime.signOut ? { signOut: runtime.signOut } : {})} />
+            {runtime.users && runtime.person.role === 'owner' && <UsersAdmin users={runtime.users} />}
+          </>
+        ) : (
+          <RemoteSection signOut={runtime.signOut} />
+        )
       ) : runtime.backup ? (
         <>
           <section aria-labelledby="data-heading">
@@ -60,6 +69,7 @@ export function SettingsScreen() {
           </section>
           <BackupSection backup={runtime.backup} web={runtime.mode === 'live'} />
           {runtime.mode === 'live' && runtime.lan && <HomeNetworkDevices lan={runtime.lan} />}
+          {runtime.mode === 'live' && runtime.users && <HostUsers users={runtime.users} {...(runtime.lan ? { lan: runtime.lan } : {})} />}
           {runtime.mode === 'live' && <EncryptionNotice />}
         </>
       ) : (
@@ -94,6 +104,30 @@ export function SettingsScreen() {
       </section>
     </section>
   )
+}
+
+/**
+ * The host session administers users (#181). Only worth showing when the HTTPS
+ * listener is on, since without it nobody can sign in with Google.
+ */
+function HostUsers({ users, lan }: { users: UserAdminApi; lan?: LanAdminApi }) {
+  const [show, setShow] = useState(lan === undefined)
+  useEffect(() => {
+    if (!lan) return
+    let cancelled = false
+    lan
+      .getLanStatus()
+      .then((status) => {
+        if (!cancelled) setShow(status.enabled && status.origin?.startsWith('https://') === true)
+      })
+      .catch(() => {
+        // Without a status the section stays hidden.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [lan])
+  return show ? <UsersAdmin users={users} /> : null
 }
 
 /** A paired home-network device (#136): backups stay on the researcher's computer. */

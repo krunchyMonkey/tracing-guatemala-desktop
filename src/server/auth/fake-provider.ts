@@ -10,6 +10,8 @@ export interface FakeProviderOptions {
   identities?: Record<string, VerifiedIdentity>
   /** Failures by `code`. */
   failures?: Record<string, IdentityFailure>
+  /** Where beginSignIn sends the browser; a test serves a fake consent page here. */
+  authUrl?: string
 }
 
 export function createFakeIdentityProvider(options: FakeProviderOptions = {}): IdentityProvider {
@@ -20,10 +22,11 @@ export function createFakeIdentityProvider(options: FakeProviderOptions = {}): I
     beginSignIn() {
       const loginId = `fake-login-${++counter}`
       pending.add(loginId)
-      return { redirectUrl: `https://fake.invalid/auth?login=${loginId}`, loginId }
+      return { redirectUrl: `${options.authUrl ?? 'https://fake.invalid/auth'}?login=${loginId}`, loginId }
     },
     async completeSignIn(loginId, params): Promise<CompleteResult> {
       if (!loginId || !pending.delete(loginId)) return { ok: false, reason: 'expired-login' }
+      if (params.get('error') === 'access_denied') return { ok: false, reason: 'denied-by-user' }
       const code = params.get('code') ?? ''
       const failure = options.failures?.[code]
       if (failure) return { ok: false, reason: failure }

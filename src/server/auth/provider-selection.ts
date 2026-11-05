@@ -8,7 +8,7 @@ export function fakeIdentityAllowed(env: NodeJS.ProcessEnv): boolean {
   return env['TG_TEST_HOOKS'] === '1' && env['TG_TEST_FAKE_IDENTITY'] === '1'
 }
 
-/** A fixed fictional set for end-to-end tests: sign in with `code=alex` or `code=bea`. Null unless both flags are set. */
+/** A fixed fictional set for end-to-end tests: sign in with `code=alex`, `code=bea` or `code=cara`. Null unless both flags are set. */
 export function testFakeProvider(env: NodeJS.ProcessEnv): IdentityProvider | null {
   if (!fakeIdentityAllowed(env)) return null
   const person = (subject: string, email: string, name: string) => ({
@@ -22,7 +22,10 @@ export function testFakeProvider(env: NodeJS.ProcessEnv): IdentityProvider | nul
   return createFakeIdentityProvider({
     identities: {
       alex: person('fake-sub-alex', 'alex@example.test', 'Alex Fictional'),
-      bea: person('fake-sub-bea', 'bea@example.test', 'Bea Fictional')
-    }
+      bea: person('fake-sub-bea', 'bea@example.test', 'Bea Fictional'),
+      // Nobody approves this one up front: it exercises the sign-in request flow.
+      cara: person('fake-sub-cara', 'cara@example.test', 'Cara Fictional')
+    },
+    authUrl: 'https://fake-google.test/auth'
   })
 }

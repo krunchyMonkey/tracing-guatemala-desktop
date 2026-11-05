@@ -41,7 +41,7 @@ export function AppLayout() {
         Skip to content
       </a>
       {demo && <DemoBanner />}
-      {remote && <HttpRiskBanner />}
+      {remote && <HttpRiskBanner person={runtime.mode === 'live' ? (runtime.person ?? null) : null} />}
       <aside className="sidebar">
         <p className="brand">
           Tracing Guatemala

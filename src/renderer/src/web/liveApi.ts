@@ -1,5 +1,5 @@
 import type { BackupChoice } from '../../../shared/ipc'
-import type { AppDataApi, BackupApi, BackupStatusApi, CaseApi, LanAdminApi, UserAdminApi } from '../runtime/AppRuntime'
+import type { AccountApi, AppDataApi, BackupApi, BackupStatusApi, CaseApi, LanAdminApi, UserAdminApi } from '../runtime/AppRuntime'
 
 // The Live web app's data calls (#110): same-origin fetches to the loopback
 // local web host (src/server/live-host.ts). Every call carries the session's
@@ -110,6 +110,7 @@ export function createLiveApi(options: LiveApiOptions): {
   cases: CaseApi
   lan: LanAdminApi
   users: UserAdminApi
+  account: AccountApi
   /** Ends this paired device's session (home-network devices only). */
   signOut: () => Promise<void>
 } {
@@ -246,9 +247,14 @@ export function createLiveApi(options: LiveApiOptions): {
     revokeUserSessions: (id) => call('revokeUserSessions', id)
   }
 
+  const account: AccountApi = {
+    getMyAccount: () => call('getMyAccount'),
+    revokeMySessions: () => call('revokeMySessions')
+  }
+
   const signOut = async () => {
     await post(options.auth === 'google' ? '/auth/logout' : '/lan/logout', '{}', { 'Content-Type': 'application/json' })
   }
 
-  return { data, backup, backupStatus, cases, lan, users, signOut }
+  return { data, backup, backupStatus, cases, lan, users, account, signOut }
 }
