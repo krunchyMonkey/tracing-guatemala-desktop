@@ -153,6 +153,23 @@ describe('restoreBackup', () => {
     expect(names()).toEqual(['After Restore', 'Ana Ejemplo'])
   })
 
+  it('keeps approved users and identity bindings through backup and restore', () => {
+    const claims = { provider: 'google', subject: 'sub-ana', email: 'ana@example.test', emailVerified: true, emailAuthoritative: false, name: 'Ana Example' } as const
+    const request = data.users.recordSignInRequest(claims)
+    if (!request.ok) throw new Error('refused')
+    const approved = data.users.approveSignInRequest(request.request.id, { displayName: 'Ana Example', role: 'owner' }, 'host')
+    if (!approved.ok) throw new Error('refused')
+    const file = join(root, 'users.tgbackup')
+    data.createBackup(file)
+
+    // After the backup the user is changed and another is added; restore undoes both.
+    data.users.create({ displayName: 'Ben Example', role: 'researcher' }, 'host')
+    data.users.revokeSessions(approved.user.id, 'host')
+    data.restoreBackup(file)
+    expect(data.users.list()).toEqual([approved.user])
+    expect(data.users.resolveIdentity(claims)).toMatchObject({ kind: 'active', user: { id: approved.user.id } })
+  })
+
   it('keeps a safety copy of the data it replaced', () => {
     seed('Ana Ejemplo')
     const file = join(root, 'backup.tgbackup')
@@ -183,6 +200,7 @@ describe('restoreBackup', () => {
 
     expect(data.restoreBackup(file)).toEqual({ clients: 1, notes: 0, schemaVersion: migrations.length })
     expect(names()).toEqual(['Older Backup Client'])
+    expect(data.users.list()).toEqual([])
     expect(data.notes.create('00000000-0000-4000-8000-000000000001', note).ok).toBe(true)
   })
 

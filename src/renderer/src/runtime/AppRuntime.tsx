@@ -6,6 +6,7 @@ import type { CaseTask, CaseTaskInput, CaseTaskMutationResult } from '../../../s
 import type { StopOptions, TimeEntry, TimeEntryInput, TimeEntryMutationResult, TimerResult, TimerSnapshot } from '../../../shared/case-time'
 import type { CaseEvent, CaseInput, CaseMutationResult, CaseQuery, CaseState, ResearchCase } from '../../../shared/case-model'
 import type { StudioSummary } from '../../../shared/studio-summary'
+import type { AppUser, ApproveTarget, NewUserInput, SignInRequest, UserMutationResult, UserRole } from '../../../shared/users'
 import type { BackupStatus, TracingGuatemalaApi } from '../../../shared/ipc'
 
 // Where the shared React UI gets its data (#100, #110). The desktop app reads and
@@ -100,6 +101,18 @@ export interface LanAdminApi {
   disableLan(): Promise<{ disabled: boolean }>
 }
 
+/** Host-only user directory administration (#179). No screen uses it yet; the demo has no users. */
+export interface UserAdminApi {
+  listUsers(): Promise<AppUser[]>
+  listSignInRequests(): Promise<SignInRequest[]>
+  createUser(input: NewUserInput): Promise<UserMutationResult>
+  approveSignInRequest(requestId: string, target: ApproveTarget, expectedVersion?: number): Promise<UserMutationResult>
+  dismissSignInRequest(requestId: string): Promise<{ dismissed: boolean }>
+  setUserRole(id: string, role: UserRole, expectedVersion: number): Promise<UserMutationResult>
+  setUserStatus(id: string, status: 'active' | 'disabled', expectedVersion: number): Promise<UserMutationResult>
+  revokeUserSessions(id: string): Promise<UserMutationResult>
+}
+
 export type AppRuntime =
   | { mode: 'desktop'; data: AppDataApi; backup: BackupApi; cases: null; backupStatus?: null; switcher: ModeSwitch }
   | {
@@ -114,6 +127,8 @@ export type AppRuntime =
       remote?: boolean
       /** Host (loopback) only. */
       lan?: LanAdminApi
+      /** Host (loopback) only. */
+      users?: UserAdminApi
       /** Remote only: ends this device's session on the host. */
       signOut?: () => Promise<void>
     }

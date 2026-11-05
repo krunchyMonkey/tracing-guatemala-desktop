@@ -158,6 +158,46 @@ describe('demo address (#114)', () => {
   })
 })
 
+describe('user directory (#179)', () => {
+  it('lets the host session provision, bind and manage users, and never returns a subject', async () => {
+    const live = await start()
+    const host = await signIn(live)
+    const ana = await call<{ ok: true; user: { id: string; version: number; status: string } }>(live, host, 'createUser', {
+      displayName: 'Ana Example',
+      role: 'owner',
+      contactEmail: 'ana@example.test'
+    })
+    expect(ana.user.status).toBe('pending')
+    expect(await call(live, host, 'createUser', { displayName: '', role: 'owner' })).toEqual({ ok: false, reason: 'invalid' })
+
+    // The queue is filled by the sign-in flow (#178), not by any API call.
+    const missing = '00000000-0000-4000-8000-000000000001'
+    expect(await call(live, host, 'listSignInRequests')).toEqual([])
+    expect(await call(live, host, 'approveSignInRequest', missing, { userId: ana.user.id })).toEqual({ ok: false, reason: 'request-not-found' })
+    expect(await call(live, host, 'dismissSignInRequest', missing)).toEqual({ dismissed: false })
+
+    expect(await call(live, host, 'setUserRole', ana.user.id, 'researcher', ana.user.version + 5)).toEqual({ ok: false, reason: 'stale' })
+    const disabled = await call<{ ok: true; user: { status: string; authVersion: number } }>(live, host, 'setUserStatus', ana.user.id, 'disabled', ana.user.version)
+    expect(disabled.user).toMatchObject({ status: 'disabled', authVersion: 2 })
+    const list = await call<{ id: string }[]>(live, host, 'listUsers')
+    expect(list.map((u) => u.id)).toEqual([ana.user.id])
+    expect(JSON.stringify(list)).not.toContain('subject')
+  })
+
+  it('rejects malformed user calls', async () => {
+    const live = await start()
+    const host = await signIn(live)
+    for (const [name, args] of [
+      ['createUser', [{ displayName: 'Ana Example', role: 'admin' }]],
+      ['setUserRole', ['not-a-uuid', 'owner', 1]],
+      ['setUserStatus', ['a'.repeat(8) + '-aaaa-aaaa-aaaa-' + 'a'.repeat(12), 'pending', 1]]
+    ] as const) {
+      const reply = await send(live, 'POST', `/api/v1/call/${name}`, writeHeaders(live, host), JSON.stringify({ args }))
+      expect(reply.status, name).toBe(400)
+    }
+  })
+})
+
 describe('request protection', () => {
   it('answers only to 127.0.0.1, never to localhost (the demo mirror’s site, #114)', async () => {
     const live = await start()

@@ -13,6 +13,7 @@ import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, ty
 import { getSchemaVersion, migrate, migrations } from './migrations'
 import { NoteRepository } from './note-repository'
 import { NotebookRepository } from './notebook-repository'
+import { UserRepository } from './user-repository'
 
 // Owns the live database connection and its repositories, and makes and
 // restores backups (#11). A backup is one self-contained SQLite file. Restore
@@ -68,7 +69,7 @@ function readsAsSqlite(file: string): boolean {
   return header.toString('latin1') === SQLITE_HEADER
 }
 
-type CountedTable = 'clients' | 'client_notes' | 'research_cases' | 'notebook_pages'
+type CountedTable = 'clients' | 'client_notes' | 'research_cases' | 'notebook_pages' | 'app_users'
 
 function hasTable(db: DatabaseSync, table: CountedTable): boolean {
   return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !== undefined
@@ -86,7 +87,7 @@ export function inspectBackup(file: string): BackupSummary {
 }
 
 /** inspectBackup plus the case and notebook page counts, which restore verifies but the public summary doesn't carry. */
-function inspectBackupContents(file: string): BackupSummary & { cases: number; notebookPages: number } {
+function inspectBackupContents(file: string): BackupSummary & { cases: number; notebookPages: number; users: number } {
   if (!existsSync(file) || !readsAsSqlite(file)) throw new BackupInvalidError('not-a-backup')
 
   let db: DatabaseSync
@@ -116,6 +117,7 @@ function inspectBackupContents(file: string): BackupSummary & { cases: number; n
       notes: count(db, 'client_notes'),
       cases: count(db, 'research_cases'),
       notebookPages: count(db, 'notebook_pages'),
+      users: count(db, 'app_users'),
       schemaVersion
     }
   } finally {
@@ -139,6 +141,7 @@ export class AppData {
   time: CaseTimeRepository
   notebook: NotebookRepository
   studio: StudioSummaryRepository
+  users: UserRepository
 
   constructor(
     private readonly userDataDir: string,
@@ -154,6 +157,7 @@ export class AppData {
     this.time = new CaseTimeRepository(this.opened.db)
     this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
+    this.users = new UserRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
   }
 
   get file(): string {
@@ -236,6 +240,9 @@ export class AppData {
       if (count(this.opened.db, 'notebook_pages') !== expected.notebookPages) {
         throw new Error('restored notebook page count differs from the backup')
       }
+      if (count(this.opened.db, 'app_users') !== expected.users) {
+        throw new Error('restored user count differs from the backup')
+      }
       options.verify?.(this)
     } catch (error) {
       try {
@@ -268,5 +275,6 @@ export class AppData {
     this.time = new CaseTimeRepository(this.opened.db)
     this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
+    this.users = new UserRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
   }
 }
