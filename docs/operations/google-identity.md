@@ -2,7 +2,7 @@
 
 Phase 2.7 ([#176](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/176)) lets an approved person sign in to the private HTTPS Live app at `https://tg.krunchymonkey.dev` with Google. This page is the configuration runbook and decision record for [#177](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/177). The code lands in #178 (verification), #179 (approved users), #180 (sessions) and #181 (UI).
 
-**Status (2026-11-05):** design and documentation are in place. The Google Cloud project, OAuth client, domain verification, branding and the working sign-in test have **not** been done. Those are owner steps (see the checklist below). Nothing on this page has been run against real Google yet, so nothing here claims that it works.
+**Status (2026-11-05):** engineering is merged: verification (#178), users (#179), sessions and authorization (#180) and screens (#181), all tested with a fake provider. The validation record and operator runbook are in [phase-2.7-identity-validation.md](../pilot/phase-2.7-identity-validation.md) (#182). The Google Cloud project, OAuth client, domain verification, branding and the working sign-in test have **not** been done. Those are owner steps (see the checklist below). Nothing has been run against real Google yet, so nothing here claims that it works.
 
 ## What Google is used for, and what it is not
 
@@ -139,7 +139,7 @@ Routes, sessions, the account gate and the fake-provider gate landed in #180 (ne
 
 **Turning it on.** `--google-client <path to the Google client JSON>` together with `--https-host <name>` (and the existing fictional-profile gate; #168/#169 are untouched). Without `--https-host` the flag is refused and nothing starts; an unreadable or mismatching client file prints a fixed message (never file content) and nothing starts. With it, the HTTPS proxy listener signs people in with Google and uses app sessions; **device pairing and `tg_lan_*` cookies do not exist on it** (`/api/v1/lan/enroll` is 404, a device cookie is ignored). Without `--google-client`, `--https-host` keeps fictional pairing, and `--lan-host` (plain HTTP) is pairing only, never Google. The loopback launch-link session is unchanged and is the operator/recovery path. **Rollback:** restart without `--google-client`.
 
-**Test hook.** Only with both `TG_TEST_HOOKS=1` and `TG_TEST_FAKE_IDENTITY=1` does the CLI use a fake provider (sign in with `code=alex` or `code=bea`); it prints a loud warning. Never set them outside automated tests.
+**Test hook.** Only with both `TG_TEST_HOOKS=1` and `TG_TEST_FAKE_IDENTITY=1` does the CLI use a fake provider (sign in with `code=alex`, `code=bea` or the unapproved `code=cara`); it prints a loud warning. Never set them outside automated tests.
 
 **Routes (proxy listener, Google mode).** All keep the exact Host check; `Forwarded`/`X-Forwarded-*` are never read.
 
@@ -178,7 +178,7 @@ Unknown call names are 404 for users. Backups, restore, device administration an
 
 ## Sign-in, Account and Users screens (#181)
 
-**Sign-in page** (HTTPS Google mode only; Demo never shows it and has no link into it). A light "Sign in with Google" button with the standard multicolour "G" is a plain `<form method="post" action="/api/v1/auth/google/start">`: no Google script, no token in the browser. The host's `?signin=<reason>` redirect is read once and removed from the address bar. Messages: not approved ("the owner can approve it from Users"; nothing says the owner was notified, because nothing is sent), turned off, Google unavailable, timed out, cancelled, too many attempts, failed, and "Your session ended. Sign in again." when a session is lost mid-use. Offline shows "No network connection" and disables the button. No message says whether an address exists in the directory.
+**Sign-in page** (HTTPS Google mode only; Demo never shows it and has no link into it). A light "Sign in with Google" button with the standard multicolour "G" is a plain same-origin link to `/api/v1/auth/google/start` (see "Why a link and not a form" below): no Google script, no token in the browser. The host's `?signin=<reason>` redirect is read once and removed from the address bar. Messages: not approved ("the owner can approve it from Users"; nothing says the owner was notified, because nothing is sent), turned off, Google unavailable, timed out, cancelled, too many attempts, failed, and "Your session ended. Sign in again." when a session is lost mid-use. Offline shows "No network connection" and disables the button. No message says whether an address exists in the directory.
 
 **Account** (Settings, every signed-in person): name, email, role badge, "Sign out", and "Sign out on all devices" (asks first, then returns to sign-in). The banner shows "Signed in as <name> (<role>)". The old HTTP device-pairing pilot keeps its own labels.
 

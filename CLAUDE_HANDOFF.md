@@ -1,4 +1,4 @@
-# Claude handoff — Web-first (updated 2026-10-31 for Phase 2.9 + Claude-ready PR delivery policy)
+# Claude handoff — Web-first (updated 2026-11-05 for Phase 2.7 identity; 2026-10-31 for Phase 2.9 + Claude-ready PR delivery policy)
 
 > **LATEST OWNER ROADMAP / PR POLICY OVERRIDE — 2026-10-30:** Phase 3 is now **Research Notebook & Freeform Canvas**, prioritized before previous Phase 3 Evidence Management (now future Phase 4). See [Phase 3 spec](docs/phase-3-research-notebook-spec.md) and [tracking issue #145](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/145); child issues #146–#157 by Release A–D, with #158 AI formalization design **DEFERRED**. Older instructions below are historical where inconsistent.
 >
@@ -41,6 +41,25 @@ GitHub is the source of status and the code is the truth; re-check both before a
     - **Playwright clash:** the web specs use 4191/4192 while the pilot runs, so set `WEB_E2E_PORT` and `WEB_E2E_CASES_PORT`.
   - **Blocked on owner decisions:** #168 (how real data may be enabled over HTTPS; Google Sign-In is not in its scope) and #169 (final validation and explicit privacy approval).
   - **Host-only, never in GitHub:** the token is the single `.txt` in a restricted folder outside the repo. Host Caddy lives in a `<tg-https>` folder in the owner's profile (copies of `deploy/caddy`, `data\` ACL-restricted). Never print or log the token.
+- **Phase 2.7 — Google Sign-In & basic user management (#176), engineering merged 2026-11-05; owner acceptance NOT RUN:**
+  - #177 → PR #196: `docs/operations/google-identity.md`. Recommended flow: **OIDC authorization code + PKCE**, server side, confidential client, scopes `openid email profile`, no refresh token. The client JSON stays host-local and is git-ignored. **Owner steps open:** Google Cloud project/client, Search Console verification of `krunchymonkey.dev`, privacy contact, and publishing the privacy page on the public site (`krunchymonkey-site`, a separate owner-reviewed change). A real sign-in test is also still needed.
+  - #178 → PR #197: `src/server/auth/`. Contains the provider-neutral `IdentityProvider` port, Google ID-token verification (JWKS cache, fails closed), the code+PKCE provider, the config reader, and a fake provider that is test-only.
+  - #179 → PR #198: migration 9 (`app_users`, `user_identities`, `sign_in_requests`, `user_events`) and `UserRepository`.
+    - Accounts bind by Google `sub` only, never by email.
+    - An unknown person only leaves a bounded request; the owner approves explicitly, and nobody becomes owner automatically.
+    - The last-owner guard and `auth_version` live here.
+  - #180 → PR #199: `--google-client <file>` (needs `--https-host`) switches the HTTPS listener from device pairing to Google sessions.
+    - Cookies: `__Host-tg_session` (Strict) and `__Host-tg_login` (Lax).
+    - Sessions are in memory, 8 h idle / 7 d absolute, and every request re-checks status, role and `auth_version` in SQLite.
+    - Policy (`auth/policy.ts`, every call pinned by a test): owner = researcher + user admin. Backups, devices and network stay host-only for every remote user.
+    - A restart, LAN off or a restore signs everyone out.
+    - The fictional-profile gate is unchanged.
+  - #181 → PR #200: sign-in screen, Account section and Users administration.
+    - Sign-in starts from a **same-origin link** (a GET checked with Fetch Metadata), because a form can't pass `form-action 'none'` or `Referrer-Policy: no-referrer`. Neither header was relaxed.
+    - Browser E2E runs over real HTTPS via `tests/web/https-front.ts` (an openssl cert generated at test time, a CONNECT/TLS front end and a fake Google page).
+  - #182: validation record, owner checklist and operator runbook in `docs/pilot/phase-2.7-identity-validation.md`.
+  - **Keep #176–#182 open** until the owner verifies real Google, iPhone Safari and the UX. **Google login never authorizes real data:** #168/#169/#139 stay separate gates. Test hooks `TG_TEST_HOOKS=1` + `TG_TEST_FAKE_IDENTITY=1` are for automated tests only.
+  - Phase 2.8 (#187): replace the `UserSessionStore` seam with a shared async store before routing a second node, and keep the per-request DB re-check.
 - **Phase 2.9 CI/CD & isolated public Demo (new, OPEN):** parent #189; #190 CI first/unblocked, #191 verified fictional static build after CI, #192 GitHub Pages after artifact isolation with public launch signoff, #193 safe private Live host pull after CI plus #183/#187 hosting dependencies, #194 linked release/rollback after both deployment paths. These tickets are groomed, **not implemented**; owner-confirmed Claude-ready issue template + mandatory verified merge-to-main applies. Preserve separate-site browser origin and all #168/#169/#180 privacy/identity gates.
 - **Next Phase 3 feature issue:** #150 (Release B, P03-05 draggable linked canvas) through the existing `CanvasSurfaceAdapter` port and `tg-canvas/1` contract.
 - **Open, not in scope:** docs PR #111.
