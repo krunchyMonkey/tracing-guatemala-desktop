@@ -62,6 +62,7 @@ export function createGoogleProvider(options: GoogleProviderOptions): IdentityPr
 
   const recent = (list: number[], window: number) => list.filter((t) => now() - t < window)
 
+  /** A failed completion of a real pending login: counted toward the limiter. Outages are not counted. */
   function failed(reason: IdentityFailure): CompleteResult {
     failures.push(now())
     return { ok: false, reason }
@@ -106,7 +107,9 @@ export function createGoogleProvider(options: GoogleProviderOptions): IdentityPr
 
       const login = loginId ? pending.get(loginId) : undefined
       if (loginId) pending.delete(loginId) // single use
-      if (!login || login.expiresAt <= now()) return failed('expired-login')
+      // Not counted: a callback without a live login costs nothing, and counting it would let
+      // anyone on the network lock everyone out with bogus requests.
+      if (!login || login.expiresAt <= now()) return { ok: false, reason: 'expired-login' }
 
       if (params.has('error')) return failed('denied-by-user')
       const state = params.get('state')
@@ -129,12 +132,12 @@ export function createGoogleProvider(options: GoogleProviderOptions): IdentityPr
           }).toString(),
           signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS)
         })
-        if (res.status >= 500) return failed('provider-unavailable')
+        if (res.status >= 500) return { ok: false, reason: 'provider-unavailable' }
         if (!res.ok) return failed('invalid-token')
         const body = (await res.json()) as { id_token?: unknown }
         idToken = body.id_token // access_token is deliberately never read
       } catch {
-        return failed('provider-unavailable')
+        return { ok: false, reason: 'provider-unavailable' }
       }
       if (typeof idToken !== 'string') return failed('invalid-token')
 
@@ -142,7 +145,7 @@ export function createGoogleProvider(options: GoogleProviderOptions): IdentityPr
       try {
         jwks = await keys.getKeys(readKid(idToken))
       } catch {
-        return failed('provider-unavailable')
+        return { ok: false, reason: 'provider-unavailable' }
       }
       const result = verifyGoogleIdToken(idToken, {
         clientId: options.clientId,

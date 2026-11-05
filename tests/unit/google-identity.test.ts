@@ -408,16 +408,26 @@ describe('google provider: complete', () => {
     })
   })
 
-  it('limits failed completions', async () => {
+  it('limits failed completions of real logins', async () => {
     const { provider } = setup()
     for (let i = 0; i < MAX_FAILURES; i++) {
-      expect(await provider.completeSignIn('nope', cb('x'))).toEqual({ ok: false, reason: 'expired-login' })
+      const login = provider.beginSignIn()
+      expect(await provider.completeSignIn(login.loginId, cb('wrong-state'))).toEqual({ ok: false, reason: 'state-mismatch' })
     }
     const a = provider.beginSignIn()
     expect(await provider.completeSignIn(a.loginId, cb(stateOf(a.redirectUrl)))).toEqual({
       ok: false,
       reason: 'too-many-attempts'
     })
+  })
+
+  it('does not let bogus callbacks without a live login lock everyone out', async () => {
+    const { provider } = setup()
+    for (let i = 0; i < MAX_FAILURES * 3; i++) {
+      expect(await provider.completeSignIn('nope', cb('x'))).toEqual({ ok: false, reason: 'expired-login' })
+    }
+    const a = provider.beginSignIn()
+    expect(await provider.completeSignIn(a.loginId, cb(stateOf(a.redirectUrl)))).toMatchObject({ ok: true })
   })
 })
 
