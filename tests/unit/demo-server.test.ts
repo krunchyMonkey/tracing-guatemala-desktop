@@ -32,10 +32,10 @@ describe('chooseLanHost', () => {
   })
 
   it('skips virtual machine and WSL adapters when exactly one real adapter is left', () => {
-    const hyperV = { address: '172.31.128.1', name: 'vEthernet (Default Switch)' }
-    const wsl = { address: '192.168.80.1', name: 'vEthernet (WSL (Hyper-V firewall))' }
-    const choice = chooseLanHost(undefined, [{ address: '192.168.68.64', name: 'Ethernet' }, hyperV, wsl, loopback])
-    expect(choice).toEqual({ ok: true, host: '192.168.68.64', note: expect.stringMatching(/skipped virtual adapters 172\.31\.128\.1/) })
+    const hyperV = { address: '172.29.112.1', name: 'vEthernet (Default Switch)' }
+    const wsl = { address: '192.168.96.1', name: 'vEthernet (WSL (Hyper-V firewall))' }
+    const choice = chooseLanHost(undefined, [{ address: '192.168.50.20', name: 'Ethernet' }, hyperV, wsl, loopback])
+    expect(choice).toEqual({ ok: true, host: '192.168.50.20', note: expect.stringMatching(/skipped virtual adapters 172\.29\.112\.1/) })
     expect(chooseLanHost(undefined, [hyperV, wsl])).toEqual({ ok: false, error: expect.stringMatching(/^Several/) })
   })
 
