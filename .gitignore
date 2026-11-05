@@ -36,3 +36,5 @@ google-client*.json
 *.sqlite3-wal
 *.bak
 *.backup
+# App backup files (contain the whole database, including users)
+*.tgbackup
