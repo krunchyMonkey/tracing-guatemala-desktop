@@ -96,12 +96,18 @@ export function GoogleSignIn({ reason = null, sessionEnded = false }: { reason?:
             {message.text}
           </Alert>
         )}
-        <form method="post" action="/api/v1/auth/google/start">
-          <button type="submit" className="google-signin-button" disabled={!online}>
+        {/* A same-origin link, not a form: the page CSP keeps form-action 'none' (#181). */}
+        {online ? (
+          <a className="google-signin-button" href="/api/v1/auth/google/start">
+            <GoogleMark />
+            <span>Sign in with Google</span>
+          </a>
+        ) : (
+          <button type="button" className="google-signin-button" disabled>
             <GoogleMark />
             <span>Sign in with Google</span>
           </button>
-        </form>
+        )}
         <p className="muted">Your Google password is never shared with Tracing Guatemala. Only your name and email address are used.</p>
       </section>
     </main>

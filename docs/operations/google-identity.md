@@ -146,7 +146,7 @@ Routes, sessions, the account gate and the fake-provider gate landed in #180 (ne
 | Route | Rule |
 |---|---|
 | `GET /api/v1/session` | `{ authenticated, csrfToken, remote: true, auth: 'google', user }` |
-| `POST /api/v1/auth/google/start` | top-level form POST; `Origin` must equal `https://<name>`, `Sec-Fetch-Site` absent or `same-origin`, body at most 1 KiB; 303 to Google with the login cookie |
+| `GET /api/v1/auth/google/start` | top-level navigation from the sign-in **link** (#181): `Sec-Fetch-Site` must be `same-origin` (or `none`, a typed address), `Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document` when sent, and any `Origin` must equal `https://<name>`; a browser that sends no Fetch Metadata can't start a sign-in. 303 to Google with the login cookie. POST is 405 |
 | `GET /api/v1/auth/google/callback` | GET only; `Sec-Fetch-Mode` (if sent) `navigate`, `Sec-Fetch-Dest` (if sent) `document`; query at most 4 KiB; verified via the login cookie, state, nonce and PKCE (#178); 303 to `/` or `/?signin=<reason>` |
 | `POST /api/v1/auth/logout` | exact Origin and CSRF; deletes the session |
 | `POST /api/v1/call/:name` | exact Origin, `Sec-Fetch-Site` same-origin or absent, session, CSRF, then the policy below |
@@ -194,9 +194,7 @@ Unknown call names are 404 for users. Backups, restore, device administration an
 
 **Browser E2E harness.** `tests/web/live-google.spec.ts` starts the built host with `--https-host tg.example.test --google-client <unused path> --init-lan-test-profile` and `TG_TEST_HOOKS=1 TG_TEST_FAKE_IDENTITY=1` (fake provider with fictional Alex, Bea, Cara; it verifies nothing). `tests/web/https-front.ts` generates a throwaway self-signed certificate with `openssl` at test time (deleted afterwards, never committed; the spec skips without `openssl`) and runs an HTTP CONNECT proxy that terminates TLS for `tg.example.test` (forwarded to the HTTPS listener, Host and Origin intact) and `fake-google.test` (a consent page with "Continue as alex/bea/cara" and "Cancel"). Playwright uses that proxy with `ignoreHTTPSErrors`, so the `__Host-` Secure cookie and exact-Origin checks run for real.
 
-**Open finding from the E2E (sign-in form in a real browser).** Two #180 server settings stop the sign-in button from working in Chromium, and need an owner decision before the spec is enabled (it is marked `fixme` until then):
-1. `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on a same-origin form POST, so `/api/v1/auth/google/start` answers `not-same-origin`. `same-origin` keeps cross-origin referrers off and sends the real Origin.
-2. The page CSP has `form-action 'none'`, which blocks the form and the redirect to Google. It needs `form-action 'self' https://accounts.google.com` for the sign-in page (the redirect after a form POST is checked against this directive too).
+**Why a link and not a form (decided in #181).** The E2E found that a form POST can't work with the host's existing headers: the page CSP has `form-action 'none'` (which also covers the redirect to Google), and `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on form posts. Rather than relax either, the sign-in button is a same-origin link and the start route is a Fetch-Metadata-checked GET. Neither header changes. Starting a sign-in from another site, the public apex or `www`, `fetch()` or an iframe is refused. Forging a start gives an attacker nothing anyway, because the login is bound to the `__Host-tg_login` cookie, its `state` and its nonce.
 
 ## Owner checklist (#177)
 

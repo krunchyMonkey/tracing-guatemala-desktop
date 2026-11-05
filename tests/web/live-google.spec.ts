@@ -42,13 +42,6 @@ async function freePort(): Promise<number> {
   throw new Error('no free port triple')
 }
 
-// BLOCKED (see "Open finding from the E2E" in docs/operations/google-identity.md): in a real
-// browser the sign-in form is refused by `form-action 'none'` in the page CSP and, once that is
-// allowed, by `Origin: null` caused by `Referrer-Policy: no-referrer`. With the two server
-// settings fixed (or, as a diagnostic only, bypassCSP plus rewriting `Origin: null` in the
-// test front) all ten tests pass. Remove this line when the server settings are changed.
-test.fixme(true, 'blocked: sign-in form needs the form-action CSP and Referrer-Policy decisions in docs/operations/google-identity.md')
-
 test.describe.serial('Google sign-in over HTTPS', () => {
   let browser: Browser
   let front: HttpsFront
@@ -70,7 +63,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
   /** From the sign-in page through the fake Google page, back to the app. */
   async function chooseOnGoogle(page: Page, choice: string) {
     await page.goto(`${APP_ORIGIN}/`)
-    await page.getByRole('button', { name: 'Sign in with Google' }).click()
+    await page.getByRole('link', { name: 'Sign in with Google' }).click()
     await expect(page.getByRole('heading', { name: 'Fake Google sign-in' })).toBeVisible()
     await page.getByRole('link', { name: choice }).click()
     await page.waitForURL(`${APP_ORIGIN}/**`)
@@ -159,7 +152,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     const page = pages['stranger']!
     await page.goto(`${APP_ORIGIN}/`)
     await expect(page.getByRole('heading', { name: 'Tracing Guatemala' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled()
+    await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0)
     await expect(page.getByText(/pairing code/i)).toHaveCount(0)
     const response = await page.request.post(`${APP_ORIGIN}/api/v1/call/listClients`, { data: { args: [] } })
@@ -212,10 +205,10 @@ test.describe.serial('Google sign-in over HTTPS', () => {
   test('declined Google sign-in says so and changes nothing', async () => {
     const page = await person('declined')
     await page.goto(`${APP_ORIGIN}/`)
-    await page.getByRole('button', { name: 'Sign in with Google' }).click()
+    await page.getByRole('link', { name: 'Sign in with Google' }).click()
     await page.getByRole('link', { name: 'Cancel' }).click()
     await expect(page.getByText('Sign-in was cancelled.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeEnabled()
+    await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     expect(page.url()).toBe(`${APP_ORIGIN}/`)
   })
 
@@ -259,7 +252,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     // Bea's page is still open; her next request is refused and she lands on sign-in.
     await bea.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Cases' }).click()
     await expect(bea.getByText('Your session ended. Sign in again.')).toBeVisible()
-    await expect(bea.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+    await expect(bea.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     await bea.screenshot({ path: join(shots, 'session-ended.png') })
 
     // Signing in again says the account is turned off, and nothing about anyone else.
@@ -285,9 +278,9 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     await page.goto(`${APP_ORIGIN}/#/clients`)
     await openSettings(page)
     await page.getByRole('button', { name: 'Sign out', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     await page.goBack()
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0)
     const response = await page.request.post(`${APP_ORIGIN}/api/v1/call/listClients`, { data: { args: [] } })
     expect([401, 403]).toContain(response.status())
@@ -301,7 +294,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     await openSettings(first)
     await first.getByRole('button', { name: 'Sign out on all devices' }).click()
     await first.getByRole('alertdialog').getByRole('button', { name: 'Sign out everywhere' }).click()
-    await expect(first.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+    await expect(first.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     await second.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Cases' }).click()
     await expect(second.getByText('Your session ended. Sign in again.')).toBeVisible()
   })
@@ -310,7 +303,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     const phone = { width: 390, height: 844 }
     const page = await person('phone', phone)
     await page.goto(`${APP_ORIGIN}/`)
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible()
     expect(await overflow(page)).toBeLessThanOrEqual(0)
     await page.screenshot({ path: join(shots, 'mobile-sign-in.png') })
 

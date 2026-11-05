@@ -3150,6 +3150,7 @@ img.ProseMirror-separator {
   color: #1f1f1f;
   font: inherit;
   font-weight: 500;
+  text-decoration: none;
   cursor: pointer;
 }
 

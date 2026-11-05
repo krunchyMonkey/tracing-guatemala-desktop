@@ -93,13 +93,13 @@ function openSettings(runtime: AppRuntime) {
 }
 
 describe('sign-in screen', () => {
-  it('is a plain form POST with the branded button and no script', () => {
+  it('is a plain same-origin link with the branded button and no form or script', () => {
     const { container } = render(<GoogleSignIn />)
-    const form = container.querySelector('form')!
-    expect(form.getAttribute('method')).toBe('post')
-    expect(form.getAttribute('action')).toBe('/api/v1/auth/google/start')
-    const button = screen.getByRole('button', { name: 'Sign in with Google' })
-    expect(button.querySelector('svg')).not.toBeNull()
+    // A link, not a form: the page CSP keeps form-action 'none'.
+    expect(container.querySelector('form')).toBeNull()
+    const link = screen.getByRole('link', { name: 'Sign in with Google' })
+    expect(link.getAttribute('href')).toBe('/api/v1/auth/google/start')
+    expect(link.querySelector('svg')).not.toBeNull()
     expect(container.querySelector('script')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -143,7 +143,7 @@ describe('sign-in screen', () => {
       window.dispatchEvent(new Event('online'))
     })
     expect(screen.queryByText('No network connection')).toBeNull()
-    expect((screen.getByRole('button', { name: 'Sign in with Google' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('link', { name: 'Sign in with Google' })).toBeTruthy()
   })
 })
 
@@ -346,6 +346,7 @@ describe('where the Users section appears', () => {
     const { container } = openSettings({ mode: 'demo', data: fake.api, backup: null, cases: null, switcher })
     await screen.findByTestId('app-version')
     expect(screen.queryByRole('button', { name: /Sign in with Google/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Sign in with Google/ })).toBeNull()
     expect(screen.queryByRole('heading', { name: /Users|Your account/ })).toBeNull()
     expect(container.innerHTML).not.toMatch(/auth\/google/)
   })
