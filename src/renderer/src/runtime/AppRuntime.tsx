@@ -101,7 +101,19 @@ export interface LanAdminApi {
   disableLan(): Promise<{ disabled: boolean }>
 }
 
-/** Host-only user directory administration (#179). No screen uses it yet; the demo has no users. */
+/** The signed-in person's own account (#180, #181): Google sessions only. */
+export interface AccountApi {
+  getMyAccount(): Promise<AppUser | null>
+  revokeMySessions(): Promise<{ ok: boolean }>
+}
+
+/** The signed-in person on an HTTPS Google session, shown in the banner (#181). */
+export interface SignedInPerson {
+  name: string
+  role: UserRole
+}
+
+/** User directory administration (#179, #181): the host session and remote owners. The demo has no users. */
 export interface UserAdminApi {
   listUsers(): Promise<AppUser[]>
   listSignInRequests(): Promise<SignInRequest[]>
@@ -127,8 +139,12 @@ export type AppRuntime =
       remote?: boolean
       /** Host (loopback) only. */
       lan?: LanAdminApi
-      /** Host (loopback) only. */
+      /** Host (loopback) and remote owners only. */
       users?: UserAdminApi
+      /** Google sessions only: the signed-in person's own account. */
+      account?: AccountApi
+      /** Google sessions only. */
+      person?: SignedInPerson
       /** Remote only: ends this device's session on the host. */
       signOut?: () => Promise<void>
     }

@@ -127,7 +127,8 @@ function viaProxy(live: RunningLiveServer, method: string, path: string, headers
   })
 }
 
-const form = { 'Content-Type': 'application/x-www-form-urlencoded' }
+/** What a browser sends when the person follows the sign-in link on our own page. */
+const startNav = { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document' }
 const json = (headers: Record<string, string> = {}) => ({ 'Content-Type': 'application/json', ...headers })
 const setCookies = (reply: Reply): string[] => (reply.headers['set-cookie'] as string[] | undefined) ?? []
 /** `name=value` of a non-empty Set-Cookie for `name`, or null. */
@@ -140,7 +141,7 @@ const LOGIN = '__Host-tg_login'
 const navigate = { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document' }
 
 async function beginLogin(live: RunningLiveServer): Promise<Reply> {
-  const reply = await viaProxy(live, 'POST', '/api/v1/auth/google/start', { Origin: ORIGIN, ...form, 'Sec-Fetch-Site': 'same-origin' }, '')
+  const reply = await viaProxy(live, 'GET', '/api/v1/auth/google/start', startNav)
   expect(reply.status, reply.text).toBe(303)
   return reply
 }
@@ -340,25 +341,24 @@ describe('start of sign-in', () => {
   })
 
   it.each([
-    ['the public apex', { Origin: 'https://krunchymonkey.dev' }],
-    ['the www host', { Origin: 'https://www.krunchymonkey.dev' }],
-    ['plain http', { Origin: `http://${NAME}` }],
-    ['no Origin', {}],
-    ['same-site fetch metadata', { Origin: ORIGIN, 'Sec-Fetch-Site': 'same-site' }],
-    ['cross-site fetch metadata', { Origin: ORIGIN, 'Sec-Fetch-Site': 'cross-site' }]
+    ['a link on another site', { ...startNav, 'Sec-Fetch-Site': 'cross-site' }],
+    ['a link on the public apex or www (same site)', { ...startNav, 'Sec-Fetch-Site': 'same-site' }],
+    ['a browser that sends no Fetch Metadata', {}],
+    ['fetch() from our own page', { ...startNav, 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty' }],
+    ['an iframe', { ...startNav, 'Sec-Fetch-Dest': 'iframe' }],
+    ['a foreign Origin header', { ...startNav, Origin: 'https://krunchymonkey.dev' }]
   ])('refuses a start from %s', async (_label, headers) => {
     const live = await start()
-    const reply = await viaProxy(live, 'POST', '/api/v1/auth/google/start', { ...form, ...headers }, '')
+    const reply = await viaProxy(live, 'GET', '/api/v1/auth/google/start', headers)
     expect(reply.status).toBe(403)
     expect(setCookies(reply)).toEqual([])
     expect(reply.headers['location']).toBeUndefined()
   })
 
-  it('refuses a JSON body and a large body', async () => {
+  it('accepts an address the person typed (Sec-Fetch-Site: none) and refuses POST', async () => {
     const live = await start()
-    expect((await viaProxy(live, 'POST', '/api/v1/auth/google/start', json({ Origin: ORIGIN }), '{}')).status).toBe(415)
-    expect((await viaProxy(live, 'POST', '/api/v1/auth/google/start', { Origin: ORIGIN, ...form }, 'x'.repeat(2000))).status).toBe(413)
-    expect((await viaProxy(live, 'GET', '/api/v1/auth/google/start')).status).toBe(405)
+    expect((await viaProxy(live, 'GET', '/api/v1/auth/google/start', { ...startNav, 'Sec-Fetch-Site': 'none' })).status).toBe(303)
+    expect((await viaProxy(live, 'POST', '/api/v1/auth/google/start', { ...startNav, Origin: ORIGIN }, '')).status).toBe(405)
   })
 })
 

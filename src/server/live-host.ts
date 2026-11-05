@@ -290,31 +290,7 @@ function readJsonBody(req: IncomingMessage, maxBytes = MAX_JSON_BYTES): Promise<
   })
 }
 
-/** Reads and discards a small body, so a form POST is fully consumed. */
-function drainBody(req: IncomingMessage, maxBytes: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (Number(req.headers['content-length'] ?? 0) > maxBytes) {
-      reject(new RequestError(413, 'too-large'))
-      return
-    }
-    let size = 0
-    let failed = false
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length
-      if (!failed && size > maxBytes) {
-        failed = true
-        reject(new RequestError(413, 'too-large'))
-      }
-    })
-    req.on('end', () => {
-      if (!failed) resolve()
-    })
-    req.on('error', () => reject(new RequestError(400, 'invalid-request')))
-  })
-}
-
 const MAX_CALLBACK_QUERY = 4 * 1024
-const MAX_START_BODY = 1024
 const SIGN_IN_FAILURE_PAGE: Partial<Record<IdentityFailure, string>> = {
   'provider-unavailable': 'unavailable',
   'expired-login': 'expired',
@@ -789,12 +765,21 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
 
     if (path === `${API_PREFIX}/auth/google/start`) {
       ctx.label = path
-      if (method !== 'POST') throw new RequestError(405, 'method-not-allowed')
-      // A top-level form POST from our own sign-in page: exact Origin, never cross-site.
-      if (!isSameOriginRequest(req, policy.origin)) throw new RequestError(403, 'not-same-origin')
-      const type = mediaType(req)
-      if (type !== '' && type !== 'application/x-www-form-urlencoded') throw new RequestError(415, 'unsupported-media-type')
-      await drainBody(req, MAX_START_BODY)
+      if (method !== 'GET') throw new RequestError(405, 'method-not-allowed')
+      // A top-level navigation from a link on our own sign-in page (or typed by the person),
+      // never one another site started. A link, not a form: the page CSP keeps
+      // `form-action 'none'` and the host keeps `Referrer-Policy: no-referrer` (which makes
+      // browsers send `Origin: null` on form posts). Fetch Metadata is required: a browser
+      // that sends none can't start a sign-in. Forging a start gains nothing anyway: the
+      // login is bound to the `__Host-` login cookie, its `state` and its nonce.
+      const site = req.headers['sec-fetch-site']
+      const mode = req.headers['sec-fetch-mode']
+      const dest = req.headers['sec-fetch-dest']
+      if ((site !== 'same-origin' && site !== 'none') || mode !== 'navigate' || (dest !== undefined && dest !== 'document')) {
+        throw new RequestError(403, 'not-same-origin')
+      }
+      const claimed = req.headers.origin
+      if (claimed !== undefined && claimed.toLowerCase() !== policy.origin.toLowerCase()) throw new RequestError(403, 'not-same-origin')
       let begun: { redirectUrl: string; loginId: string }
       try {
         begun = identity.beginSignIn()

@@ -146,7 +146,7 @@ Routes, sessions, the account gate and the fake-provider gate landed in #180 (ne
 | Route | Rule |
 |---|---|
 | `GET /api/v1/session` | `{ authenticated, csrfToken, remote: true, auth: 'google', user }` |
-| `POST /api/v1/auth/google/start` | top-level form POST; `Origin` must equal `https://<name>`, `Sec-Fetch-Site` absent or `same-origin`, body at most 1 KiB; 303 to Google with the login cookie |
+| `GET /api/v1/auth/google/start` | top-level navigation from the sign-in **link** (#181): `Sec-Fetch-Site` must be `same-origin` (or `none`, a typed address), `Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document` when sent, and any `Origin` must equal `https://<name>`; a browser that sends no Fetch Metadata can't start a sign-in. 303 to Google with the login cookie. POST is 405 |
 | `GET /api/v1/auth/google/callback` | GET only; `Sec-Fetch-Mode` (if sent) `navigate`, `Sec-Fetch-Dest` (if sent) `document`; query at most 4 KiB; verified via the login cookie, state, nonce and PKCE (#178); 303 to `/` or `/?signin=<reason>` |
 | `POST /api/v1/auth/logout` | exact Origin and CSRF; deletes the session |
 | `POST /api/v1/call/:name` | exact Origin, `Sec-Fetch-Site` same-origin or absent, session, CSRF, then the policy below |
@@ -175,6 +175,26 @@ Unknown call names are 404 for users. Backups, restore, device administration an
 **Same-site defences.** The public apex and `www` (`krunchymonkey.dev`) are the same site as `tg` but a different origin: their `Origin` fails the exact check, `Sec-Fetch-Site: same-site` is refused, the `__Host-` prefix stops a sibling from planting or shadowing a cookie, and the session cookie is `SameSite=Strict`. Nothing on the public site may run scripts that talk to `tg`.
 
 **Phase 2.8 seam (#187).** Sessions sit behind `UserSessionStore` (`src/server/auth/user-sessions.ts`), injectable into `createLiveHost`/`startLiveServer`. It is synchronous because the only implementation is in memory; a store shared by several backend nodes will need an async variant of the same interface. The per-request database check above is what makes role revocation correct across nodes, so keep it when the store changes. Do not route a second node until a shared store exists and revocation across nodes has been tested.
+
+## Sign-in, Account and Users screens (#181)
+
+**Sign-in page** (HTTPS Google mode only; Demo never shows it and has no link into it). A light "Sign in with Google" button with the standard multicolour "G" is a plain `<form method="post" action="/api/v1/auth/google/start">`: no Google script, no token in the browser. The host's `?signin=<reason>` redirect is read once and removed from the address bar. Messages: not approved ("the owner can approve it from Users"; nothing says the owner was notified, because nothing is sent), turned off, Google unavailable, timed out, cancelled, too many attempts, failed, and "Your session ended. Sign in again." when a session is lost mid-use. Offline shows "No network connection" and disables the button. No message says whether an address exists in the directory.
+
+**Account** (Settings, every signed-in person): name, email, role badge, "Sign out", and "Sign out on all devices" (asks first, then returns to sign-in). The banner shows "Signed in as <name> (<role>)". The old HTTP device-pairing pilot keeps its own labels.
+
+**Users** (Settings, host session and remote owners; never researchers or paired devices; the host shows it only while the HTTPS listener is on). People list (name, email, role, status, last sign-in), sign-in requests (approve as new user, link to an existing pending person, dismiss), add a pending person, change role, turn off / back on, sign out everywhere. Role changes, turning someone off and sign-out-everywhere ask first. The last active owner can't be removed. Hiding the section is cosmetic: the host enforces every call (see the table above).
+
+**Bootstrap (first owner).**
+1. The future owner opens the HTTPS address and tries Sign in with Google: "not approved yet". This leaves a sign-in request.
+2. On the host computer, open the private launch link, then Settings, Users.
+3. Under Sign-in requests, "Approve as new user" on your own request, set Role to Owner, Approve.
+4. Sign in again on the HTTPS address. Add researchers the same way (they try to sign in, you approve them as Researcher), or use "Add person" first and "Link to existing person" when their request arrives.
+
+**Recovery.** The loopback host session always reaches Users, so a lost owner account, a demoted owner or a disabled owner is repaired there (make or re-enable an owner, or approve a new request as Owner) without any Google access.
+
+**Browser E2E harness.** `tests/web/live-google.spec.ts` starts the built host with `--https-host tg.example.test --google-client <unused path> --init-lan-test-profile` and `TG_TEST_HOOKS=1 TG_TEST_FAKE_IDENTITY=1` (fake provider with fictional Alex, Bea, Cara; it verifies nothing). `tests/web/https-front.ts` generates a throwaway self-signed certificate with `openssl` at test time (deleted afterwards, never committed; the spec skips without `openssl`) and runs an HTTP CONNECT proxy that terminates TLS for `tg.example.test` (forwarded to the HTTPS listener, Host and Origin intact) and `fake-google.test` (a consent page with "Continue as alex/bea/cara" and "Cancel"). Playwright uses that proxy with `ignoreHTTPSErrors`, so the `__Host-` Secure cookie and exact-Origin checks run for real.
+
+**Why a link and not a form (decided in #181).** The E2E found that a form POST can't work with the host's existing headers: the page CSP has `form-action 'none'` (which also covers the redirect to Google), and `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on form posts. Rather than relax either, the sign-in button is a same-origin link and the start route is a Fetch-Metadata-checked GET. Neither header changes. Starting a sign-in from another site, the public apex or `www`, `fetch()` or an iframe is refused. Forging a start gives an attacker nothing anyway, because the login is bound to the `__Host-tg_login` cookie, its `state` and its nonce.
 
 ## Owner checklist (#177)
 
