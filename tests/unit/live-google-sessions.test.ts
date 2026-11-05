@@ -249,6 +249,23 @@ describe('authorization policy table', () => {
     for (const name of [...NEVER, ...ADMIN, ...SELF]) expect(CALL_NAMES).toContain(name)
   })
 
+  // The policy allows remote users every call it doesn't list as special, so a new call must be
+  // classified on purpose: adding one fails here until it is placed in this list or a policy set.
+  it('classifies every call name explicitly (a new call fails until it is reviewed)', () => {
+    const SHARED_WORKSPACE = [
+      'getAppInfo', 'listClients', 'getClient', 'createClient', 'updateClient', 'archiveClient', 'restoreClient', 'findDuplicateClients',
+      'listNotes', 'createNote', 'updateNote', 'listCases', 'getCase', 'listCaseEvents', 'createCase', 'updateCase', 'setCaseState',
+      'archiveCase', 'unarchiveCase', 'getCaseBrief', 'saveCaseBrief', 'listJournalEntries', 'createJournalEntry', 'updateJournalEntry',
+      'getNotebook', 'createNotebookSection', 'renameNotebookSection', 'moveNotebookSection', 'archiveNotebookSection',
+      'unarchiveNotebookSection', 'createNotebookPage', 'getNotebookPage', 'renameNotebookPage', 'moveNotebookPage',
+      'archiveNotebookPage', 'unarchiveNotebookPage', 'saveNotebookPage', 'listPageRevisions', 'getPageRevision', 'restorePageRevision',
+      'listCaseTasks', 'createCaseTask', 'updateCaseTask', 'completeCaseTask', 'reopenCaseTask', 'listTimeEntries', 'createTimeEntry',
+      'updateTimeEntry', 'deleteTimeEntry', 'getActiveTimer', 'startTimer', 'pauseTimer', 'resumeTimer', 'heartbeatTimer',
+      'stopAndSaveTimer', 'discardTimer', 'getStudioSummary'
+    ]
+    expect([...CALL_NAMES].sort()).toEqual([...SHARED_WORKSPACE, ...NEVER, ...ADMIN, ...SELF].sort())
+  })
+
   it.each(principals)('%s: every call name', (_label, principal) => {
     for (const name of CALL_NAMES) {
       const decision = authorizeCall(name, principal)
