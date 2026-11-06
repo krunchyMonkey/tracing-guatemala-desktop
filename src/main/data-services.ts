@@ -11,7 +11,7 @@ export function createDataServices(current: () => AppData): { clients: ClientSer
     clients: {
       list: (query) => current().clients.list(query),
       get: (id) => current().clients.get(id),
-      create: (input) => current().clients.create(input),
+      create: (input, ownership) => current().clients.create(input, ownership),
       update: (id, input) => current().clients.update(id, input),
       archive: (id) => current().clients.archive(id),
       restore: (id) => current().clients.restore(id),

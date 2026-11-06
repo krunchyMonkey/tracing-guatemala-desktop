@@ -459,6 +459,159 @@ export const migrations: readonly Migration[] = [
         SELECT RAISE(ABORT, 'user events are append-only');
       END;
     `
+  },
+  {
+    version: 10,
+    name: 'research_ownership',
+    // Purely additive (#209): new tables only, no ALTER, UPDATE or DELETE of any existing row.
+    // A client with no client_ownership row is unclaimed. Cases and everything below them derive
+    // their owner through research_cases.client_id, so there is no child-level owner to disagree.
+    // This schema stores ownership and grants; it does not enforce access (#210).
+    sql: `
+      CREATE TABLE client_ownership (
+        client_id TEXT PRIMARY KEY NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        owner_user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        origin TEXT NOT NULL CHECK (origin IN ('created', 'legacy-claim')),
+        assigned_at TEXT NOT NULL,
+        assigned_by TEXT NOT NULL CHECK (length(assigned_by) BETWEEN 1 AND 36)
+      ) STRICT;
+
+      CREATE INDEX client_ownership_owner_idx ON client_ownership (owner_user_id);
+
+      CREATE TRIGGER client_ownership_owner_active BEFORE INSERT ON client_ownership
+      WHEN (SELECT status FROM app_users WHERE id = NEW.owner_user_id) IS NOT 'active'
+      BEGIN
+        SELECT RAISE(ABORT, 'a client owner must be an active user');
+      END;
+
+      CREATE TRIGGER client_ownership_no_update BEFORE UPDATE ON client_ownership
+      BEGIN
+        SELECT RAISE(ABORT, 'client ownership is never changed');
+      END;
+
+      CREATE TRIGGER client_ownership_no_delete BEFORE DELETE ON client_ownership
+      BEGIN
+        SELECT RAISE(ABORT, 'client ownership is never deleted');
+      END;
+
+      CREATE TABLE client_grants (
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        grantee_user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        permission TEXT NOT NULL CHECK (permission IN ('viewer', 'editor')),
+        granted_by TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (client_id, grantee_user_id)
+      ) STRICT;
+
+      CREATE INDEX client_grants_grantee_idx ON client_grants (grantee_user_id);
+
+      CREATE TRIGGER client_grants_valid_insert BEFORE INSERT ON client_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'a grant needs an owned client')
+          WHERE NOT EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id);
+        SELECT RAISE(ABORT, 'only the owner grants access')
+          WHERE NOT EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id AND owner_user_id = NEW.granted_by);
+        SELECT RAISE(ABORT, 'the owner needs no grant')
+          WHERE EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id AND owner_user_id = NEW.grantee_user_id);
+        SELECT RAISE(ABORT, 'a grantee must be an active user')
+          WHERE (SELECT status FROM app_users WHERE id = NEW.grantee_user_id) IS NOT 'active';
+      END;
+
+      CREATE TRIGGER client_grants_valid_update BEFORE UPDATE ON client_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'a grant needs an owned client')
+          WHERE NOT EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id);
+        SELECT RAISE(ABORT, 'only the owner grants access')
+          WHERE NOT EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id AND owner_user_id = NEW.granted_by);
+        SELECT RAISE(ABORT, 'the owner needs no grant')
+          WHERE EXISTS (SELECT 1 FROM client_ownership WHERE client_id = NEW.client_id AND owner_user_id = NEW.grantee_user_id);
+        SELECT RAISE(ABORT, 'a grantee must be an active user')
+          WHERE (SELECT status FROM app_users WHERE id = NEW.grantee_user_id) IS NOT 'active';
+      END;
+
+      CREATE TRIGGER client_grants_immutable_keys BEFORE UPDATE OF client_id, grantee_user_id, granted_by ON client_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'only the permission of a grant can change');
+      END;
+
+      CREATE TABLE case_grants (
+        case_id TEXT NOT NULL REFERENCES research_cases (id) ON DELETE RESTRICT,
+        grantee_user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        permission TEXT NOT NULL CHECK (permission IN ('viewer', 'editor')),
+        granted_by TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (case_id, grantee_user_id)
+      ) STRICT;
+
+      CREATE INDEX case_grants_grantee_idx ON case_grants (grantee_user_id);
+
+      CREATE TRIGGER case_grants_valid_insert BEFORE INSERT ON case_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'a grant needs a case of an owned client')
+          WHERE NOT EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id WHERE c.id = NEW.case_id);
+        SELECT RAISE(ABORT, 'only the owner grants access')
+          WHERE NOT EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id
+            WHERE c.id = NEW.case_id AND o.owner_user_id = NEW.granted_by);
+        SELECT RAISE(ABORT, 'the owner needs no grant')
+          WHERE EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id
+            WHERE c.id = NEW.case_id AND o.owner_user_id = NEW.grantee_user_id);
+        SELECT RAISE(ABORT, 'a grantee must be an active user')
+          WHERE (SELECT status FROM app_users WHERE id = NEW.grantee_user_id) IS NOT 'active';
+      END;
+
+      CREATE TRIGGER case_grants_valid_update BEFORE UPDATE ON case_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'a grant needs a case of an owned client')
+          WHERE NOT EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id WHERE c.id = NEW.case_id);
+        SELECT RAISE(ABORT, 'only the owner grants access')
+          WHERE NOT EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id
+            WHERE c.id = NEW.case_id AND o.owner_user_id = NEW.granted_by);
+        SELECT RAISE(ABORT, 'the owner needs no grant')
+          WHERE EXISTS (
+            SELECT 1 FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id
+            WHERE c.id = NEW.case_id AND o.owner_user_id = NEW.grantee_user_id);
+        SELECT RAISE(ABORT, 'a grantee must be an active user')
+          WHERE (SELECT status FROM app_users WHERE id = NEW.grantee_user_id) IS NOT 'active';
+      END;
+
+      CREATE TRIGGER case_grants_immutable_keys BEFORE UPDATE OF case_id, grantee_user_id, granted_by ON case_grants
+      BEGIN
+        SELECT RAISE(ABORT, 'only the permission of a grant can change');
+      END;
+
+      -- Audit of ownership and grant changes. detail carries ids, counts, hashes and sizes only:
+      -- never a path or record content.
+      CREATE TABLE ownership_events (
+        id TEXT PRIMARY KEY NOT NULL CHECK (length(id) = 36),
+        at TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('owned-on-create', 'legacy-claimed', 'grant-created', 'grant-changed', 'grant-revoked')),
+        client_id TEXT NOT NULL REFERENCES clients (id) ON DELETE RESTRICT,
+        case_id TEXT REFERENCES research_cases (id) ON DELETE RESTRICT,
+        subject_user_id TEXT NOT NULL REFERENCES app_users (id) ON DELETE RESTRICT,
+        permission TEXT CHECK (permission IS NULL OR permission IN ('viewer', 'editor')),
+        actor TEXT NOT NULL CHECK (length(actor) BETWEEN 1 AND 36),
+        detail TEXT CHECK (detail IS NULL OR (json_valid(detail) AND length(detail) <= 4000))
+      ) STRICT;
+
+      CREATE INDEX ownership_events_client_idx ON ownership_events (client_id, at);
+
+      CREATE TRIGGER ownership_events_no_update BEFORE UPDATE ON ownership_events
+      BEGIN
+        SELECT RAISE(ABORT, 'ownership events are append-only');
+      END;
+
+      CREATE TRIGGER ownership_events_no_delete BEFORE DELETE ON ownership_events
+      BEGIN
+        SELECT RAISE(ABORT, 'ownership events are append-only');
+      END;
+    `
   }
 ]
 

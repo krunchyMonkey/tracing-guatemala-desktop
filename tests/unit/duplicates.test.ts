@@ -28,7 +28,7 @@ beforeEach(() => {
   migrate(db)
   repo = new ClientRepository(db)
   const create = (input: Partial<ClientInput>) => {
-    const result = repo.create({ ...blank, ...input })
+    const result = repo.create({ ...blank, ...input }, { kind: 'unowned' })
     if (!result.ok) throw new Error('fixture invalid')
     return result.client
   }

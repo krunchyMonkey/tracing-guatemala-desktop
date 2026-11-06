@@ -87,8 +87,8 @@ describe('NoteRepository', () => {
     const clock = { now: () => new Date(NOW.getTime() + 1000 * second++), newId: () => crypto.randomUUID() }
     clients = new ClientRepository(db, clock)
     notes = new NoteRepository(db, clock)
-    const a = clients.create(clientInput)
-    const b = clients.create({ ...clientInput, displayName: 'Bea Muestra' })
+    const a = clients.create(clientInput, { kind: 'unowned' })
+    const b = clients.create({ ...clientInput, displayName: 'Bea Muestra' }, { kind: 'unowned' })
     if (!a.ok || !b.ok) throw new Error('fixture clients invalid')
     clientA = a.client.id
     clientB = b.client.id
@@ -165,7 +165,7 @@ describe('notes across restarts', () => {
 
   it('keeps entries and edits after reopening the database', () => {
     const first = openAppDatabase(userData)
-    const client = new ClientRepository(first.db).create(clientInput)
+    const client = new ClientRepository(first.db).create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('create failed')
     const repo = new NoteRepository(first.db)
     const created = repo.create(client.client.id, contactInput)

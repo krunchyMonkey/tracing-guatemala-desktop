@@ -43,7 +43,7 @@ function setup() {
       email,
       otherContact: null,
       preferredContactChannel: 'unspecified'
-    })
+    }, { kind: 'unowned' })
     if (!r.ok) throw new Error('client')
     return r.client.id
   }

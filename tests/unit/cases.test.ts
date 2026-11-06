@@ -102,7 +102,7 @@ describe('CaseRepository', () => {
   let clientB: string
 
   function newClient(name: string): string {
-    const created = clients.create({ ...clientInput, displayName: name, fiverrUsername: null, preferredContactChannel: 'unspecified' })
+    const created = clients.create({ ...clientInput, displayName: name, fiverrUsername: null, preferredContactChannel: 'unspecified' }, { kind: 'unowned' })
     if (!created.ok) throw new Error('fixture client invalid')
     return created.client.id
   }
@@ -521,7 +521,7 @@ describe('CaseRepository', () => {
 describe('persistence', () => {
   it('keeps cases, states, archive flags and events across closing and reopening', () => {
     let data = new AppData(userData)
-    const client = data.clients.create(clientInput)
+    const client = data.clients.create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const created = expectOk(data.cases.create(client.client.id, caseInput))
     expectOk(data.cases.setState(created.id, 'active'))
@@ -560,7 +560,7 @@ describe('migration 3 (research_cases)', () => {
     const clients = new ClientRepository(db)
     const notes = new NoteRepository(db)
     const ids = ['Ana Ejemplo', 'Bea Muestra', 'Carlos Ficticio'].map((displayName) => {
-      const created = clients.create({ ...clientInput, displayName, fiverrUsername: null, preferredContactChannel: 'unspecified' })
+      const created = clients.create({ ...clientInput, displayName, fiverrUsername: null, preferredContactChannel: 'unspecified' }, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       return created.client.id
     })
@@ -668,7 +668,7 @@ describe('backup and restore with cases', () => {
     const existing = data.clients.list(everyoneClients)[0]
     let clientId = existing?.id
     if (!clientId) {
-      const created = data.clients.create(clientInput)
+      const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       clientId = created.client.id
     }
@@ -706,7 +706,7 @@ describe('backup and restore with cases', () => {
     configureConnection(old)
     migrate(old, {}, migrations.slice(0, 2))
     old.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-    const oldClient = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' })
+    const oldClient = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' }, { kind: 'unowned' })
     if (!oldClient.ok) throw new Error('fixture client invalid')
     old.exec('PRAGMA journal_mode = DELETE')
     old.close()
