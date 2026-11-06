@@ -63,3 +63,9 @@ Run the workflow again with `source_sha` set to the last good commit, and `expec
 ## Turning publication off
 
 Open **Settings → Pages** and choose **Unpublish site**, or run `gh api -X DELETE repos/krunchyMonkey/tracing-guatemala-desktop/pages`. Then switch the branded page in `krunchymonkey-site` back to "Coming soon". Nothing about the private Live application changes either way.
+
+## Release record
+
+| Date | Run | Source | Digest | Approved by | Smoke |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-06 | [42199222654](https://github.com/krunchyMonkey/tracing-guatemala-desktop/actions/runs/42199222654) | `005b943035b2798bd3aa781ad7833bf10ca83e2c` | `774362dff0343b34e6295377b1aca052711a1af0fd2f14c779a0f3ce439046af` | owner (first public go-live) | workflow smoke passed; external desktop and phone check from the branded page passed |

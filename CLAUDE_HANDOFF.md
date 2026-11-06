@@ -19,11 +19,14 @@
 > **OWNER-APPROVED CLAUDE-READY ISSUES / MERGE-TO-MAIN — 2026-10-31:** For **all future implementation tickets in every phase**, use [the Claude-ready issue standard](docs/engineering/claude-ready-issue-standard.md) and [GitHub issue template](.github/ISSUE_TEMPLATE/claude-ready-implementation.md), including a **mandatory final-delivery step**: implement → test/review/security/dependency gates → open focused PR → **squash-merge promptly into `main`** → verify GitHub says merged and the implementation landed → close/confirm issue status → update handoff when status changes. Owner reaffirmed standing authorization for **routine verified PRs**, not unconditional auto-merge. If owner/researcher privacy, public-launch or real-data deployment approval is required, leave that PR unmerged and report the blocker; never bypass gates. Unrelated PR #111 remains outside this instruction.
 >
 > **Phase 2.9 NEW — 2026-10-31:** [Epic #189](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/189) and Claude-ready children [#190 CI](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/190), [#191 Demo artifact isolation](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/191), [#192 public GitHub Pages publish](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/192), [#193 private outbound-pull deploy](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/193), [#194 release/version/rollback](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/194).
-> - **2026-11-06 status:** #190, #191 and #192 are implemented.
+> - **2026-11-06 status:** #190, #191 and #192 are done (PRs #228, #230, #229, #231).
 >   - CI: `.github/workflows/ci.yml` and [docs/engineering/ci.md](docs/engineering/ci.md).
 >   - Artifact gate: `npm run demo:artifact` and [docs/demo/public-artifact.md](docs/demo/public-artifact.md).
 >   - Pages promotion workflow: `.github/workflows/demo-pages.yml` and [docs/operations/public-demo-pages.md](docs/operations/public-demo-pages.md).
->   - First public publication to `https://krunchymonkey.github.io/tracing-guatemala-desktop/` needs owner go-live approval plus the Pages and environment settings in that runbook.
+>   - **Public demo LIVE since 2026-11-06** at `https://krunchymonkey.github.io/tracing-guatemala-desktop/`. The owner approved go-live and the first deployment. Run 42199222654 published source `005b943` with digest `774362df…046af`; the smoke test passed.
+>   - Pages Source is GitHub Actions. The `github-pages` environment allows main only and requires the owner as reviewer.
+>   - The branded entry `https://krunchymonkey.dev/tracing-guatemala/demo/` links to it (krunchymonkey-site PRs #52 and #53).
+>   - Further releases: run the workflow with `source_sha` and `expected_digest`; the owner approves the deployment.
 >   - **#193/#194 are not started.** No Live deployment automation exists, and none may be added without separate approval.
 > - **Never run `npm run check` / `test:e2e` / the web-live project on the machine hosting Live:** `live-web.spec.ts` (4191) and `live-cases.spec.ts` (4192) default to Live's own ports. CI covers them on GitHub-hosted runners. Branch protection requiring CI is an owner setting that is not yet applied (see ci.md).
 >
