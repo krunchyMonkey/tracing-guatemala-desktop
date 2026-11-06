@@ -4,7 +4,7 @@
 
 | Job | Commands |
 | --- | --- |
-| `quality` | `npm ci`, `npm run lint`, `npm run typecheck`, `npx vitest run --maxWorkers=4` |
+| `quality` | `npm ci`, `npm run lint`, `npm run typecheck`, `npx vitest run --maxWorkers=2` |
 | `browser` | `npm ci`, `npm run build` (Electron renderer compile only, for the bundle-separation test), `npm run web:build` (includes `demo:build`), `npx playwright install --with-deps chromium`, `npx playwright test --project browser-demo --project web-live` |
 
 ## Safety rules

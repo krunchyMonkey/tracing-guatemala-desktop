@@ -42,8 +42,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run typecheck
-      # Full-parallel Vitest has timing-sensitive tests; four workers is the known-green setting.
-      - run: npx vitest run --maxWorkers=4
+      # Some renderer tests wait on real timers; two workers keeps a 4-vCPU runner from starving them.
+      - run: npx vitest run --maxWorkers=2
 
   browser:
     name: Demo build and browser tests
