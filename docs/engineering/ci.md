@@ -5,12 +5,12 @@
 | Job | Commands |
 | --- | --- |
 | `quality` | `npm ci`, `npm run lint`, `npm run typecheck`, `npx vitest run --maxWorkers=4` |
-| `browser` | `npm ci`, `npm run web:build` (includes `demo:build`), `npx playwright install --with-deps chromium`, `npx playwright test --project browser-demo --project web-live` with `DEMO_E2E_HOST=127.0.0.1` |
+| `browser` | `npm ci`, `npm run build` (Electron renderer compile only, for the bundle-separation test), `npm run web:build` (includes `demo:build`), `npx playwright install --with-deps chromium`, `npx playwright test --project browser-demo --project web-live` |
 
 ## Safety rules
 
 - The workflow token is `contents: read`. The workflow has no secrets and no deploy step, and it uses no self-hosted runner. Checkout does not persist credentials.
-- Every test server binds `127.0.0.1` on the runner with a temporary data folder seeded with fictional records. Nothing reaches the private Live host, its network or its data.
+- Every test server binds `127.0.0.1` (or, for the LAN-origin demo tests, the runner's own private IPv4) on the throwaway runner with a temporary data folder seeded with fictional records. Nothing reaches the private Live host, its network or its data.
 - Actions are pinned to full commit SHAs, with the release tag in a comment.
 - On failure, only `test-results/` (Playwright traces and screenshots of fictional data) is uploaded, and it is kept for 3 days.
 - A newer push to the same PR cancels the older PR run. Runs on `main` are never cancelled.
