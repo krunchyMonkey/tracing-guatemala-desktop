@@ -244,6 +244,8 @@ async function writeFormattedPage(page: Page): Promise<void> {
   await page.keyboard.press('Enter')
   await page.keyboard.type('Archive website')
   await page.keyboard.press('Shift+Home')
+  // Wait until the editor really holds the selection before using the toolbar (CI race, #190).
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Archive website')
   await toolbar(page).getByRole('button', { name: 'Link', exact: true }).click()
   const linkDialog = page.getByRole('dialog', { name: 'Link' })
   await linkDialog.getByLabel('Web address').fill('https://example.org')
@@ -488,6 +490,8 @@ test('Release A: one realistic journey from first notebook to backup, archive an
     await page.keyboard.press('Enter')
     await page.keyboard.type('Request the 1884 baptism index')
     await page.keyboard.press('Shift+Home')
+    // Wait until the editor really holds the selection before using the toolbar (CI race, #190).
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Request the 1884 baptism index')
     await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
     const taskDialog = page.getByRole('dialog', { name: 'Create a task from your notes' })
     await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
