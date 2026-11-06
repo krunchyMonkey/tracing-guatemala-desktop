@@ -517,8 +517,11 @@ describe('persistence', () => {
     const caseId = created.case.id
     saved(first.journal.create(caseId, entry))
     saved(first.journal.create(caseId, { ...entry, occurredAt: '2026-10-01T00:00:00.000Z', activity: null, body: 'Backdated.' }))
-    const edited = saved(first.journal.create(caseId, entry))
-    saved(first.journal.update(caseId, edited.id, { ...entry, body: 'Edited.' }))
+    // A later occurredAt than the first entry: with the same one the order fell to
+    // created_at, which ties when both land in the same millisecond (CI flake, #190).
+    const later = { ...entry, occurredAt: '2026-10-21T09:00:00.000Z' }
+    const edited = saved(first.journal.create(caseId, later))
+    saved(first.journal.update(caseId, edited.id, { ...later, body: 'Edited.' }))
     const listed = first.journal.list(caseId)
     const caseAfter = first.cases.get(caseId)
     first.close()
