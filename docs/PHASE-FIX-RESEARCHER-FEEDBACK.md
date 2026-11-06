@@ -23,6 +23,16 @@
 
 At the time of grooming, the New Case form has **no acquisition/source selector**. The TikTok request cannot be satisfied by changing just a shared enum. #205 explicitly adds the missing persisted case-side field with backward compatibility, without rewriting the parent client's source.
 
+## Feedback grooming gate: default NOT Claude Ready
+
+Researcher feedback entering the private Live intake is initially `Pending owner review` and **not a GitHub issue**. After explicit owner promotion (#207), the new **private** numbered issue must start with the label `needs-grooming`, and the private Project's dedicated single-select `Grooming State` should be `Needs Grooming`. A normal Project Status of `Todo` is insufficient.
+
+Grooming transitions: `Needs Grooming` → `In Grooming` → **explicit owner/trusted reviewer acceptance** → `Claude Ready`; or `Won't Do`. Only after an issue has a concrete scope, acceptance criteria, sanitized reproduction/evidence, tests, dependencies, estimated effort, privacy review and an owner priority decision may the reviewer remove `needs-grooming`, add the `claude-ready` label and mark `Grooming State = Claude Ready`.
+
+**Authorization rule for automation:** A private feedback issue with `needs-grooming`, or without the `claude-ready` label, is NOT eligible to be picked up by Claude, even when a user selects Bug or Phase FIX and even if Project Status says `Todo`. Never automatically mark raw reports ready or P0. Project field sync failure must retain `needs-grooming` and expose a recoverable sync error, never pretend grooming succeeded. Only separately sanitized/approved implementation tickets may enter the public source repository.
+
+This applies to **future feedback submissions**, not the already-owner-groomed implementation stories #205–#207 themselves.
+
 ## Feedback editor definition of done
 
 This must be a **message composer**, not just a textarea with an unrelated file picker. When the researcher focuses the body and presses Ctrl+V on Windows (or Cmd+V on a Mac) with a copied screenshot, the image appears **at the caret** inside her prose. She can continue typing before/after it, paste several screenshots up to configured limits, remove a mistaken image, and review the composed message before submission. File selection/drag-and-drop are additional options, not substitutes for clipboard paste.
