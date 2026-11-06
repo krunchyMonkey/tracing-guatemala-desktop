@@ -1,9 +1,11 @@
 # Phase FIX — Researcher Feedback & Bugfixes (standing P0 interrupt lane)
 
+**Highest priority PRIVACY CHANGE (2026-11-05):** [Epic #208](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/208) changes the original shared workspace to private-by-default per-user records with owner-approved sharing. Work order **#209 → #210 → #212 → #211**. This supersedes the former start-with-#205 direction. Protect data immediately: while current multi-user Live still uses the old shared model, do not treat private records as isolated. A deliberate legacy-ownership reconciliation and owner/researcher validation are required. Never silently grant a remote app administrator access to other people's records.
+
 **Owner instruction (2026-11-05):** Fixes requested by the researcher during actual use outrank ordinary work in Phase 2.7, 2.8, 2.9, Phase 3 and later phases. This phase has no numbered position in the roadmap; it is a permanent **interrupt priority queue**, not a renumbering of existing phases.
 
 - **Tracker:** [Phase FIX epic #204](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/204)
-- **Next implementation-ready task:** [#205 — TikTok across client, case and contact-log Via](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205)
+- **Next implementation-ready task:** [#209 — ownership, ACL schema and legacy reconciliation](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/209), followed by #210, #212, and acceptance #211. #205 resumes after privacy gates.
 - **Priority:** P0; select the highest-priority dependency-ready Phase FIX issue **before starting** the next numbered-phase story.
 - **Safety exceptions:** safely checkpoint current in-progress work; never abandon a partially applied schema migration, interrupt urgent security/data-loss recovery, bypass required review/consent or ship an unsafe regression. Routine verified PRs continue to follow the standing merge-to-main policy.
 - **No scope creep:** this lane holds real, reproducible researcher defects and narrow usability consistency fixes. Feature ideas and platform integrations belong in separately evaluated roadmaps unless clearly essential to resolve the reported blocker.
@@ -15,6 +17,10 @@
 
 | Issue | User outcome | Status |
 | --- | --- | --- |
+| [#209](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/209) | Ownership/ACL persistence and safe host-only legacy claim | **Privacy P0 · first** |
+| [#210](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/210) | Enforce resource authorization for all Live APIs and nested records | **Privacy P0 · after #209** |
+| [#212](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/212) | Explicit sharing UI, viewer/editor grants and instant revocation | **Privacy P0 · after #210** |
+| [#211](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/211) | Cross-user security validation, safe rollout, researcher sign-off | **Privacy P0 · after #212** |
 | [#205](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205) | TikTok selectable and persistent when creating/editing a client, adding/editing a case, and logging a contact under **Via** | Ready for Claude |
 | [#206](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/206) | Live feedback editor with **Ctrl+V/Cmd+V inline screenshots** amid text, previews/removal, and host-private intake | After #205; engineer-ready |
 | [#207](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/207) | Owner-approved promotion to PRIVATE numbered GitHub issues and PRIVATE Project board, preserving ordered inline images | After #206; private destination and owner approval needed |
@@ -41,4 +47,4 @@ Store the text and inline attachment references in stable order and keep image b
 
 ## Agent handoff
 
-Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, work through **#205 → #206 → #207** in that order, honoring the owner-only private destination and image-upload gates. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
+Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, **prioritize #209 → #210 → #212 → #211**, including all migration/privacy/owner gates. Only after the privacy-first work is verified and no urgent issue is outstanding resume **#205 → #206 → #207**, honoring the owner-only private destination and image-upload gates. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
