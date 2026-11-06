@@ -61,6 +61,15 @@ jobs:
       # out/ (Electron renderer, compile only) is needed by the bundle-separation test.
       - name: Build Electron renderer, demo and Live web bundles
         run: npm run build && npm run web:build
+      # Public demo artifact gate (#191): manifest + verifier, then a rebuild must give the same digest.
+      - name: Verify public demo artifact and reproducibility
+        run: |
+          node scripts/demo-artifact.mjs manifest
+          node scripts/demo-artifact.mjs verify
+          first="$(node -p "require('./dist-demo/demo-manifest.json').digest")"
+          npm run demo:build
+          node scripts/demo-artifact.mjs manifest
+          node scripts/demo-artifact.mjs verify --digest "$first"
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       # Both projects start their own servers with temporary, fictional data

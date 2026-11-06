@@ -23,6 +23,7 @@
     "package": "npm run build && electron-builder",
     "smoke:packaged": "node --no-warnings scripts/packaged-smoke.mjs",
     "demo:build": "vite build --configLoader runner --config vite.demo.config.ts",
+    "demo:artifact": "npm run demo:build && node scripts/demo-artifact.mjs manifest && node scripts/demo-artifact.mjs verify",
     "demo:lan": "node scripts/demo-lan.mjs",
     "demo:lan:feedback": "node scripts/demo-lan.mjs --feedback",
     "demo:dev": "vite --configLoader runner --config vite.demo.config.ts",
