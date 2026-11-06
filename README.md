@@ -4,6 +4,8 @@ A local-first workspace for Tracing Guatemala genealogy research. Phase 1 built 
 
 > This repository is public. Never commit real client names, contact details, research records, or completed questionnaires. Use fictional data in tests and screenshots.
 
+> **Highest-priority workstream:** [Phase FIX — Researcher Feedback & Bugfixes](docs/PHASE-FIX-RESEARCHER-FEEDBACK.md) ([epic #204](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/204)). Prioritize [TikTok across client, case and contact log (#205)](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205) before starting another normal phase story, while preserving security/owner approval gates.
+
 ## Getting started
 
 Requires Node.js 22.12 or newer.
