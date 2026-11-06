@@ -99,3 +99,9 @@ Existing issue numbers remain stable, preserving traceability. Historical `[P03-
 ## Definition of done
 
 The researcher can create/edit a notebook, write and draw with a touch/pen device, arrange one canonical note across rich-text and spatial views, recover all content after save/restart/backup, generate a local non-LLM recap, and complete a privacy-safe pilot. **Real researcher signoff** is required before marking the milestone accepted.
+
+## Calm UI facelift — visual polish extension
+
+**Owner planning 2026-11-06.** Under Phase 3 epic [#145](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/145), optional P1 visual-polish stories [#234](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/234) (approve visual direction) → [#235](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/235) (app shell/Studio) and [#236](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/236) (notebook editor/navigation) → [#237](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/237) (responsive, accessibility, rights and researcher validation). Source references and original illustrative images: [Calm UI design brief](design/notebook-facelift/README.md). Images and layouts shown are aspirational, not proof that later-phase apps, AI, document imports, or source records are available. No feature/data/model/API change is implied.
+
+**Scheduling:** These remain planned until the P0 privacy/Phase FIX lane is appropriately handled and the researcher/owner approves the design; no changes to local Live, Caddy/DNS, database, sessions or public Demo deployment. Use isolated test profiles and CI, not web-live tests bound to the occupied Live host. The existing Release B–D notebook functionality and actual researcher acceptance in #157 remain separate gates.
