@@ -10,6 +10,7 @@ import {
   type DuplicateCandidate
 } from '../../shared/client-model'
 import type { ClientMutationResult } from '../../shared/ipc'
+import { insertOwnershipEvent } from './ownership-repository'
 
 // Client persistence (client-model/v1). Every write re-runs the shared rules, so
 // the renderer's checks are never trusted. All SQL is parameterized.
@@ -17,6 +18,26 @@ import type { ClientMutationResult } from '../../shared/ipc'
 export interface RepositoryClock {
   now: () => Date
   newId: () => string
+}
+
+/**
+ * Who owns a client being created (#209). Nothing here comes from a browser: the web host builds
+ * 'user' from the validated session, and 'unowned' is only for profiles that have no users.
+ */
+export type ClientCreateOwnership =
+  /** Owned by this active app user. `actor` is recorded in the audit trail ('host' for a host-chosen owner). */
+  | { kind: 'user'; userId: string; actor: string }
+  /** No owner. Allowed only while the profile has no app_users rows; the client stays unclaimed. */
+  | { kind: 'unowned' }
+
+export type ClientOwnershipRefusal = 'owner-required' | 'owner-unavailable'
+
+/** A create was refused for ownership reasons. Nothing was written. Carries no input values. */
+export class ClientOwnershipError extends Error {
+  constructor(readonly reason: ClientOwnershipRefusal) {
+    super(`Client not created: ${reason}`)
+    this.name = 'ClientOwnershipError'
+  }
 }
 
 const defaultClock: RepositoryClock = { now: () => new Date(), newId: () => randomUUID() }
@@ -84,13 +105,49 @@ export class ClientRepository {
     return row ? toClient(row) : null
   }
 
-  create(raw: ClientInput): ClientMutationResult {
+  /**
+   * Creates a client together with its owner row and 'owned-on-create' event in ONE transaction.
+   * Throws ClientOwnershipError (nothing written) when the owner is not an active user, or when an
+   * unowned create is attempted in a profile that has users: the host or app owner is never
+   * assigned silently.
+   */
+  create(raw: ClientInput, ownership: ClientCreateOwnership): ClientMutationResult {
     const checked = this.check(raw)
     if (!checked.ok) return checked.result
 
     const input = checked.input
     const now = this.clock.now().toISOString()
     const id = this.clock.newId()
+    this.transaction(() => {
+      if (ownership.kind === 'user') {
+        const owner = this.db.prepare('SELECT status FROM app_users WHERE id = ?').get(ownership.userId) as { status: string } | undefined
+        if (!owner || owner.status !== 'active') throw new ClientOwnershipError('owner-unavailable')
+      } else if (this.hasAnyUser()) {
+        throw new ClientOwnershipError('owner-required')
+      }
+      this.insertClient(id, input, now)
+      if (ownership.kind === 'user') {
+        this.db
+          .prepare(`INSERT INTO client_ownership (client_id, owner_user_id, origin, assigned_at, assigned_by) VALUES (?, ?, 'created', ?, ?)`)
+          .run(id, ownership.userId, now, ownership.actor)
+        insertOwnershipEvent(
+          this.db,
+          this.clock,
+          { action: 'owned-on-create', clientId: id, caseId: null, subjectUserId: ownership.userId, permission: null, actor: ownership.actor, detail: null },
+          now
+        )
+      }
+    })
+    return this.found(id)
+  }
+
+  /** Profiles older than schema 9 have no app_users table (restore staging, fixtures): no users. */
+  private hasAnyUser(): boolean {
+    if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'app_users'").get() === undefined) return false
+    return this.db.prepare('SELECT 1 FROM app_users LIMIT 1').get() !== undefined
+  }
+
+  private insertClient(id: string, input: ClientInput, now: string): void {
     this.db
       .prepare(
         `INSERT INTO clients (id, display_name, source, source_detail, fiverr_username, email, other_contact,
@@ -109,7 +166,6 @@ export class ClientRepository {
         now,
         now
       )
-    return this.found(id)
   }
 
   update(id: string, raw: ClientInput): ClientMutationResult {

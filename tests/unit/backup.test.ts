@@ -49,7 +49,7 @@ afterEach(() => {
 })
 
 function seed(name = input.displayName) {
-  const created = data.clients.create({ ...input, displayName: name })
+  const created = data.clients.create({ ...input, displayName: name }, { kind: 'unowned' })
   if (!created.ok) throw new Error('seed failed')
   const added = data.notes.create(created.client.id, note)
   if (!added.ok) throw new Error('note failed')

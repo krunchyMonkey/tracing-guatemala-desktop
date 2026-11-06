@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { caseContracts, contracts, liveContracts, type CallContract } from '../main/contracts'
 import { createDataServices } from '../main/data-services'
+import { ClientOwnershipError, type ClientCreateOwnership } from '../main/database/client-repository'
 import type { AppData } from '../main/database/app-data'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
 import { buildContentSecurityPolicy } from '../shared/csp'
@@ -185,6 +186,7 @@ export type ApiErrorCode =
   | 'too-many-devices'
   | 'lan-off'
   | 'restore-disabled-while-lan'
+  | 'owner-required'
 
 /** What one listener accepts: its Host allowlist and its own origin (scheme included). */
 export interface ListenerPolicy {
@@ -340,7 +342,21 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     getAppInfo: () => appInfo,
     listClients: ([query]) => clients.list(query),
     getClient: ([id]) => clients.get(id),
-    createClient: ([input]) => clients.create(input),
+    createClient: ([input], ctx) => {
+      // The owner comes from the validated session, never from the request body (the input schema is strict).
+      // Host and paired devices have no signed-in researcher: their create works only in a profile without
+      // users and is otherwise refused; the host or app owner is never assigned silently.
+      const ownership: ClientCreateOwnership =
+        ctx.principal.kind === 'user' ? { kind: 'user', userId: ctx.principal.userId, actor: ctx.principal.userId } : { kind: 'unowned' }
+      try {
+        return clients.create(input, ownership)
+      } catch (error) {
+        if (error instanceof ClientOwnershipError) {
+          throw error.reason === 'owner-required' ? new RequestError(409, 'owner-required') : new RequestError(403, 'forbidden')
+        }
+        throw error
+      }
+    },
     updateClient: ([id, input]) => clients.update(id, input),
     archiveClient: ([id]) => clients.archive(id),
     restoreClient: ([id]) => clients.restore(id),
@@ -495,7 +511,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     if (remote && identity) {
       const { session, state } = authorizeUser(req, remote)
       if (!Object.hasOwn(callable, name)) throw new RequestError(404, 'not-found')
-      const principal: Principal = { kind: 'user', role: state.role }
+      const principal: Principal = { kind: 'user', role: state.role, userId: session.userId }
       const decision = authorizeCall(name, principal)
       if (!decision.allowed) throw new RequestError(403, decision.code)
       ctx = { principal, actor: session.userId, userId: session.userId, sessionId: session.id, headers: {} }

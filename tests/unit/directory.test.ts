@@ -21,7 +21,7 @@ beforeEach(() => {
     newId: () => crypto.randomUUID()
   })
   created = manyClientInputs().map((input, i) => {
-    const result = repo.create(input)
+    const result = repo.create(input, { kind: 'unowned' })
     if (!result.ok) throw new Error(`fixture ${i} invalid`)
     if (isArchivedIndex(i)) repo.archive(result.client.id)
     return result.client

@@ -57,15 +57,19 @@ describe('migrate', () => {
       'case_active_timer',
       'case_briefs',
       'case_events',
+      'case_grants',
       'case_journal_entries',
       'case_notebooks',
       'case_tasks',
       'case_time_entries',
+      'client_grants',
       'client_notes',
+      'client_ownership',
       'clients',
       'notebook_page_revisions',
       'notebook_pages',
       'notebook_sections',
+      'ownership_events',
       'research_cases',
       'sign_in_requests',
       'user_events',
@@ -102,7 +106,7 @@ describe('migrate', () => {
     const db = memoryDb()
     migrate(db)
     const repo = new ClientRepository(db)
-    const created = repo.create(input)
+    const created = repo.create(input, { kind: 'unowned' })
     if (!created.ok) throw new Error('create failed')
     const id = created.client.id
 
@@ -135,7 +139,7 @@ describe('openAppDatabase', () => {
     first.db.close()
     // Simulate a database left by an app version that only knew migration 1.
     const old = new DatabaseSync(first.file)
-    old.exec('DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; DROP TABLE case_active_timer; DROP TABLE case_time_entries; DROP TABLE case_tasks; DROP TABLE case_journal_entries; DROP TABLE case_briefs; DROP TABLE case_events; DROP TABLE research_cases; DROP TABLE client_notes; PRAGMA user_version = 1;')
+    old.exec('DROP TABLE ownership_events; DROP TABLE case_grants; DROP TABLE client_grants; DROP TABLE client_ownership; DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; DROP TABLE case_active_timer; DROP TABLE case_time_entries; DROP TABLE case_tasks; DROP TABLE case_journal_entries; DROP TABLE case_briefs; DROP TABLE case_events; DROP TABLE research_cases; DROP TABLE client_notes; PRAGMA user_version = 1;')
     old
       .prepare(
         `INSERT INTO clients (id, display_name, source, created_at, updated_at)
@@ -181,7 +185,7 @@ describe('ClientRepository', () => {
   })
 
   function create(overrides: Partial<ClientInput> = {}) {
-    const result = repo.create({ ...input, ...overrides })
+    const result = repo.create({ ...input, ...overrides }, { kind: 'unowned' })
     if (!result.ok) throw new Error(`create failed: ${result.reason}`)
     return result.client
   }
@@ -203,7 +207,7 @@ describe('ClientRepository', () => {
 
   it('returns rule codes, never values, for invalid input and stores nothing', () => {
     const secret = 'Fictional Secret Name'
-    const result = repo.create({ ...input, displayName: `${secret}\u0007`, email: 'not-an-email' })
+    const result = repo.create({ ...input, displayName: `${secret}\u0007`, email: 'not-an-email' }, { kind: 'unowned' })
     expect(result).toEqual({
       ok: false,
       reason: 'invalid',
@@ -279,7 +283,7 @@ describe('ClientRepository', () => {
 
   it('persists across reopening the database file', () => {
     const first = openAppDatabase(userData)
-    const created = new ClientRepository(first.db).create(input)
+    const created = new ClientRepository(first.db).create(input, { kind: 'unowned' })
     first.db.close()
     if (!created.ok) throw new Error('create failed')
 

@@ -224,7 +224,7 @@ describe('CaseTaskRepository', () => {
   let clientA: string
 
   function newClient(name: string): string {
-    const created = clients.create({ ...clientInput, displayName: name })
+    const created = clients.create({ ...clientInput, displayName: name }, { kind: 'unowned' })
     if (!created.ok) throw new Error('fixture client invalid')
     return created.client.id
   }
@@ -512,7 +512,7 @@ describe('CaseTaskRepository', () => {
 describe('persistence', () => {
   it('keeps tasks across closing and reopening, with order, status and the case’s updated time', () => {
     const first = new AppData(userData)
-    const client = first.clients.create(clientInput)
+    const client = first.clients.create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const created = first.cases.create(client.client.id, caseInput)
     if (!created.ok) throw new Error('fixture case invalid')
@@ -549,8 +549,8 @@ describe('migration 6 (case_tasks)', () => {
     db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
     const clients = new ClientRepository(db)
     const cases = new CaseRepository(db)
-    const archived = clients.create({ ...clientInput, displayName: 'Archived Client' })
-    const active = clients.create({ ...clientInput, displayName: 'Active Client' })
+    const archived = clients.create({ ...clientInput, displayName: 'Archived Client' }, { kind: 'unowned' })
+    const active = clients.create({ ...clientInput, displayName: 'Active Client' }, { kind: 'unowned' })
     if (!archived.ok || !active.ok) throw new Error('fixture client invalid')
     const one = cases.create(active.client.id, caseInput)
     const two = cases.create(archived.client.id, { ...caseInput, title: 'Second case' })
@@ -642,7 +642,7 @@ describe('backup and restore with tasks', () => {
   function seedCase(title: string): string {
     let clientId = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]?.id
     if (!clientId) {
-      const created = data.clients.create(clientInput)
+      const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       clientId = created.client.id
     }
@@ -677,7 +677,7 @@ describe('backup and restore with tasks', () => {
     configureConnection(old)
     migrate(old, {}, migrations.slice(0, 5))
     old.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-    const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' })
+    const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' }, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const oldCase = new CaseRepository(old).create(client.client.id, caseInput)
     if (!oldCase.ok) throw new Error('fixture case invalid')
