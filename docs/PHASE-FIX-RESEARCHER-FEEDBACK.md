@@ -13,6 +13,21 @@
 - **Data boundary:** protect shared research records, preserve old values/migrations and backups, keep Demo fictional and never automatically deploy real-data LAN or public application surfaces. Publishing to `main` is separate from deploying.
 - **Release cycle:** once a Phase FIX issue is verified and merged, review remaining P0 issues; only resume the feature phase when the Phase FIX ready queue is empty.
 
+## Privacy migration — non-destructive release gates (owner direction 2026-11-06)
+
+**Production Live is off limits to development and CI.** Never open its SQLite data folder with a new build or test utility: `openAppDatabase()` applies pending migrations automatically. Do not run `npm run check`, web-live Playwright/default 4191/4192 tests, or database migration rehearsals on the host running private Live. Use synthetic isolated profiles, separate ports and GitHub-hosted CI. Preserve existing worktrees, Caddy, domain, HTTPS and the fictional-only Demo.
+
+**Engineering sequence, not a deployment sequence:** #209 additive ownership/ACL/host-only reconciliation → #210 enforced per-request authorization → #212 explicit sharing → #211 security and recovery validation. #209 and #210 must activate **as one coordinated Live release**; an independently mergeable PR is never an independently deployable database upgrade. The original Phase 2.7 shared-workspace behavior must never be silently retained or re-enabled. Existing legacy records remain unclaimed/sealed until deliberate host-only researcher's ownership assignment; never guess from admin role or first login.
+
+**Release checklist in #211 (no implicit authorization):**
+1. On **fictional** database fixtures, enumerate all durable entities (clients, cases, client contacts/notes, journals, tasks, time, notebooks/pages/**revisions**, users and relationships). Verify before/after canonical content hashes and counts, archives, `PRAGMA integrity_check` and `foreign_key_check`, failed/interrupted migration and data recovery.
+2. Prove a complete, SQLite-consistent backup restores successfully with the compatible app. For a future approved Live window require two verified recoverable copies, including one encrypted/protected **off the Live machine**; never copy only an active WAL-mode `.sqlite` file.
+3. Obtain **fresh explicit owner cutover approval**. Finish autosaves, stop writes, preserve old build, take final verified backups, migrate schema + activate authorization with users offline, check exact content equivalence and ownership, perform researcher-approved host-only reconciliation, validate negative cross-account behavior, and **only then** reopen writes.
+4. Before reopening writes, rollback may restore the tested old snapshot **and old compatible app** if checks fail. After writes resume, no blind rollback: a snapshot would discard new work, so use a separately approved data reconciliation/forward-fix plan.
+5. Do not close #211/#208 or assume private real-data LAN approval without genuine researcher/owner acceptance; #168/#169/#139 are separate.
+
+**Status:** this section authorizes planning and issue grooming only. It does not approve touching or deploying to private Live, restoring backups, transferring client data, or changing source PR merge gates.
+
 ## Current backlog
 
 | Issue | User outcome | Status |
