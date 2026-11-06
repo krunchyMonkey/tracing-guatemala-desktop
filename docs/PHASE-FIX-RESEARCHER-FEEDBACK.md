@@ -21,9 +21,21 @@
 | [#210](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/210) | Enforce resource authorization for all Live APIs and nested records | **Privacy P0 · after #209** |
 | [#212](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/212) | Explicit sharing UI, viewer/editor grants and instant revocation | **Privacy P0 · after #210** |
 | [#211](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/211) | Cross-user security validation, safe rollout, researcher sign-off | **Privacy P0 · after #212** |
-| [#205](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205) | TikTok selectable and persistent when creating/editing a client, adding/editing a case, and logging a contact under **Via** | Ready for Claude |
+| [#213](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/213) | Per-user configurable source/contact catalog, immutable reserved defaults, seeded editable TikTok | **After Privacy #208, before #214/#205** |
+| [#214](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/214) | Settings hub with My Workspace category management, user administration and host-only backups | **After #213, before #205** |
+| [#205](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205) | Use configured values (TikTok plus future new platforms) in client source, case source and contact **Via** | **After #213 and #214** |
 | [#206](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/206) | Live feedback editor with **Ctrl+V/Cmd+V inline screenshots** amid text, previews/removal, and host-private intake | After #205; engineer-ready |
 | [#207](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/207) | Owner-approved promotion to PRIVATE numbered GitHub issues and PRIVATE Project board, preserving ordered inline images | After #206; private destination and owner approval needed |
+
+## Settings evolution and configurable lists (owner direction 2026-11-05)
+
+The original #205 TikTok request is now implemented **through an editable catalog** rather than hard-coded enums. After the privacy-first #208 work (because custom options must be isolated by account), deliver **#213 backend catalog → #214 Settings hub → #205 form integration**, then #206–#207.
+
+- The current single **Settings & Backup** page mixes account, users, backups, devices and About. Organize as **My Workspace** (each researcher's own configurable sources/contact methods), **Administration** (application owner-only user management), **Backup & Recovery** (trusted host operator only), **About** (everyone).
+- Each researcher may add, rename, activate and deactivate their own custom platforms, for example TikTok, Instagram and WhatsApp. Options have stable IDs and applicability to `lead source` and/or `contact Via`; the **case source** uses lead-source choices. When editing an explicitly shared record, its owner's catalog controls available values. An admin role never implicitly grants access to another researcher's catalog or records.
+- Protect existing built-in values (Fiverr, Referral, Direct, Other, Email, Unspecified as appropriate) as **Reserved**; they cannot be changed through the UI. Ship TikTok initially active but **editable**, not system-locked. A custom value's stable ID survives edits; deactivate never removes or rewrites historical data; no hard-delete when referenced.
+- Keep host-only backups and device actions **host-only**, even for remote account owners; don't mistake a user-admin page for physical-backup authorization. Browser Demo remains fictional/in-memory.
+- Scope this as the self-service catalog needed to fix the researcher's dropdown friction, **not** a generic system-wide settings engine, third-party social integration or a new mandatory feature phase.
 
 ## Note on case creation
 
@@ -47,4 +59,4 @@ Store the text and inline attachment references in stable order and keep image b
 
 ## Agent handoff
 
-Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, **prioritize #209 → #210 → #212 → #211**, including all migration/privacy/owner gates. Only after the privacy-first work is verified and no urgent issue is outstanding resume **#205 → #206 → #207**, honoring the owner-only private destination and image-upload gates. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
+Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, **prioritize #209 → #210 → #212 → #211**, including migration/privacy/owner gates. Next implement **#213 → #214 → #205 → #206 → #207**, honoring user-scoped catalogs and owner-only private feedback/image-upload gates. Resume numbered feature phases afterward. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
