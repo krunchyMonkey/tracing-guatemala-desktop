@@ -1,0 +1,78 @@
+# CI for pull requests to main and pushes to main (#190).
+#
+# Runs only on GitHub-hosted runners with fictional, temporary test profiles.
+# It never deploys anything, holds no secrets, and has no route to the private
+# Live host. Untrusted PR code runs with a read-only token and no secrets.
+# Electron GUI tests (Playwright project "electron") need a display and stay a
+# local pre-merge check; see docs/engineering/ci.md.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '24'
+  # No telemetry, no Electron binary download in jobs that never launch Electron.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+jobs:
+  quality:
+    name: Lint, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      # Some renderer tests wait on real timers; two workers keeps a 4-vCPU runner from starving them.
+      - run: npx vitest run --maxWorkers=2
+
+  browser:
+    name: Demo build and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # out/ (Electron renderer, compile only) is needed by the bundle-separation test.
+      - name: Build Electron renderer, demo and Live web bundles
+        run: npm run build && npm run web:build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      # Both projects start their own servers with temporary, fictional data
+      # folders on this throwaway runner (loopback, or the runner's own private
+      # IPv4 for the LAN-origin demo tests).
+      - name: Playwright (browser-demo, web-live)
+        run: npx playwright test --project browser-demo --project web-live
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore

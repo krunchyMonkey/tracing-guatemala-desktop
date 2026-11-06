@@ -20,6 +20,8 @@ npm run dev          # Electron desktop app (paused for new features)
 
 ```sh
 npm run check        # lint, typecheck, unit tests, then builds + Electron, demo and Live web E2E tests
+                     # (GitHub Actions CI runs the same minus Electron; see docs/engineering/ci.md.
+                     #  Don't run the web E2E suite on a machine that is hosting Live: shared ports.)
 npm run package:dir  # unpacked app for the current OS, in release/
 npm run smoke:packaged  # after package:dir: packaged app creates and reopens its database
 npm run smoke:live      # after web:build: Live launch, backup and restore drill with fictional data
