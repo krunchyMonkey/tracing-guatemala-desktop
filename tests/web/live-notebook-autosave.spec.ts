@@ -297,6 +297,8 @@ test('links records and creates a task from the selection, without ever duplicat
   await page.keyboard.press('Enter')
   await page.keyboard.type('Request the 1884 baptism index')
   await page.keyboard.press('Shift+Home')
+  // Wait until the editor really holds the selection: clicking the toolbar first was a CI race (#190).
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Request the 1884 baptism index')
   await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
   const taskDialog = page.getByRole('dialog', { name: 'Create a task from your notes' })
   await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
