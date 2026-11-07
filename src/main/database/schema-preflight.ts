@@ -1,6 +1,7 @@
 import { type Stats, closeSync, existsSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs'
 import { join } from 'node:path'
-import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from './identity'
+import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory, PROFILE_MARKER_FILE_NAME } from './identity'
+import { DB_HEADER_BYTES, readWal } from './wal-reader'
 
 // A look at a data profile that never changes it (#248). Startup runs this before
 // anything is created or opened read-write, so a newer build can't silently upgrade
@@ -14,7 +15,7 @@ export type UnsafeReason =
   | 'missing-database'
   | 'not-an-app-database'
   | 'unreadable'
-  | 'wal-pending'
+  | 'wal-unreadable'
 
 export type ProfileState =
   | { kind: 'fresh' }
@@ -53,7 +54,7 @@ export interface PreflightTolerance {
 export const MIGRATION_MARKER_RELATIVE = join('maintenance', 'migration-in-progress.json')
 
 const MAGIC = Buffer.from('SQLite format 3\u0000', 'latin1')
-const HEADER_BYTES = 100
+const HEADER_BYTES = DB_HEADER_BYTES
 const USER_VERSION_OFFSET = 60
 const APPLICATION_ID_OFFSET = 68
 
@@ -75,6 +76,61 @@ export function walSize(file: string): number {
   }
 }
 
+export type EffectiveHeader =
+  | { ok: true; version: number; applicationId: number; fromWal: boolean }
+  | { ok: false; reason: 'not-an-app-database' | 'wal-unreadable' | 'unreadable' }
+
+function readMainHeader(file: string): Buffer {
+  const header = Buffer.alloc(HEADER_BYTES)
+  const fd = openSync(file, 'r')
+  try {
+    return header.subarray(0, readSync(fd, header, 0, HEADER_BYTES, 0))
+  } finally {
+    closeSync(fd)
+  }
+}
+
+const hasMagic = (header: Buffer): boolean => header.length >= MAGIC.length && header.subarray(0, MAGIC.length).equals(MAGIC)
+
+const fieldsOf = (header: Buffer, fromWal: boolean): EffectiveHeader => ({
+  ok: true,
+  version: header.readUInt32BE(USER_VERSION_OFFSET),
+  applicationId: header.readUInt32BE(APPLICATION_ID_OFFSET),
+  fromWal
+})
+
+/**
+ * The page-1 header SQLite would see: the last committed copy of page 1 in the log, else
+ * the main file's. Plain file reads only: never opens SQLite, never creates a -shm.
+ * A non-empty log whose header is invalid or unknown fails closed (wal-unreadable).
+ */
+export function effectiveHeader(file: string): EffectiveHeader {
+  try {
+    const main = readMainHeader(file)
+    const mainKnown = main.length >= HEADER_BYTES
+    if (walSize(file) === 0) {
+      return mainKnown && hasMagic(main) ? fieldsOf(main, false) : { ok: false, reason: 'not-an-app-database' }
+    }
+    // SQLite discards a log whose main file is empty, so opening would silently lose it: fail closed.
+    if (main.length === 0) return { ok: false, reason: 'wal-unreadable' }
+    const wal = readWal(`${file}-wal`)
+    if (wal === null) return { ok: false, reason: 'wal-unreadable' }
+    if (wal.page1 !== null) return hasMagic(wal.page1) ? fieldsOf(wal.page1, true) : { ok: false, reason: 'wal-unreadable' }
+    if (!mainKnown) return { ok: false, reason: 'wal-unreadable' }
+    return hasMagic(main) ? fieldsOf(main, false) : { ok: false, reason: 'not-an-app-database' }
+  } catch {
+    return { ok: false, reason: 'unreadable' }
+  }
+}
+
+function isEmptyDirectory(dir: string): boolean {
+  try {
+    return readdirSync(dir).length === 0
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT'
+  }
+}
+
 export function inspectProfile(userDataDir: string, latest: number, tolerate: PreflightTolerance = {}): ProfileState {
   const dir = dataDirectory(userDataDir)
   const file = join(dir, DATABASE_FILE_NAME)
@@ -83,8 +139,8 @@ export function inspectProfile(userDataDir: string, latest: number, tolerate: Pr
   try {
     entries = readdirSync(dir)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'fresh' }
-    return { kind: 'unsafe', reason: 'unreadable' }
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return { kind: 'unsafe', reason: 'unreadable' }
+    entries = []
   }
 
   // Residue first: these mean a previous restore or migration did not finish.
@@ -102,47 +158,28 @@ export function inspectProfile(userDataDir: string, latest: number, tolerate: Pr
     return { kind: 'unsafe', reason: 'unreadable' }
   }
   if (stat !== null && !stat.isFile()) return { kind: 'unsafe', reason: 'unreadable' }
-  const size = stat === null ? null : stat.size
-
-  if (size === null) {
-    const leftovers = entries.some(
-      (name) => ['pre-migration', 'pre-restore', 'maintenance'].includes(name) || name.includes('.sqlite')
-    )
-    return leftovers ? { kind: 'unsafe', reason: 'missing-database' } : { kind: 'fresh' }
-  }
 
   const wal = walSize(file)
-  if (size === 0 && wal === 0) return { kind: 'fresh' }
-
-  let version: number
-  let applicationId: number
-  try {
-    const header = Buffer.alloc(HEADER_BYTES)
-    const fd = openSync(file, 'r')
-    let read: number
-    try {
-      read = readSync(fd, header, 0, HEADER_BYTES, 0)
-    } finally {
-      closeSync(fd)
-    }
-    if (read < HEADER_BYTES && wal === 0) return { kind: 'unsafe', reason: 'not-an-app-database' }
-    if (read >= HEADER_BYTES && !header.subarray(0, MAGIC.length).equals(MAGIC)) {
-      return { kind: 'unsafe', reason: 'not-an-app-database' }
-    }
-    version = read >= HEADER_BYTES ? header.readUInt32BE(USER_VERSION_OFFSET) : 0
-    applicationId = read >= HEADER_BYTES ? header.readUInt32BE(APPLICATION_ID_OFFSET) : 0
-  } catch {
-    return { kind: 'unsafe', reason: 'unreadable' }
+  if (stat === null || (stat.size === 0 && wal === 0)) {
+    // No database. It is a new profile only if nothing shows one ever existed: no marker,
+    // an empty data folder (a 0-byte database file and its side files don't count), no backups or uploads.
+    const ignored = [DATABASE_FILE_NAME, `${DATABASE_FILE_NAME}-shm`, `${DATABASE_FILE_NAME}-wal`]
+    const others = entries.filter((name) => !ignored.includes(name))
+    const evidence =
+      others.length > 0 ||
+      (stat === null && wal > 0) ||
+      existsSync(join(userDataDir, PROFILE_MARKER_FILE_NAME)) ||
+      !isEmptyDirectory(join(userDataDir, 'backups')) ||
+      !isEmptyDirectory(join(userDataDir, 'uploads'))
+    return evidence ? { kind: 'unsafe', reason: 'missing-database' } : { kind: 'fresh' }
   }
 
-  // A non-empty log is never opened here, not even read-only: SQLite would create a -shm file,
-  // and preflight must not create anything. The header is a safe lower bound of the version
-  // (a log only holds newer pages, and nothing migrates in place any more): below latest is
-  // reported as migration-required, which the maintenance command then refuses until the old
-  // app closes cleanly; at latest the normal open recovers the log and migrate() still refuses
-  // a newer version before any schema write. Only a header too short to read is undecidable.
-  if (wal > 0 && version === 0 && applicationId === 0) return { kind: 'unsafe', reason: 'wal-pending' }
-
+  // The version is the effective header's (the log's last committed page 1, else the file's):
+  // equal to latest opens normally and SQLite recovers the log; lower needs the maintenance
+  // command; higher is too new. Nothing is opened or created here.
+  const header = effectiveHeader(file)
+  if (!header.ok) return { kind: 'unsafe', reason: header.reason }
+  const { version, applicationId } = header
   if (applicationId !== 0 && applicationId !== APPLICATION_ID) return { kind: 'unsafe', reason: 'not-an-app-database' }
   if (version === 0) return { kind: 'unsafe', reason: 'not-an-app-database' }
   if (version === latest) return { kind: 'current', version }

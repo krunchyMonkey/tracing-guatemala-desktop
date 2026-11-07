@@ -9,10 +9,10 @@ const RUNBOOK = 'docs/operations/database-migration.md'
 const UNSAFE_MESSAGES: Record<UnsafeReason, string> = {
   'restore-interrupted': `A restore was interrupted. Nothing was changed. See the recovery steps in ${RUNBOOK}.`,
   'migration-interrupted': `A database upgrade was interrupted. Nothing was changed. See the recovery steps in ${RUNBOOK}.`,
-  'missing-database': `The database file is missing but the data folder has other saved data. Nothing was changed. See the recovery steps in ${RUNBOOK}.`,
+  'missing-database': `The database file is missing, but this folder was used before or has other saved data. Nothing was changed and no new database was created. See the recovery steps in ${RUNBOOK}.`,
   'not-an-app-database': `The data file is not a Tracing Guatemala database. Nothing was changed. See ${RUNBOOK}.`,
   unreadable: `The data folder could not be read. Nothing was changed. Check the folder's permissions, then see ${RUNBOOK}.`,
-  'wal-pending': `The data was not closed cleanly. Nothing was changed. Start and stop the previous version once, then see ${RUNBOOK}.`
+  'wal-unreadable': `The data's write-ahead log could not be read. Nothing was changed. Do not delete anything; see ${RUNBOOK}.`
 }
 
 /** The message for a deliberate refusal, or null if `error` is something else. */

@@ -12,3 +12,6 @@ export const APPLICATION_ID = 0x54474431
 export function dataDirectory(userDataDir: string): string {
   return join(userDataDir, 'data')
 }
+
+/** Marker in the profile root (next to data/, so deleting data/ leaves it): this profile once held a database. */
+export const PROFILE_MARKER_FILE_NAME = 'profile-initialized.json'

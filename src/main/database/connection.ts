@@ -1,7 +1,7 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from './identity'
+import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory, PROFILE_MARKER_FILE_NAME } from './identity'
 import { DatabaseTooNewError, getSchemaVersion, migrate, migrations, type Migration, type MigrationOutcome } from './migrations'
 import { DataProfileUnsafeError, inspectProfile, MigrationRequiredError, type PreflightTolerance } from './schema-preflight'
 
@@ -9,7 +9,7 @@ import { DataProfileUnsafeError, inspectProfile, MigrationRequiredError, type Pr
 // the spike). Only this module and the repositories import it, so a driver swap
 // stays local to src/main/database.
 
-export { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory }
+export { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory, PROFILE_MARKER_FILE_NAME }
 
 export interface OpenedDatabase {
   db: DatabaseSync
@@ -27,6 +27,24 @@ export interface OpenOptions {
    * run verifying its own swap). In-code only; everything else still fails closed.
    */
   tolerate?: PreflightTolerance
+}
+
+/**
+ * Records that this profile has held a database, in the profile root next to data/, so a
+ * profile whose data/ was deleted is refused instead of replaced by an empty one (#248).
+ * Written atomically; never overwrites an existing marker. Best effort: a failure here
+ * must not stop the app, and the next open tries again.
+ */
+export function writeProfileMarker(userDataDir: string, now: () => Date = () => new Date()): void {
+  const marker = join(userDataDir, PROFILE_MARKER_FILE_NAME)
+  const temp = `${marker}.tmp`
+  try {
+    if (existsSync(marker)) return
+    writeFileSync(temp, JSON.stringify({ format: 1, application: 'tracing-guatemala', createdAt: now().toISOString() }))
+    renameSync(temp, marker)
+  } catch {
+    rmSync(temp, { force: true })
+  }
 }
 
 /**
@@ -67,6 +85,7 @@ export function openAppDatabase(userDataDir: string, options: OpenOptions | (() 
     const row = db.prepare('PRAGMA application_id').get() as { application_id: number }
     if (row.application_id !== APPLICATION_ID) db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
     if (getSchemaVersion(db) !== latest) throw new Error('unexpected schema version after open')
+    writeProfileMarker(userDataDir, resolved.now)
     return { db, file, migration }
   } catch (error) {
     db.close()

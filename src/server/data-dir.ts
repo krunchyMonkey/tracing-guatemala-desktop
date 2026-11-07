@@ -1,6 +1,6 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 
 // Where the Live web host keeps its data (#110). It is a separate profile from
 // the desktop app: the host never opens, migrates or replaces the Electron
@@ -46,26 +46,60 @@ function canonical(path: string): string {
   }
 }
 
+/** Marker file that, with exactly this content, makes a temporary folder a synthetic test profile. */
+export const SYNTHETIC_PROFILE_MARKER = 'tg-synthetic-test-profile'
+export const SYNTHETIC_PROFILE_CONTENT = 'fictional synthetic test profile; test hooks allowed\n'
+
+/** For test harnesses only: creates `dir` and marks it as a synthetic test profile. */
+export function markSyntheticTestProfile(dir: string): void {
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, SYNTHETIC_PROFILE_MARKER), SYNTHETIC_PROFILE_CONTENT)
+}
+
+function nativeRealpath(path: string): string | null {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return null
+  }
+}
+
+function isSyntheticTestProfile(dir: string, tmp: string): boolean {
+  const real = nativeRealpath(dir)
+  const realTmp = nativeRealpath(tmp)
+  if (real === null || realTmp === null) return false
+  const inside = relative(realTmp, real)
+  if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) return false
+  try {
+    const marker = join(real, SYNTHETIC_PROFILE_MARKER)
+    return lstatSync(marker).isFile() && readFileSync(marker, 'utf8') === SYNTHETIC_PROFILE_CONTENT
+  } catch {
+    return false
+  }
+}
+
 /**
- * Test hooks (TG_TEST_HOOKS=1) must never run against a real profile (#248): refuses the
- * default Live folder and the desktop folder, compared both as written and with symlinks
- * resolved. It only ever refuses; it never grants anything.
+ * Test hooks (TG_TEST_HOOKS=1) are allowed only on a synthetic test profile (#248): the
+ * folder (symlinks resolved) is inside the system temp folder, holds the marker file with
+ * its exact content, and is not the default Live or desktop folder. Anything else is
+ * refused. Without TG_TEST_HOOKS=1 there is nothing to check.
  */
 export function refuseTestHooksOnRealProfile(
   dir: string,
   env: NodeJS.ProcessEnv = process.env,
-  platform: Platform = currentPlatform()
+  platform: Platform = currentPlatform(),
+  tmp: string = tmpdir()
 ): { ok: true } | { ok: false; error: string } {
   if (env['TG_TEST_HOOKS'] !== '1') return { ok: true }
-  for (const real of [defaultLiveDataDir(platform), desktopProfileDir(platform)]) {
-    if (sameDir(dir, real, platform.platform) || sameDir(canonical(dir), canonical(real), platform.platform)) {
-      return {
-        ok: false,
-        error: 'Test hooks are on (TG_TEST_HOOKS=1), so this data folder is refused: it is a real profile. Use a new temporary folder. Nothing was started.'
-      }
-    }
+  const refused = {
+    ok: false as const,
+    error:
+      'Test hooks are on (TG_TEST_HOOKS=1), but this data folder is not a marked synthetic test profile in the temporary folder, so they are refused. Use a new temporary folder made by the test harness. Nothing was started.'
   }
-  return { ok: true }
+  for (const real of [defaultLiveDataDir(platform), desktopProfileDir(platform)]) {
+    if (sameDir(dir, real, platform.platform) || sameDir(canonical(dir), canonical(real), platform.platform)) return refused
+  }
+  return isSyntheticTestProfile(dir, tmp) ? { ok: true } : refused
 }
 
 /**

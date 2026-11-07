@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { configureConnection, openAppDatabase } from '../../main/database/connection'
+import { configureConnection, openAppDatabase, writeProfileMarker } from '../../main/database/connection'
 import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from '../../main/database/identity'
 import { getSchemaVersion, migrate, migrations as defaultMigrations, type Migration } from '../../main/database/migrations'
 import { inspectProfile, MIGRATION_MARKER_RELATIVE, walSize, type UnsafeReason } from '../../main/database/schema-preflight'
@@ -25,6 +25,8 @@ export type MaintenanceCode =
   | 'version-mismatch'
   | 'too-new'
   | 'not-cleanly-closed'
+  | 'in-use'
+  | 'changed-during-migration'
   | 'not-confirmed'
   | 'source-damaged'
   | 'snapshot-unverified'
@@ -46,6 +48,9 @@ const MESSAGES: Record<string, string> = {
   'too-new': 'The data was saved by a newer version than this build. Nothing was changed.',
   'not-cleanly-closed':
     'The data was not closed cleanly. Start and stop the current app version once, then try again. Nothing was changed.',
+  'in-use': 'Another program has this data open. Stop every copy of the app, then try again. Nothing was changed.',
+  'changed-during-migration':
+    'The data changed while the migration was running. The live data was not changed by the migration; the snapshot was kept.',
   'not-confirmed': 'The confirmation phrase did not match. Nothing was changed.',
   'source-damaged': 'The data failed its integrity check. Nothing was changed.',
   'snapshot-unverified': 'The snapshot could not be verified. The live data was not changed; the snapshot was kept.',
@@ -72,7 +77,7 @@ export class MaintenanceError extends Error {
   }
 }
 
-export type FaultPoint = 'after-marker' | 'after-snapshot' | 'after-staging' | 'after-swap' | 'after-swap-unrecoverable'
+export type FaultPoint = 'before-swap-write' | 'after-marker' | 'after-snapshot' | 'after-staging' | 'after-swap' | 'after-swap-unrecoverable'
 
 /** Test-only. The `crash` flavor skips every cleanup, as if the process had been killed. */
 class InjectedFault extends Error {
@@ -151,6 +156,45 @@ function tidySideFiles(file: string): void {
   if (walSize(file) === 0) removeSideFiles(file)
 }
 
+/**
+ * Evidence (not proof) that no other connection has the file open: a probe asks for the
+ * exclusive lock without waiting. Writes nothing. Side files are tidied only when it passes,
+ * because a holder may be using them.
+ */
+function assertNoOtherConnections(file: string): void {
+  let probe: DatabaseSync | null = null
+  let busy = false
+  try {
+    probe = new DatabaseSync(file)
+    probe.exec('PRAGMA busy_timeout = 0')
+    probe.exec('PRAGMA locking_mode = EXCLUSIVE')
+    probe.exec('BEGIN EXCLUSIVE')
+    probe.exec('ROLLBACK')
+  } catch (error) {
+    const code = (error as { errcode?: number }).errcode
+    busy = (typeof code === 'number' && [5, 6].includes(code & 0xff)) || /locked|busy/i.test((error as Error).message)
+    if (!busy) {
+      closeQuietly(probe)
+      throw new MaintenanceError('source-damaged')
+    }
+  }
+  closeQuietly(probe)
+  if (busy) throw new MaintenanceError('in-use')
+  tidySideFiles(file)
+}
+
+/** Test-only (faultAt 'before-swap-write'): another connection writes a fictional row. */
+function injectForeignWrite(file: string): void {
+  const db = new DatabaseSync(file)
+  try {
+    db.exec(
+      "INSERT INTO clients (id, display_name, source, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000aa', 'Cara Injectada', 'direct', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')"
+    )
+  } finally {
+    db.close()
+  }
+}
+
 function isHealthy(db: DatabaseSync): boolean {
   try {
     const rows = db.prepare('PRAGMA integrity_check').all() as { integrity_check: string }[]
@@ -179,7 +223,7 @@ function uniqueStamp(maintenanceDir: string, now: Date): string {
 function requireMigrationRequired(dataDir: string, list: readonly Migration[]): { from: number; to: number } {
   const state = inspectProfile(dataDir, list.length)
   const wal = walSize(liveFileOf(dataDir)) > 0
-  if (wal && (state.kind === 'migration-required' || (state.kind === 'unsafe' && state.reason === 'wal-pending'))) {
+  if (wal && (state.kind === 'migration-required' || (state.kind === 'unsafe' && state.reason === 'wal-unreadable'))) {
     throw new MaintenanceError('not-cleanly-closed')
   }
   if (state.kind === 'unsafe') throw new MaintenanceError(`unsafe:${state.reason}`)
@@ -243,14 +287,17 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
     const { from, to } = requireMigrationRequired(dataDir, list)
     if (from !== expectFrom || to !== expectTo) throw new MaintenanceError('version-mismatch')
     if (confirm !== confirmationPhrase(from, to)) throw new MaintenanceError('not-confirmed')
+    assertNoOtherConnections(live)
 
     // d. Read-only look at the source: it must be healthy before anything is written.
     let source: DatabaseSync | null = null
     let sourceManifest: Manifest
+    let fingerprint: { size: number; mtimeMs: number }
     try {
       source = new DatabaseSync(live, { readOnly: true })
       if (!isHealthy(source)) throw new MaintenanceError('source-damaged')
       sourceManifest = computeManifest(source)
+      fingerprint = statSync(live)
     } catch (error) {
       closeQuietly(source)
       tidySideFiles(live)
@@ -277,6 +324,7 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
     const failedFile = join(stampDir, `failed-v${to}.sqlite`)
 
     let originalMoved = false
+    let failClosed = false
     let newInPlace = false
     try {
       mkdirSync(stampDir)
@@ -335,7 +383,27 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
       removeSideFiles(staging)
       fault('after-staging')
 
-      // h. Swap. The original is moved, never deleted.
+      // h. Swap. The original is moved, never deleted. First: nobody else has the file open,
+      // and it is still exactly what step d read (size, mtime, no log, same fingerprints).
+      if (faultAt === 'before-swap-write') injectForeignWrite(live)
+      assertNoOtherConnections(live)
+      let unchanged = false
+      try {
+        const current = statSync(live)
+        if (current.size === fingerprint.size && current.mtimeMs === fingerprint.mtimeMs && !existsSync(`${live}-wal`)) {
+          const recheck = new DatabaseSync(live, { readOnly: true })
+          try {
+            unchanged = manifestsEqual(computeManifest(recheck), sourceManifest)
+          } finally {
+            closeQuietly(recheck)
+          }
+          tidySideFiles(live)
+        }
+      } catch {
+        unchanged = false
+      }
+      if (!unchanged) throw new MaintenanceError('changed-during-migration')
+      const swapFingerprint = statSync(live)
       renameSync(live, original)
       originalMoved = true
       if (existsSync(`${live}-shm`)) renameSync(`${live}-shm`, `${original}-shm`)
@@ -359,13 +427,27 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
         reopened.db.close()
       }
 
+      // The moved original must be exactly what was swapped out: nothing may still be writing to it.
+      let originalIntact = false
+      try {
+        const kept = statSync(original)
+        originalIntact = kept.size === swapFingerprint.size && kept.mtimeMs === swapFingerprint.mtimeMs && !existsSync(`${original}-wal`)
+      } catch {
+        originalIntact = false
+      }
+      if (!originalIntact) {
+        failClosed = true // no auto-repair: the marker stays and startup refuses
+        throw new MaintenanceError('verify-failed')
+      }
+
       // j. Local record, then the marker goes.
       const record: MigrationRecord = { from, to, stamp, completedAt: now().toISOString(), sourceManifest, migratedManifest }
       writeFileSync(join(stampDir, 'migration.json'), JSON.stringify(record, null, 2))
+      writeProfileMarker(dataDir, now)
       rmSync(markerFile, { force: true })
       return { from, to, stamp, folder: `maintenance/${stamp}`, tables: rowCounts(sourceManifest) }
     } catch (error) {
-      if (error instanceof InjectedFault && error.crash) throw error // simulated kill: leave everything as it is
+      if ((error instanceof InjectedFault && error.crash) || failClosed) throw error // simulated kill / no auto-repair: leave everything as it is
       closeQuietly(source)
       let keepMarker = false
       try {
@@ -444,6 +526,7 @@ export function revertMigration({
     if (state.kind !== 'current') throw new MaintenanceError('version-mismatch')
     if (walSize(live) > 0) throw new MaintenanceError('not-cleanly-closed')
     if (!existsSync(original)) throw new MaintenanceError('original-missing')
+    assertNoOtherConnections(live)
 
     let db: DatabaseSync | null = null
     let unchanged: boolean
@@ -459,6 +542,7 @@ export function revertMigration({
     if (!unchanged) throw new MaintenanceError('changed-since-migration')
     if (confirm !== revertPhrase(from, to)) throw new MaintenanceError('not-confirmed')
 
+    assertNoOtherConnections(live)
     const reverted = join(stampDir, `reverted-v${to}.sqlite`)
     const temp = join(dataDirectory(dataDir), `${DATABASE_FILE_NAME}.revert-${stamp}.tmp`)
     renameSync(live, reverted)

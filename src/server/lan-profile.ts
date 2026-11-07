@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { defaultLiveDataDir, ensurePrivateDir, sameDir } from './data-dir'
+import { defaultLiveDataDir, ensurePrivateDir, sameDir, SYNTHETIC_PROFILE_MARKER } from './data-dir'
 import { LanHostError } from './lan'
 
 // The real-data gate for the home-network listener (#136). Over plain HTTP,
@@ -52,7 +52,7 @@ export function assertLanDataAllowed(dataDir: string): void {
 export function initLanTestProfile(dataDir: string): void {
   if (isDefaultProfile(dataDir)) throw new LanHostError(`That is your default data folder. ${WHY}`)
   if (existsSync(dataDir)) {
-    if (!statSync(dataDir).isDirectory() || readdirSync(dataDir).length > 0) {
+    if (!statSync(dataDir).isDirectory() || readdirSync(dataDir).some((name) => name !== SYNTHETIC_PROFILE_MARKER)) {
       throw new LanHostError(`--init-lan-test-profile only works on a folder that doesn't exist yet or is empty, so real data is never marked as test data. ${WHY}`)
     }
   } else {

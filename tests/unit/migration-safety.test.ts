@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -13,7 +14,15 @@ import {
   type UnsafeReason
 } from '../../src/main/database/schema-preflight'
 import { startupProblemMessage } from '../../src/main/database/startup-messages'
-import { acquireDataDirLock, DataDirInUseError, refuseTestHooksOnRealProfile } from '../../src/server/data-dir'
+import {
+  acquireDataDirLock,
+  DataDirInUseError,
+  markSyntheticTestProfile,
+  refuseTestHooksOnRealProfile,
+  SYNTHETIC_PROFILE_CONTENT,
+  SYNTHETIC_PROFILE_MARKER
+} from '../../src/server/data-dir'
+import { initLanTestProfile } from '../../src/server/lan-profile'
 import { runMaintenanceCommand } from '../../src/server/maintenance/cli'
 import {
   confirmationPhrase,
@@ -265,9 +274,8 @@ describe('startup never migrates an existing profile', () => {
     unsafe('unreadable', () => {
       mkdirSync(live(), { recursive: true })
     })
-    unsafe('wal-pending', () => {
-      // A main file too short to hold a header, with a log next to it: the version can't be
-      // known without opening the log, which preflight never does.
+    unsafe('wal-unreadable', () => {
+      // A main file too short to hold a header, with a log whose header is not a log header.
       mkdirSync(dataDirectory(root), { recursive: true })
       writeFileSync(live(), Buffer.alloc(40, 0))
       writeFileSync(`${live()}-wal`, Buffer.alloc(32, 7))
@@ -283,7 +291,7 @@ describe('startup messages', () => {
     expect(required).toContain('docs/operations/database-migration.md')
     const restore = startupProblemMessage(new DataProfileUnsafeError('restore-interrupted'))
     expect(restore).toContain('A restore was interrupted. Nothing was changed.')
-    for (const reason of ['restore-interrupted', 'migration-interrupted', 'missing-database', 'not-an-app-database', 'unreadable', 'wal-pending'] as const) {
+    for (const reason of ['restore-interrupted', 'migration-interrupted', 'missing-database', 'not-an-app-database', 'unreadable', 'wal-unreadable'] as const) {
       const message = startupProblemMessage(new DataProfileUnsafeError(reason))
       expect(message).toContain('Nothing was changed')
       expect(message).not.toMatch(/[A-Za-z]:[\\/]|\\/)
@@ -383,6 +391,102 @@ describe('migrateProfile', () => {
     it('for a folder that does not exist', () => {
       expect(codeOf(() => migrateProfile(migrateOptions({ dataDir: join(root, 'missing') })))).toBe('data-dir-missing')
       expect(existsSync(join(root, 'missing'))).toBe(false)
+    })
+  })
+
+  describe('needs exclusive use of the file', () => {
+    it('refuses while another connection in this process has it open, then works once it is closed', () => {
+      buildPrevious()
+      const holder = new DatabaseSync(live())
+      holder.exec('PRAGMA journal_mode = WAL')
+      holder.prepare('SELECT count(*) AS n FROM clients').get()
+      const before = readFileSync(live())
+      try {
+        expect(codeOf(() => migrateProfile(migrateOptions()))).toBe('in-use')
+        expect(readFileSync(live()).equals(before)).toBe(true)
+        expect(existsSync(marker())).toBe(false)
+        expect(existsSync(maintenance())).toBe(false)
+      } finally {
+        holder.close()
+      }
+      expect(migrateProfile(migrateOptions()).to).toBe(latest)
+    })
+
+    it('refuses while a real second process has it open, then works once that process is gone', async () => {
+      buildPrevious()
+      const [major = 0, minor = 0] = process.versions.node.split('.').map(Number)
+      const flags = major < 22 || (major === 22 && minor < 13) ? ['--experimental-sqlite'] : []
+      const script =
+        "const { DatabaseSync } = require('node:sqlite');" +
+        'const db = new DatabaseSync(process.argv[1]);' +
+        "db.exec('PRAGMA journal_mode = WAL');" +
+        "db.prepare('SELECT count(*) AS n FROM clients').get();" +
+        "console.log('READY'); setInterval(() => {}, 1000);"
+      const child = spawn(process.execPath, [...flags, '--disable-warning=ExperimentalWarning', '-e', script, live()], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      const exited = new Promise<void>((done) => child.once('exit', () => done()))
+      try {
+        await new Promise<void>((ready, fail) => {
+          let seen = ''
+          const timer = setTimeout(() => fail(new Error('the second process never became ready: ' + seen)), 20000)
+          child.stdout.on('data', (chunk: Buffer) => {
+            seen += chunk.toString()
+            if (seen.includes('READY')) {
+              clearTimeout(timer)
+              ready()
+            }
+          })
+          child.stderr.on('data', (chunk: Buffer) => (seen += chunk.toString()))
+          child.once('exit', () => fail(new Error('the second process exited early: ' + seen)))
+        })
+        const before = readFileSync(live())
+        expect(codeOf(() => migrateProfile(migrateOptions()))).toBe('in-use')
+        expect(readFileSync(live()).equals(before)).toBe(true)
+        expect(existsSync(marker())).toBe(false)
+      } finally {
+        child.kill()
+        await exited
+      }
+      expect(migrateProfile(migrateOptions()).to).toBe(latest)
+    }, 60000)
+
+    it('refuses a write between the source fingerprint and the swap, and does not swap', () => {
+      buildCurrent()
+      expect(codeOf(() => migrateProfile(nextOptions({ faultAt: 'before-swap-write' })))).toBe('changed-during-migration')
+      // The foreign write is in the live file; nothing was swapped; the snapshot is kept.
+      expect(clientNames(live())).toContain('Cara Injectada')
+      expect(inspectProfile(root, latest)).toEqual({ kind: 'current', version: latest })
+      expect(existsSync(maintenance(STAMP, `original-v${latest}.sqlite`))).toBe(false)
+      expect(existsSync(maintenance(STAMP, `snapshot-v${latest}.sqlite`))).toBe(true)
+      expect(existsSync(maintenance(STAMP, 'staging.sqlite'))).toBe(false)
+      expect(existsSync(marker())).toBe(false)
+    })
+
+    it.runIf(process.platform === 'win32')('on Windows the swap itself fails while another connection holds the file', () => {
+      buildCurrent()
+      const holder = new DatabaseSync(live())
+      holder.prepare('SELECT count(*) AS n FROM clients').get()
+      try {
+        expect(() => renameSync(live(), join(root, 'moved.sqlite'))).toThrow()
+        expect(existsSync(live())).toBe(true)
+      } finally {
+        holder.close()
+      }
+    })
+
+    it('refuses a revert while another connection has the migrated file open', () => {
+      buildCurrent()
+      migrateProfile(nextOptions())
+      const holder = new DatabaseSync(live())
+      holder.prepare('SELECT count(*) AS n FROM clients').get()
+      const before = readFileSync(live())
+      try {
+        expect(codeOf(() => revertMigration({ dataDir: root, confirm: revertPhrase(latest, latest + 1) }))).toBe('in-use')
+        expect(readFileSync(live()).equals(before)).toBe(true)
+      } finally {
+        holder.close()
+      }
     })
   })
 
@@ -539,28 +643,193 @@ describe('maintenance command line', () => {
   })
 })
 
-describe('test hooks cannot touch a real profile', () => {
-  it('refuses the default Live and desktop folders when TG_TEST_HOOKS=1, and only then', () => {
-    const where = { platform: 'linux' as const, env: { XDG_CONFIG_HOME: root }, home: root }
-    const live = join(root, 'Tracing Guatemala Web')
-    const desktop = join(root, 'Tracing Guatemala')
-    const hooks = { TG_TEST_HOOKS: '1' }
-    expect(refuseTestHooksOnRealProfile(live, hooks, where).ok).toBe(false)
-    expect(refuseTestHooksOnRealProfile(desktop, hooks, where).ok).toBe(false)
-    expect(refuseTestHooksOnRealProfile(join(root, 'scratch'), hooks, where).ok).toBe(true)
-    expect(refuseTestHooksOnRealProfile(live, {}, where).ok).toBe(true)
+
+describe('a profile that lost its database', () => {
+  const markerFile = () => join(root, 'profile-initialized.json')
+
+  /** An established fictional profile: created by the app, with a backup file beside data/. */
+  function establish(): void {
+    const opened = openAppDatabase(root)
+    opened.db.close()
+    mkdirSync(join(root, 'backups'))
+    writeFileSync(join(root, 'backups', 'backup-1.sqlite'), 'placeholder backup bytes')
+  }
+
+  const refusedAndUntouched = (): void => {
+    const before = tree()
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'unsafe', reason: 'missing-database' })
+    expect(() => openAppDatabase(root)).toThrow(DataProfileUnsafeError)
+    expect(tree()).toEqual(before)
+    expect(existsSync(live())).toBe(false)
+  }
+
+  it('writes the marker (and only these fields) when a new profile is created', () => {
+    const opened = openAppDatabase(root)
+    opened.db.close()
+    const parsed = JSON.parse(readFileSync(markerFile(), 'utf8')) as Record<string, unknown>
+    expect(Object.keys(parsed).sort()).toEqual(['application', 'createdAt', 'format'])
+    expect(parsed).toMatchObject({ format: 1, application: 'tracing-guatemala' })
+    expect(Number.isNaN(Date.parse(String(parsed['createdAt'])))).toBe(false)
+    expect(existsSync(join(root, 'profile-initialized.json.tmp'))).toBe(false)
+  })
+
+  it('writes the marker when an existing profile without one opens', () => {
+    buildCurrent()
+    expect(existsSync(markerFile())).toBe(false)
+    openAppDatabase(root).db.close()
+    expect(existsSync(markerFile())).toBe(true)
+  })
+
+  it('refuses when the database file was deleted, and creates nothing', () => {
+    establish()
+    for (const suffix of ['', '-wal', '-shm']) rmSync(`${live()}${suffix}`, { force: true })
+    refusedAndUntouched()
+  })
+
+  it('refuses when the whole data folder was deleted, and creates nothing', () => {
+    establish()
+    rmSync(dataDirectory(root), { recursive: true, force: true })
+    refusedAndUntouched()
+    expect(existsSync(dataDirectory(root))).toBe(false)
+  })
+
+  it('refuses when only the marker is left', () => {
+    writeFileSync(markerFile(), JSON.stringify({ format: 1, application: 'tracing-guatemala', createdAt: '2026-11-01T00:00:00.000Z' }))
+    refusedAndUntouched()
+    expect(existsSync(dataDirectory(root))).toBe(false)
+  })
+
+  it('refuses a legacy profile (no marker) that has backups', () => {
+    mkdirSync(join(root, 'backups'))
+    writeFileSync(join(root, 'backups', 'backup-1.sqlite'), 'placeholder backup bytes')
+    refusedAndUntouched()
+  })
+
+  it('refuses uploads without a database, and a log without a database file', () => {
+    mkdirSync(join(root, 'uploads'))
+    writeFileSync(join(root, 'uploads', 'scan-1.png'), 'x')
+    refusedAndUntouched()
+    rmSync(join(root, 'uploads'), { recursive: true })
+    mkdirSync(dataDirectory(root))
+    writeFileSync(`${live()}-wal`, Buffer.alloc(64, 1))
+    refusedAndUntouched()
+  })
+
+  it('treats a brand-new folder as fresh, opens it and writes the marker', () => {
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'fresh' })
+    const opened = openAppDatabase(root)
+    expect(opened.migration).toEqual({ from: 0, to: latest })
+    opened.db.close()
+    expect(existsSync(markerFile())).toBe(true)
+  })
+
+  it('treats empty backups/uploads folders as fresh', () => {
+    mkdirSync(join(root, 'backups'))
+    mkdirSync(join(root, 'uploads'))
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'fresh' })
+  })
+
+  it('ignores Electron files, the host lock and the test marker in the profile root', () => {
+    writeFileSync(join(root, 'Local State'), '{}')
+    writeFileSync(join(root, 'Preferences'), '{}')
+    writeFileSync(join(root, 'web-host.lock'), '1')
+    writeFileSync(join(root, SYNTHETIC_PROFILE_MARKER), SYNTHETIC_PROFILE_CONTENT)
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'fresh' })
+    openAppDatabase(root).db.close()
+    expect(existsSync(live())).toBe(true)
+  })
+})
+
+describe('test hooks are allowed only on a synthetic test profile', () => {
+  const hooks = { TG_TEST_HOOKS: '1' }
+  const where = () => ({ platform: 'linux' as const, env: { XDG_CONFIG_HOME: join(root, 'config') }, home: join(root, 'home') })
+  const fakeTmp = () => {
+    const dir = join(root, 'fake-tmp')
+    mkdirSync(dir, { recursive: true })
+    return dir
+  }
+  const linkType = process.platform === 'win32' ? 'junction' : 'dir'
+
+  it('allows a marked folder inside the temporary folder', () => {
+    const dir = join(root, 'marked')
+    markSyntheticTestProfile(dir)
+    expect(refuseTestHooksOnRealProfile(dir, hooks, where()).ok).toBe(true)
+    expect(refuseTestHooksOnRealProfile(dir, hooks, where(), root).ok).toBe(true)
+  })
+
+  it('refuses a custom folder outside the temporary folder with no marker', () => {
+    const dir = join(root, 'custom')
+    mkdirSync(dir)
+    expect(refuseTestHooksOnRealProfile(dir, hooks, where(), fakeTmp()).ok).toBe(false)
+  })
+
+  it('refuses a temporary folder without the marker, and a folder that does not exist', () => {
+    const dir = join(root, 'plain')
+    mkdirSync(dir)
+    expect(refuseTestHooksOnRealProfile(dir, hooks, where()).ok).toBe(false)
+    expect(refuseTestHooksOnRealProfile(join(root, 'nope'), hooks, where()).ok).toBe(false)
+  })
+
+  it('refuses a marker with the wrong content', () => {
+    const wrong = ['something else', SYNTHETIC_PROFILE_CONTENT.trimEnd(), `${SYNTHETIC_PROFILE_CONTENT}x`, '']
+    wrong.forEach((content, index) => {
+      const dir = join(root, `wrong-${index}`)
+      mkdirSync(dir)
+      writeFileSync(join(dir, SYNTHETIC_PROFILE_MARKER), content)
+      expect(refuseTestHooksOnRealProfile(dir, hooks, where()).ok).toBe(false)
+    })
+  })
+
+  it('refuses a marked folder outside the temporary folder', () => {
+    const dir = join(root, 'outside')
+    markSyntheticTestProfile(dir)
+    expect(refuseTestHooksOnRealProfile(dir, hooks, where(), fakeTmp()).ok).toBe(false)
+  })
+
+  it('refuses a link inside the temporary folder that points at a marked folder outside it', () => {
+    const target = join(root, 'outside')
+    markSyntheticTestProfile(target)
+    const link = join(fakeTmp(), 'link')
+    symlinkSync(target, link, linkType)
+    expect(refuseTestHooksOnRealProfile(link, hooks, where(), fakeTmp()).ok).toBe(false)
+    // Control: the same link is fine when its target really is inside the temporary folder.
+    expect(refuseTestHooksOnRealProfile(link, hooks, where(), root).ok).toBe(true)
+  })
+
+  it('still refuses the default Live and desktop folders, even if marked', () => {
+    for (const name of ['Tracing Guatemala Web', 'Tracing Guatemala']) {
+      const dir = join(root, 'config', name)
+      markSyntheticTestProfile(dir)
+      expect(refuseTestHooksOnRealProfile(dir, hooks, where(), root).ok).toBe(false)
+    }
   })
 
   it('also refuses a link that points at them', () => {
-    const where = { platform: 'linux' as const, env: { XDG_CONFIG_HOME: root }, home: root }
-    const live = join(root, 'Tracing Guatemala Web')
-    mkdirSync(live)
+    const liveDir = join(root, 'config', 'Tracing Guatemala Web')
+    markSyntheticTestProfile(liveDir)
     const alias = join(root, 'alias')
-    try {
-      symlinkSync(live, alias, 'junction')
-    } catch {
-      return // links are not allowed here
-    }
-    expect(refuseTestHooksOnRealProfile(alias, { TG_TEST_HOOKS: '1' }, where).ok).toBe(false)
+    symlinkSync(liveDir, alias, linkType)
+    expect(refuseTestHooksOnRealProfile(alias, hooks, where(), root).ok).toBe(false)
+  })
+
+  it('has nothing to check without TG_TEST_HOOKS=1, and its refusal names no path', () => {
+    const dir = join(root, 'plain')
+    mkdirSync(dir)
+    expect(refuseTestHooksOnRealProfile(dir, {}, where()).ok).toBe(true)
+    expect(refuseTestHooksOnRealProfile(dir, { TG_TEST_HOOKS: '0' }, where()).ok).toBe(true)
+    const refusal = refuseTestHooksOnRealProfile(dir, hooks, where())
+    expect(refusal.ok).toBe(false)
+    if (!refusal.ok) expect(refusal.error).not.toContain(root)
+  })
+
+  it('leaves --init-lan-test-profile working on a freshly marked folder, and still refuses a used one', () => {
+    const dir = join(root, 'lan')
+    markSyntheticTestProfile(dir)
+    expect(() => initLanTestProfile(dir)).not.toThrow()
+    expect(existsSync(join(dir, SYNTHETIC_PROFILE_MARKER))).toBe(true)
+    const used = join(root, 'used')
+    markSyntheticTestProfile(used)
+    writeFileSync(join(used, 'other.txt'), 'x')
+    expect(() => initLanTestProfile(used)).toThrow()
   })
 })
