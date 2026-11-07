@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -31,6 +31,7 @@ import {
   type ResearchCase
 } from '../../src/shared/case-model'
 import type { ClientInput, DirectoryQuery, NoteInput } from '../../src/shared/client-model'
+import { confirmationPhrase, migrateProfile } from '../../src/server/maintenance/migrate-database'
 
 // Research cases through the real SQLite repositories, in memory and in
 // temporary profile folders. Fictional data only.
@@ -585,9 +586,23 @@ describe('migration 3 (research_cases)', () => {
     expect(before.clients).toHaveLength(3)
     expect(before.notes).toHaveLength(3)
 
-    const opened = openAppDatabase(userData, () => new Date('2026-10-29T12:00:00.000Z'))
+    const report = migrateProfile({
+
+      dataDir: userData,
+
+      expectFrom: 2,
+
+      expectTo: migrations.length,
+
+      confirm: confirmationPhrase(2, migrations.length),
+
+      now: () => new Date('2026-10-29T12:00:00.000Z')
+
+    })
+
+    const opened = openAppDatabase(userData)
     try {
-      expect(opened.migration).toEqual({ from: 2, to: migrations.length })
+      expect(report).toMatchObject({ from: 2, to: migrations.length })
       expect(getSchemaVersion(opened.db)).toBe(migrations.length)
       expect(dump(opened.db)).toEqual(before)
       expect(count(opened.db, 'research_cases')).toBe(0)
@@ -598,9 +613,7 @@ describe('migration 3 (research_cases)', () => {
       opened.db.close()
     }
 
-    const copies = readdirSync(join(dataDirectory(userData), 'pre-migration'))
-    expect(copies).toEqual([`${DATABASE_FILE_NAME}.v2.2026-10-29T12-00-00-000Z.sqlite`])
-    const copy = new DatabaseSync(join(dataDirectory(userData), 'pre-migration', copies[0]!), { readOnly: true })
+    const copy = new DatabaseSync(join(dataDirectory(userData), report.folder, 'original-v2.sqlite'), { readOnly: true })
     expect(getSchemaVersion(copy)).toBe(2)
     expect(dump(copy)).toEqual(before)
     expect(copy.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%case%'").all()).toEqual([])

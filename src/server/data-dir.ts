@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -37,6 +37,36 @@ export function desktopProfileDir(platform: Platform = currentPlatform()): strin
 
 export const sameDir = (a: string, b: string, platform: NodeJS.Platform) =>
   platform === 'win32' || platform === 'darwin' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b)
+
+function canonical(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return resolve(path)
+  }
+}
+
+/**
+ * Test hooks (TG_TEST_HOOKS=1) must never run against a real profile (#248): refuses the
+ * default Live folder and the desktop folder, compared both as written and with symlinks
+ * resolved. It only ever refuses; it never grants anything.
+ */
+export function refuseTestHooksOnRealProfile(
+  dir: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: Platform = currentPlatform()
+): { ok: true } | { ok: false; error: string } {
+  if (env['TG_TEST_HOOKS'] !== '1') return { ok: true }
+  for (const real of [defaultLiveDataDir(platform), desktopProfileDir(platform)]) {
+    if (sameDir(dir, real, platform.platform) || sameDir(canonical(dir), canonical(real), platform.platform)) {
+      return {
+        ok: false,
+        error: 'Test hooks are on (TG_TEST_HOOKS=1), so this data folder is refused: it is a real profile. Use a new temporary folder. Nothing was started.'
+      }
+    }
+  }
+  return { ok: true }
+}
 
 /**
  * Refuses the desktop app's profile, and any folder that looks like an Electron

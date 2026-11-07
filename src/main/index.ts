@@ -5,6 +5,7 @@ import { BACKUP_EXTENSION, createBackupService, type BackupDialogs } from './bac
 import { createDataServices } from './data-services'
 import { AppData } from './database/app-data'
 import { DatabaseTooNewError } from './database/migrations'
+import { startupProblemMessage } from './database/startup-messages'
 import { registerIpcHandlers } from './ipc'
 import { buildApplicationMenu } from './menu'
 import { APP_SCHEME, resolveRendererTarget } from './renderer-target'
@@ -48,7 +49,8 @@ function openDataOrQuit(): AppData | null {
     const detail =
       error instanceof DatabaseTooNewError
         ? 'Your data was saved by a newer version of Tracing Guatemala. Install that version to keep using it. Nothing was changed.'
-        : 'Your saved data could not be opened. Nothing was changed or deleted. Close other copies of the app and try again.'
+        : (startupProblemMessage(error) ??
+          'Your saved data could not be opened. Nothing was changed or deleted. Close other copies of the app and try again.')
     dialog.showErrorBox('Tracing Guatemala cannot open its data', detail)
     app.exit(1)
     return null

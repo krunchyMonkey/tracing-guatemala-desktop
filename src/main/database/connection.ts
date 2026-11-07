@@ -1,16 +1,15 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { migrate, type MigrationOutcome } from './migrations'
+import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from './identity'
+import { DatabaseTooNewError, getSchemaVersion, migrate, migrations, type Migration, type MigrationOutcome } from './migrations'
+import { DataProfileUnsafeError, inspectProfile, MigrationRequiredError, type PreflightTolerance } from './schema-preflight'
 
 // Driver: Node's built-in node:sqlite (see docs/architecture/client-storage.md for
 // the spike). Only this module and the repositories import it, so a driver swap
 // stays local to src/main/database.
 
-export const DATABASE_FILE_NAME = 'tracing-guatemala.sqlite'
-
-/** SQLite application_id ("TGD1"), so a backup can be told apart from any other SQLite file. */
-export const APPLICATION_ID = 0x54474431
+export { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory }
 
 export interface OpenedDatabase {
   db: DatabaseSync
@@ -18,37 +17,56 @@ export interface OpenedDatabase {
   migration: MigrationOutcome
 }
 
-/** Path of the data directory inside Electron's per-user data directory. */
-export function dataDirectory(userDataDir: string): string {
-  return join(userDataDir, 'data')
-}
-
-function timestampForFileName(date: Date): string {
-  return date.toISOString().replace(/[:.]/g, '-')
+export interface OpenOptions {
+  /** Kept so callers share one options shape; opening no longer writes anything that needs a clock. */
+  now?: () => Date
+  /** In-code test seam only: no environment variable, flag or config file may select it. */
+  migrations?: readonly Migration[]
+  /**
+   * Leftovers the caller already knows about (a restore in progress, a maintenance
+   * run verifying its own swap). In-code only; everything else still fails closed.
+   */
+  tolerate?: PreflightTolerance
 }
 
 /**
- * Open (creating if needed) the app database under `<userData>/data` and apply
- * pending migrations. Before upgrading an existing database, a consistent copy
- * is written to `<userData>/data/pre-migration/`.
+ * Open the app database under `<userData>/data` (#248). A new profile is created at
+ * the latest schema. An existing profile is opened only if it is already at the latest
+ * schema: an older one throws MigrationRequiredError, a newer one DatabaseTooNewError,
+ * and a profile with leftovers or damage DataProfileUnsafeError. Those three are
+ * thrown without creating or opening anything read-write. Upgrading an existing
+ * profile is the operator's maintenance command (src/server/maintenance).
  */
-export function openAppDatabase(userDataDir: string, now: () => Date = () => new Date()): OpenedDatabase {
+export function openAppDatabase(userDataDir: string, options: OpenOptions | (() => Date) = {}): OpenedDatabase {
+  const resolved: OpenOptions = typeof options === 'function' ? { now: options } : options
+  const list = resolved.migrations ?? migrations
+  const latest = list.length
+
+  const state = inspectProfile(userDataDir, latest, resolved.tolerate)
+  switch (state.kind) {
+    case 'migration-required':
+      throw new MigrationRequiredError(state.from, state.to)
+    case 'too-new':
+      throw new DatabaseTooNewError(state.from, state.to)
+    case 'unsafe':
+      throw new DataProfileUnsafeError(state.reason)
+    case 'fresh':
+    case 'current':
+      break
+  }
+
   const dir = dataDirectory(userDataDir)
-  mkdirSync(dir, { recursive: true })
+  if (state.kind === 'fresh') mkdirSync(dir, { recursive: true })
   const file = join(dir, DATABASE_FILE_NAME)
 
   const db = new DatabaseSync(file)
   try {
     configureConnection(db)
-    const migration = migrate(db, {
-      beforeUpgrade: (from) => {
-        const backupDir = join(dir, 'pre-migration')
-        mkdirSync(backupDir, { recursive: true })
-        const target = join(backupDir, `${DATABASE_FILE_NAME}.v${from}.${timestampForFileName(now())}.sqlite`)
-        db.prepare('VACUUM INTO ?').run(target)
-      }
-    })
-    db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
+    // For a current profile this is a no-op that re-checks the version we just read.
+    const migration = migrate(db, {}, list)
+    const row = db.prepare('PRAGMA application_id').get() as { application_id: number }
+    if (row.application_id !== APPLICATION_ID) db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
+    if (getSchemaVersion(db) !== latest) throw new Error('unexpected schema version after open')
     return { db, file, migration }
   } catch (error) {
     db.close()

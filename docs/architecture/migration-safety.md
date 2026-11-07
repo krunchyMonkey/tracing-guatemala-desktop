@@ -1,0 +1,11 @@
+# Migration safety (#248)
+
+Design summary; the operator steps are in [../operations/database-migration.md](../operations/database-migration.md).
+
+- `src/main/database/schema-preflight.ts`: `inspectProfile(userDataDir, latest)` classifies a profile as `fresh`, `current`, `migration-required`, `too-new` or `unsafe(reason)` without creating, opening read-write or modifying anything. It reads the SQLite header (`user_version` at offset 60, `application_id` at offset 68); a non-empty `-wal` means the header may be stale, so the version is re-read through a read-only connection.
+- Residue is checked first and fails closed: a `tracing-guatemala.sqlite.replaced-*` file (interrupted restore) or `maintenance/migration-in-progress.json` (interrupted migration). A missing database next to `pre-restore/`, `pre-migration/`, `maintenance/` or other `.sqlite` files is refused instead of replaced by an empty one.
+- `openAppDatabase` runs the preflight before `mkdir`. Only `fresh` and `current` open; the rest throw `MigrationRequiredError`, `DatabaseTooNewError` or `DataProfileUnsafeError` without opening read-write. The old in-place upgrade with a `VACUUM INTO` copy was removed from normal open. `migrate()` itself is unchanged and is used by the maintenance command, restore staging and tests. The `migrations` option is an in-code test seam; no environment variable, flag or file selects it.
+- `AppData.restoreBackup` still migrates only its staging copy, then swaps. While the restore runs, its own `.replaced-*` file is passed to the preflight as a known leftover; after a crash the next start sees it as `restore-interrupted`.
+- `src/server/maintenance/migrate-database.ts` upgrades a verified copy and swaps it in under the Live folder lock: read-only integrity check and table fingerprints (`manifest.ts`), marker, verified snapshot, staging migration with an additive-content check, swap, strict verify, local record. `src/server/main.ts` exposes it as `--migrate-database` / `--revert-migration` and never starts the server in that mode.
+- Console output and errors carry versions, counts, error codes and names relative to the data folder; never absolute paths or row content.
+- With `TG_TEST_HOOKS=1` the web host refuses the default Live and desktop profile folders. The guard only refuses.

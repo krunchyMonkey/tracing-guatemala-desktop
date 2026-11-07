@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -38,6 +38,7 @@ import {
   type TimerSnapshot
 } from '../../src/shared/case-time'
 import type { ClientInput } from '../../src/shared/client-model'
+import { confirmationPhrase, migrateProfile } from '../../src/server/maintenance/migrate-database'
 
 // Case research hours (#109): the shared rules, the SQLite repository, the timer
 // state machine under an injectable clock, migration 7 on a real v6 profile and
@@ -701,9 +702,23 @@ describe('migration 7 (case_time_entries, case_active_timer)', () => {
     expect(before.cases).toHaveLength(1)
     expect(before.tasks).toHaveLength(1)
 
-    const opened = openAppDatabase(userData, () => new Date('2026-10-29T12:00:00.000Z'))
+    const report = migrateProfile({
+
+      dataDir: userData,
+
+      expectFrom: 6,
+
+      expectTo: migrations.length,
+
+      confirm: confirmationPhrase(6, migrations.length),
+
+      now: () => new Date('2026-10-29T12:00:00.000Z')
+
+    })
+
+    const opened = openAppDatabase(userData)
     try {
-      expect(opened.migration).toEqual({ from: 6, to: migrations.length })
+      expect(report).toMatchObject({ from: 6, to: migrations.length })
       expect(migrations[6]?.name).toBe('case_time')
       expect(dump(opened.db)).toEqual(before)
       expect(count(opened.db, 'case_time_entries')).toBe(0)
@@ -719,9 +734,7 @@ describe('migration 7 (case_time_entries, case_active_timer)', () => {
       opened.db.close()
     }
 
-    const copies = readdirSync(join(dataDirectory(userData), 'pre-migration'))
-    expect(copies).toEqual([`${DATABASE_FILE_NAME}.v6.2026-10-29T12-00-00-000Z.sqlite`])
-    const copy = new DatabaseSync(join(dataDirectory(userData), 'pre-migration', copies[0]!), { readOnly: true })
+    const copy = new DatabaseSync(join(dataDirectory(userData), report.folder, 'original-v6.sqlite'), { readOnly: true })
     expect(getSchemaVersion(copy)).toBe(6)
     copy.close()
   })

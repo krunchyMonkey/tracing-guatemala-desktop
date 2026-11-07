@@ -3,7 +3,10 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { DatabaseTooNewError } from '../main/database/migrations'
-import { DataDirInUseError, defaultLiveDataDir } from './data-dir'
+import { startupProblemMessage } from '../main/database/startup-messages'
+import { DataDirInUseError, defaultLiveDataDir, refuseTestHooksOnRealProfile } from './data-dir'
+import { runMaintenanceCommand } from './maintenance/cli'
+import { createInterface } from 'node:readline/promises'
 import { LanHostError } from './lan'
 import { initLanTestProfile } from './lan-profile'
 import { startDemoMirror, type RunningDemoMirror } from './demo-mirror'
@@ -49,11 +52,49 @@ const { values } = parseArgs({
     'https-host': { type: 'string' },
     'google-client': { type: 'string' },
     'lan-demo-name': { type: 'string' },
-    'init-lan-test-profile': { type: 'boolean' }
+    'init-lan-test-profile': { type: 'boolean' },
+    'migrate-database': { type: 'boolean' },
+    'revert-migration': { type: 'boolean' },
+    'expect-from': { type: 'string' },
+    'expect-to': { type: 'string' },
+    confirm: { type: 'string' }
   }
 })
 const port = Number(values.port ?? process.env['TG_WEB_PORT'] ?? DEFAULT_LIVE_PORT)
 const dataDir = resolve(values['data-dir'] ?? process.env['TG_WEB_DATA_DIR'] ?? defaultLiveDataDir())
+
+// Test hooks never run against the default Live or desktop profile (#248). Refuse-only.
+const hooksGuard = refuseTestHooksOnRealProfile(dataDir)
+if (!hooksGuard.ok) {
+  console.error(hooksGuard.error)
+  process.exit(1)
+}
+
+// Operator maintenance (#248): upgrade or revert an existing profile. Needs an explicit
+// --data-dir, never starts the server and exits when done. No environment variable can
+// confirm or bypass anything here.
+if (values['migrate-database'] || values['revert-migration']) {
+  const prompts = createInterface({ input: process.stdin, output: process.stdout })
+  const code = await runMaintenanceCommand(
+    {
+      migrate: values['migrate-database'] === true,
+      revert: values['revert-migration'] === true,
+      dataDir: values['data-dir'],
+      expectFrom: values['expect-from'],
+      expectTo: values['expect-to'],
+      confirm: values.confirm
+    },
+    {
+      isTTY: process.stdin.isTTY === true,
+      log: (message) => console.log(message),
+      error: (message) => console.error(message),
+      prompt: (question) => prompts.question(question)
+    }
+  )
+  prompts.close()
+  process.exit(code)
+}
+
 const lanHost = values['lan-host'] ?? null
 const httpsHost = values['https-host'] ?? null
 const lanDemoName = values['lan-demo-name'] ?? null
@@ -154,6 +195,7 @@ try {
   // Only messages written by this app are shown; SQLite messages can quote stored values.
   if (error instanceof DataDirInUseError) console.error('Tracing Guatemala is already running with this data. Use that window, or stop it first.')
   else if (error instanceof DatabaseTooNewError) console.error('This data was saved by a newer version of Tracing Guatemala. Nothing was changed.')
+  else if (startupProblemMessage(error) !== null) console.error(startupProblemMessage(error))
   else if (error instanceof LanHostError) console.error(error.message)
   else if (
     lanHost &&
