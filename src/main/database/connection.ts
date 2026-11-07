@@ -1,4 +1,16 @@
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  type Stats,
+  closeSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeSync
+} from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory, PROFILE_MARKER_FILE_NAME } from './identity'
@@ -29,21 +41,87 @@ export interface OpenOptions {
   tolerate?: PreflightTolerance
 }
 
+const lstatOrNull = (path: string): Stats | null => {
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+}
+
 /**
  * Records that this profile has held a database, in the profile root next to data/, so a
  * profile whose data/ was deleted is refused instead of replaced by an empty one (#248).
- * Written atomically; never overwrites an existing marker. Best effort: a failure here
- * must not stop the app, and the next open tries again.
+ * Durable and fail closed: fresh temp file, fsync, rename, read back and verify, then a
+ * best-effort fsync of the folder. THROWS on any failure. An existing marker file is
+ * never rewritten; anything else at the marker path is a failure.
  */
 export function writeProfileMarker(userDataDir: string, now: () => Date = () => new Date()): void {
   const marker = join(userDataDir, PROFILE_MARKER_FILE_NAME)
   const temp = `${marker}.tmp`
+
+  const existing = lstatOrNull(marker)
+  if (existing !== null) {
+    if (existing.isFile()) return
+    throw new Error('profile marker path is not a file')
+  }
+
+  const stale = lstatOrNull(temp)
+  if (stale !== null) {
+    if (!stale.isFile()) throw new Error('profile marker temp path is not a file')
+    unlinkSync(temp)
+  }
+
+  const content = { format: 1, application: 'tracing-guatemala', createdAt: now().toISOString() }
   try {
-    if (existsSync(marker)) return
-    writeFileSync(temp, JSON.stringify({ format: 1, application: 'tracing-guatemala', createdAt: now().toISOString() }))
+    const fd = openSync(temp, 'wx')
+    try {
+      writeSync(fd, JSON.stringify(content))
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
     renameSync(temp, marker)
+  } catch (error) {
+    if (lstatOrNull(temp)?.isFile()) rmSync(temp, { force: true })
+    throw error
+  }
+
+  let ok: boolean
+  try {
+    const back = JSON.parse(readFileSync(marker, 'utf8')) as Record<string, unknown>
+    ok =
+      Object.keys(back).length === 3 &&
+      back['format'] === content.format &&
+      back['application'] === content.application &&
+      back['createdAt'] === content.createdAt
   } catch {
-    rmSync(temp, { force: true })
+    ok = false
+  }
+  if (!ok) {
+    rmSync(marker, { force: true }) // our own just-written file: remove so the next start retries
+    throw new Error('profile marker did not read back')
+  }
+
+  try {
+    const dirFd = openSync(userDataDir, 'r')
+    try {
+      fsyncSync(dirFd)
+    } finally {
+      closeSync(dirFd)
+    }
+  } catch (error) {
+    // Windows cannot open or sync a folder; that is the only failure tolerated here.
+    if (!['EPERM', 'EISDIR', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+  }
+}
+
+function ensureProfileMarker(userDataDir: string, now: (() => Date) | undefined): void {
+  try {
+    writeProfileMarker(userDataDir, now)
+  } catch {
+    throw new DataProfileUnsafeError('profile-marker-unwritable')
   }
 }
 
@@ -73,6 +151,9 @@ export function openAppDatabase(userDataDir: string, options: OpenOptions | (() 
       break
   }
 
+  // An existing database must have its marker before it is opened read-write; a failure opens nothing.
+  if (state.kind === 'current') ensureProfileMarker(userDataDir, resolved.now)
+
   const dir = dataDirectory(userDataDir)
   if (state.kind === 'fresh') mkdirSync(dir, { recursive: true })
   const file = join(dir, DATABASE_FILE_NAME)
@@ -85,7 +166,9 @@ export function openAppDatabase(userDataDir: string, options: OpenOptions | (() 
     const row = db.prepare('PRAGMA application_id').get() as { application_id: number }
     if (row.application_id !== APPLICATION_ID) db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
     if (getSchemaVersion(db) !== latest) throw new Error('unexpected schema version after open')
-    writeProfileMarker(userDataDir, resolved.now)
+    // A new database is served only once its marker exists; if it can't be written the file stays
+    // and the next start (now a current profile) retries before opening it.
+    if (state.kind === 'fresh') ensureProfileMarker(userDataDir, resolved.now)
     return { db, file, migration }
   } catch (error) {
     db.close()

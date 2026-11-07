@@ -1,10 +1,10 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { configureConnection, openAppDatabase, writeProfileMarker } from '../../main/database/connection'
 import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from '../../main/database/identity'
 import { getSchemaVersion, migrate, migrations as defaultMigrations, type Migration } from '../../main/database/migrations'
-import { inspectProfile, MIGRATION_MARKER_RELATIVE, walSize, type UnsafeReason } from '../../main/database/schema-preflight'
+import { DataProfileUnsafeError, inspectProfile, MIGRATION_MARKER_RELATIVE, walSize, type UnsafeReason } from '../../main/database/schema-preflight'
 import { acquireDataDirLock, checkLiveDataDir } from '../data-dir'
 import { computeManifest, manifestsEqual, rowCounts, tableDigest, userTables, type Manifest } from './manifest'
 
@@ -34,6 +34,7 @@ export type MaintenanceCode =
   | 'content-changed'
   | 'swap-failed'
   | 'verify-failed'
+  | 'marker-unwritable'
   | 'nothing-to-revert'
   | 'original-missing'
   | 'changed-since-migration'
@@ -57,7 +58,9 @@ const MESSAGES: Record<string, string> = {
   'staging-failed': 'The upgraded copy could not be made. The live data was not changed; the snapshot was kept.',
   'content-changed': 'The upgrade would have changed stored rows. The live data was not changed; the snapshot was kept.',
   'swap-failed': 'The upgraded copy could not be put in place. See docs/operations/database-migration.md.',
-  'verify-failed': 'The upgraded data failed verification and the original was put back.',
+  'verify-failed': 'The upgraded data failed verification. See docs/operations/database-migration.md.',
+  'marker-unwritable':
+    'The app could not record that this data folder is in use. Check that the folder is writable, then try again. Nothing was deleted.',
   'nothing-to-revert': 'There is no completed migration to revert. Nothing was changed.',
   'original-missing': 'The preserved original is missing. Nothing was changed.',
   'changed-since-migration':
@@ -77,7 +80,14 @@ export class MaintenanceError extends Error {
   }
 }
 
-export type FaultPoint = 'before-swap-write' | 'after-marker' | 'after-snapshot' | 'after-staging' | 'after-swap' | 'after-swap-unrecoverable'
+export type FaultPoint =
+  | 'before-swap-write'
+  | 'after-marker'
+  | 'after-snapshot'
+  | 'after-staging'
+  | 'after-swap'
+  | 'after-swap-unrecoverable'
+  | 'after-swap-mutate-original'
 
 /** Test-only. The `crash` flavor skips every cleanup, as if the process had been killed. */
 class InjectedFault extends Error {
@@ -193,6 +203,21 @@ function injectForeignWrite(file: string): void {
   } finally {
     db.close()
   }
+}
+
+/**
+ * Test-only (faultAt 'after-swap-mutate-original'): change one character of a fictional name in the
+ * preserved original, then put its modification time back, so only a content check can notice.
+ */
+function mutateOriginal(original: string): void {
+  const before = statSync(original)
+  const db = new DatabaseSync(original)
+  try {
+    db.exec("UPDATE clients SET display_name = 'Ana Ejemplp' WHERE id = '00000000-0000-4000-8000-000000000001'")
+  } finally {
+    db.close()
+  }
+  utimesSync(original, before.atime, before.mtime)
 }
 
 function isHealthy(db: DatabaseSync): boolean {
@@ -414,13 +439,20 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
       } catch {
         throw new MaintenanceError('swap-failed')
       }
+      if (faultAt === 'after-swap-mutate-original') mutateOriginal(original)
       if (faultAt === 'after-swap-unrecoverable') throw new InjectedFault('after-swap-unrecoverable', true)
       fault('after-swap')
 
       // i. The strict open must now call it current.
       const after = inspectProfile(dataDir, list.length, { migrationMarker: true })
       if (after.kind !== 'current' || after.version !== to) throw new MaintenanceError('verify-failed')
-      const reopened = openAppDatabase(dataDir, { migrations: list, tolerate: { migrationMarker: true } })
+      let reopened: ReturnType<typeof openAppDatabase>
+      try {
+        reopened = openAppDatabase(dataDir, { migrations: list, tolerate: { migrationMarker: true } })
+      } catch (error) {
+        if (error instanceof DataProfileUnsafeError && error.reason === 'profile-marker-unwritable') throw new MaintenanceError('marker-unwritable')
+        throw error
+      }
       try {
         if (!manifestsEqual(computeManifest(reopened.db), migratedManifest)) throw new MaintenanceError('verify-failed')
       } finally {
@@ -440,10 +472,35 @@ export function migrateProfile(options: MigrateOptions): MigrationReport {
         throw new MaintenanceError('verify-failed')
       }
 
-      // j. Local record, then the marker goes.
+      // ...and by content: the preserved original must still read as exactly the source we fingerprinted.
+      let originalContentOk = false
+      let kept: DatabaseSync | null = null
+      try {
+        kept = new DatabaseSync(original, { readOnly: true })
+        originalContentOk = isHealthy(kept) && manifestsEqual(computeManifest(kept), sourceManifest)
+      } catch {
+        originalContentOk = false
+      } finally {
+        closeQuietly(kept)
+        try {
+          tidySideFiles(original)
+        } catch {
+          // Leftover side files only; the verdict below stands.
+        }
+      }
+      if (!originalContentOk) {
+        failClosed = true // nothing is renamed back, repaired or deleted: the marker stays for a human
+        throw new MaintenanceError('verify-failed')
+      }
+
+      // j. The profile marker (fail closed), local record, then the in-progress marker goes.
+      try {
+        writeProfileMarker(dataDir, now)
+      } catch {
+        throw new MaintenanceError('marker-unwritable')
+      }
       const record: MigrationRecord = { from, to, stamp, completedAt: now().toISOString(), sourceManifest, migratedManifest }
       writeFileSync(join(stampDir, 'migration.json'), JSON.stringify(record, null, 2))
-      writeProfileMarker(dataDir, now)
       rmSync(markerFile, { force: true })
       return { from, to, stamp, folder: `maintenance/${stamp}`, tables: rowCounts(sourceManifest) }
     } catch (error) {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -522,6 +522,23 @@ describe('migrateProfile', () => {
       expect(codeOf(() => migrateProfile(nextOptions()))).toBe('unsafe:migration-interrupted')
     })
 
+    it('a preserved original changed in place after the swap is caught by content: fail closed, nothing repaired', () => {
+      buildCurrent()
+      expect(codeOf(() => migrateProfile(nextOptions({ faultAt: 'after-swap-mutate-original' })))).toBe('verify-failed')
+
+      const original = maintenance(STAMP, `original-v${latest}.sqlite`)
+      expect(existsSync(marker())).toBe(true)
+      expect(existsSync(original)).toBe(true)
+      expect(existsSync(maintenance(STAMP, `snapshot-v${latest}.sqlite`))).toBe(true)
+      expect(existsSync(live())).toBe(true)
+      expect(existsSync(maintenance(STAMP, 'migration.json'))).toBe(false)
+      expect(() => openAppDatabase(root)).toThrow(DataProfileUnsafeError)
+      expect(inspectProfile(root, latest + 1)).toEqual({ kind: 'unsafe', reason: 'migration-interrupted' })
+      expect(codeOf(() => migrateProfile(nextOptions()))).toBe('unsafe:migration-interrupted')
+      // The mutation is still there: nothing was put back, repaired or overwritten.
+      expect(clientNames(original)).toEqual(['Ana Ejemplp', 'Bea Ficticia'])
+    })
+
     it('a migration that changes stored rows is refused before the swap', () => {
       const file = buildCurrent()
       const originalBytes = readFileSync(file)
@@ -737,6 +754,84 @@ describe('a profile that lost its database', () => {
     expect(inspectProfile(root, latest)).toEqual({ kind: 'fresh' })
     openAppDatabase(root).db.close()
     expect(existsSync(live())).toBe(true)
+  })
+})
+
+describe('the profile marker is durable and fails closed', () => {
+  const markerFile = () => join(root, 'profile-initialized.json')
+  const tempBlocker = () => join(root, 'profile-initialized.json.tmp')
+
+  function unsafeReasonOf(work: () => unknown): string {
+    try {
+      work()
+    } catch (error) {
+      if (error instanceof DataProfileUnsafeError) return error.reason
+      throw error
+    }
+    throw new Error('expected a DataProfileUnsafeError')
+  }
+
+  it('a new profile whose marker cannot be written is not served; a restart writes it; deleting data/ is then refused', () => {
+    mkdirSync(tempBlocker())
+    expect(unsafeReasonOf(() => openAppDatabase(root))).toBe('profile-marker-unwritable')
+    expect(existsSync(markerFile())).toBe(false)
+
+    rmSync(tempBlocker(), { recursive: true })
+    const opened = openAppDatabase(root) // the new file is now a current profile; the marker is retried first
+    opened.db.close()
+    expect(existsSync(markerFile())).toBe(true)
+
+    rmSync(dataDirectory(root), { recursive: true, force: true })
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'unsafe', reason: 'missing-database' })
+    expect(unsafeReasonOf(() => openAppDatabase(root))).toBe('missing-database')
+    expect(existsSync(dataDirectory(root))).toBe(false)
+  })
+
+  it('an existing profile without a marker is not opened when the marker cannot be written', () => {
+    const file = buildCurrent()
+    const mainBefore = createHash('sha256').update(readFileSync(file)).digest('hex')
+    const filesBefore = tree(dataDirectory(root))
+    mkdirSync(tempBlocker())
+
+    expect(unsafeReasonOf(() => openAppDatabase(root))).toBe('profile-marker-unwritable')
+    expect(createHash('sha256').update(readFileSync(file)).digest('hex')).toBe(mainBefore)
+    expect(existsSync(`${file}-wal`)).toBe(false)
+    expect(existsSync(`${file}-shm`)).toBe(false)
+    expect(tree(dataDirectory(root))).toEqual(filesBefore)
+    expect(existsSync(markerFile())).toBe(false)
+
+    rmSync(tempBlocker(), { recursive: true })
+    openAppDatabase(root).db.close()
+    expect(existsSync(markerFile())).toBe(true)
+    expect(clientNames(file)).toEqual(['Ana Ejemplo', 'Bea Ficticia'])
+  })
+
+  it('a non-file at the marker path is refused, and counts as evidence when data/ is gone', () => {
+    const file = buildCurrent()
+    const filesBefore = tree(dataDirectory(root))
+    mkdirSync(markerFile())
+    expect(unsafeReasonOf(() => openAppDatabase(root))).toBe('profile-marker-unwritable')
+    expect(tree(dataDirectory(root))).toEqual(filesBefore)
+    expect(existsSync(`${file}-wal`)).toBe(false)
+
+    rmSync(dataDirectory(root), { recursive: true, force: true })
+    expect(inspectProfile(root, latest)).toEqual({ kind: 'unsafe', reason: 'missing-database' })
+    expect(unsafeReasonOf(() => openAppDatabase(root))).toBe('missing-database')
+    expect(existsSync(dataDirectory(root))).toBe(false)
+  })
+
+  it('an existing valid marker is never rewritten', () => {
+    buildCurrent()
+    const content = JSON.stringify({ format: 1, application: 'tracing-guatemala', createdAt: '2026-01-02T03:04:05.000Z' })
+    writeFileSync(markerFile(), content)
+    const old = new Date('2026-01-02T03:04:05.000Z')
+    utimesSync(markerFile(), old, old)
+    const mtime = statSync(markerFile()).mtimeMs
+
+    for (let n = 0; n < 2; n += 1) openAppDatabase(root, { now: () => new Date('2030-01-01T00:00:00.000Z') }).db.close()
+    expect(readFileSync(markerFile(), 'utf8')).toBe(content)
+    expect(statSync(markerFile()).mtimeMs).toBe(mtime)
+    expect(existsSync(tempBlocker())).toBe(false)
   })
 })
 

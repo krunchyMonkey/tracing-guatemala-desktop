@@ -16,6 +16,7 @@ export type UnsafeReason =
   | 'not-an-app-database'
   | 'unreadable'
   | 'wal-unreadable'
+  | 'profile-marker-unwritable'
 
 export type ProfileState =
   | { kind: 'fresh' }
