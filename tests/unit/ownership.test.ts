@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppData } from '../../src/main/database/app-data'
 import { ClientOwnershipError } from '../../src/main/database/client-repository'
 import { configureConnection } from '../../src/main/database/connection'
+import { createDataServices } from '../../src/main/data-services'
 import {
   claimConfirmationPhrase,
   MAX_UNCLAIMED_LIMIT,
@@ -630,6 +631,41 @@ describe('legacy claim workflow', () => {
       const created = newClient(data, 'Created With Owner', T.users.owner)
       expect(data.ownership.previewClaim(created)).toEqual({ ok: false, reason: 'already-claimed' })
       expect(data.ownership.listUnclaimedClients().map((c) => c.id)).not.toContain(created)
+    })
+
+    it('claims for an active app owner without changing the account, who then researches as that same account', () => {
+      const secondOwner = activeUser(data, 'sub-second-owner', 'Second Owner Fictional', 'owner')
+      const { p, evidence } = prepare(T.clients.ana)
+      const rowOf = (id: string) => data.db.prepare('SELECT * FROM app_users WHERE id = ?').get(id)
+      const identitiesOf = (id: string) => data.db.prepare('SELECT provider, subject, user_id, email FROM user_identities WHERE user_id = ? ORDER BY subject').all(id)
+      const ownerBefore = rowOf(T.users.owner)
+      const identitiesBefore = identitiesOf(T.users.owner)
+      expect(ownerBefore).toMatchObject({ role: 'owner', status: 'active' })
+
+      expect(claimFor(T.clients.ana, T.users.owner, p, evidence)).toMatchObject({ ok: true, owner: { ownerUserId: T.users.owner, origin: 'legacy-claim' } })
+
+      // Role, status, identity binding, auth_version and version are untouched by the claim.
+      expect(rowOf(T.users.owner)).toEqual(ownerBefore)
+      expect(identitiesOf(T.users.owner)).toEqual(identitiesBefore)
+
+      const query = { text: '', status: 'all' as const, sources: [], sort: 'name' as const }
+      const services = createDataServices(() => data)
+      const asOwner = services.forScope({ kind: 'user', userId: T.users.owner })
+      expect(asOwner.clients.list(query).map((c) => c.id)).toEqual([T.clients.ana])
+      expect(asOwner.clients.get(T.clients.ana)?.id).toBe(T.clients.ana)
+      // The other owner (a different app owner account) sees nothing of it, by list or by id.
+      const asOther = services.forScope({ kind: 'user', userId: secondOwner.id })
+      expect(asOther.clients.list(query)).toEqual([])
+      expect(asOther.clients.get(T.clients.ana)).toBeNull()
+    })
+
+    it('refuses to claim for a disabled app owner', () => {
+      // Dani is disabled; make the account an owner so only its status can be the reason.
+      data.db.prepare("UPDATE app_users SET role = 'owner' WHERE id = ?").run(T.users.disabled)
+      const { p, evidence } = prepare(T.clients.ana)
+      expect(claimFor(T.clients.ana, T.users.disabled, p, evidence)).toEqual({ ok: false, reason: 'target-unavailable' })
+      expect(data.ownership.getClientOwner(T.clients.ana)).toBeNull()
+      expect(tableCounts()).toEqual({ client_ownership: 0, client_grants: 0, case_grants: 0, ownership_events: 0 })
     })
 
     it('succeeds on retry after a refused attempt', () => {

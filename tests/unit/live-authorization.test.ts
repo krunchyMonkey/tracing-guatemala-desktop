@@ -546,6 +546,135 @@ describe('the app owner role', () => {
   })
 })
 
+describe('an owner who is also a researcher', () => {
+  /** O signs in once; B is promoted to owner by O and signs in again, so two app owners research side by side. */
+  async function twoOwners() {
+    const w = await boot({ signedIn: ['o', 'b'] })
+    const o = sessionOf(w, 'o')
+    const bUser = result<AppUser[]>(await pcall(w.live, o, 'listUsers')).find((u) => u.id === w.users.b.id)!
+    expect(result<UserMutationResult>(await pcall(w.live, o, 'setUserRole', bUser.id, 'owner', bUser.version))).toMatchObject({ ok: true })
+    const b = await signInAs(w.live, 'b')
+    expect((await pcall(w.live, b, 'listUsers')).status).toBe(200)
+    return { w, o, b }
+  }
+
+  it('administers accounts and researches as the same account, which owns what it creates', async () => {
+    const w = await boot({ signedIn: ['o', 'b'] })
+    const o = sessionOf(w, 'o')
+    const accountsBefore = withData((d) => d.db.prepare('SELECT count(*) AS n FROM app_users').get() as { n: number }).n
+
+    // Same session: user administration and research.
+    const users = result<AppUser[]>(await pcall(w.live, o, 'listUsers'))
+    expect(users).toHaveLength(ALL_KEYS.length)
+    const bUser = users.find((u) => u.id === w.users.b.id)!
+    expect(result<UserMutationResult>(await pcall(w.live, o, 'setUserRole', bUser.id, 'owner', bUser.version))).toMatchObject({ ok: true })
+
+    const clientId = idOf(await pcall(w.live, o, 'createClient', clientIn('Alfa Client')), 'client')
+    expect(withData((d) => d.ownership.getClientOwner(clientId))).toMatchObject({ ownerUserId: w.users.o.id })
+    expect(result<{ id: string }>(await pcall(w.live, o, 'getClient', clientId)).id).toBe(clientId)
+    expect(result<{ ok: boolean }>(await pcall(w.live, o, 'updateClient', clientId, clientIn('Alfa Client Edited'))).ok).toBe(true)
+    const caseId = idOf(await pcall(w.live, o, 'createCase', clientId, caseIn('Alfa Case')), 'case')
+
+    expect(result<{ id: string; displayName: string }[]>(await pcall(w.live, o, 'listClients', listQuery)).map((c) => [c.id, c.displayName])).toEqual([[clientId, 'Alfa Client Edited']])
+    expect(result<{ id: string }[]>(await pcall(w.live, o, 'listCases', everything)).map((c) => c.id)).toEqual([caseId])
+    const summary = result<{ counts: { activeClients: number; openCases: number }; activeCases: { caseId: string }[] }>(await pcall(w.live, o, 'getStudioSummary'))
+    expect(summary.counts).toMatchObject({ activeClients: 1, openCases: 1 })
+    expect(summary.activeCases.map((c) => c.caseId)).toEqual([caseId])
+    expect(withData((d) => d.ownership.getCaseOwner(caseId))).toMatchObject({ ownerUserId: w.users.o.id })
+
+    // Still an owner, still one account for this identity, and no second account appeared.
+    const me = result<AppUser>(await pcall(w.live, o, 'getMyAccount'))
+    expect(me).toMatchObject({ id: w.users.o.id, role: 'owner' })
+    const stored = withData((d) => ({
+      identities: d.db.prepare("SELECT user_id FROM user_identities WHERE provider = 'google' AND subject = 'sub-o'").all() as { user_id: string }[],
+      accounts: (d.db.prepare('SELECT count(*) AS n FROM app_users').get() as { n: number }).n,
+      role: (d.db.prepare('SELECT role FROM app_users WHERE id = ?').get(w.users.o.id) as { role: string }).role
+    }))
+    expect(stored.identities).toEqual([{ user_id: w.users.o.id }])
+    expect(stored.accounts).toBe(accountsBefore)
+    expect(stored.role).toBe('owner')
+  })
+
+  it('lets two owners each see only their own research, and the owner role opens nothing of the other', async () => {
+    const { w, o, b } = await twoOwners()
+    const idsO = await populate(w.live, o, 'Alfa')
+    const idsB = await populate(w.live, b, 'Bravo')
+
+    expect(result<{ id: string }[]>(await pcall(w.live, o, 'listClients', listQuery)).map((c) => c.id)).toEqual([idsO.clientId])
+    expect(result<{ id: string }[]>(await pcall(w.live, b, 'listClients', listQuery)).map((c) => c.id)).toEqual([idsB.clientId])
+    expect(result<{ id: string }[]>(await pcall(w.live, o, 'listCases', everything)).map((c) => c.id).sort()).toEqual([idsO.caseId, idsO.case2Id].sort())
+    expect(result<{ id: string }[]>(await pcall(w.live, b, 'listCases', everything)).map((c) => c.id).sort()).toEqual([idsB.caseId, idsB.case2Id].sort())
+    expect(result<unknown[]>(await pcall(w.live, b, 'listClients', { ...listQuery, text: 'Alfa' }))).toEqual([])
+    expect(result<unknown[]>(await pcall(w.live, o, 'listCases', { ...everything, text: 'Bravo' }))).toEqual([])
+
+    const probe = clientIn('Alfa Client')
+    expect(result<{ client: { id: string } }[]>(await pcall(w.live, o, 'findDuplicateClients', probe, null)).map((d) => d.client.id)).toEqual([idsO.clientId])
+    expect(result<unknown[]>(await pcall(w.live, b, 'findDuplicateClients', probe, null))).toEqual([])
+
+    for (const [who, own, other] of [[o, idsO, idsB], [b, idsB, idsO]] as const) {
+      const summary = result<{ counts: { activeClients: number; openCases: number }; activeCases: { caseId: string }[] }>(await pcall(w.live, who, 'getStudioSummary'))
+      expect(summary.counts).toMatchObject({ activeClients: 1, openCases: 2 })
+      expect(summary.activeCases.map((c) => c.caseId).sort()).toEqual([own.caseId, own.case2Id].sort())
+      expect(JSON.stringify(summary)).not.toContain(other.caseId)
+    }
+
+    // Each owner using the other's ids is answered as for missing ids, and nothing changes.
+    const before = manifestNow()
+    const forward = await expectDeniedLikeMissing('owner B reads and writes owner O', (name, ...args) => pcall(w.live, b, name, ...args), idsO, markers('Alfa'))
+    const backward = await expectDeniedLikeMissing('owner O reads and writes owner B', (name, ...args) => pcall(w.live, o, name, ...args), idsB, markers('Bravo'))
+    expect(forward).toBeGreaterThan(55)
+    expect(backward).toBeGreaterThan(55)
+    expect(diffManifests(before, manifestNow())).toEqual([])
+  })
+
+  it('gives a second owner what a viewer grant allows, nothing more, and nothing after it is revoked', async () => {
+    const { w, o, b } = await twoOwners()
+    const idsO = await populate(w.live, o, 'Alfa')
+    const idsB = await populate(w.live, b, 'Bravo')
+
+    withData((d) => {
+      const granted = d.ownership.setClientGrant({ clientId: idsO.clientId, granteeUserId: w.users.b.id, permission: 'viewer', grantedBy: w.users.o.id })
+      expect(granted.ok, JSON.stringify(granted)).toBe(true)
+    })
+    expect(result<{ id: string }>(await pcall(w.live, b, 'getClient', idsO.clientId)).id).toBe(idsO.clientId)
+    expect(result<{ id: string }[]>(await pcall(w.live, b, 'listClients', listQuery)).map((c) => c.id).sort()).toEqual([idsO.clientId, idsB.clientId].sort())
+    expect(result<{ id: string }[]>(await pcall(w.live, b, 'listCases', everything)).map((c) => c.id).sort()).toEqual([idsO.caseId, idsO.case2Id, idsB.caseId, idsB.case2Id].sort())
+
+    const before = manifestNow()
+    const denied = await expectDeniedLikeMissing('owner viewer writes', (name, ...args) => pcall(w.live, b, name, ...args), idsO, [], WRITES)
+    expect(denied).toBeGreaterThan(30)
+    expect(result(await pcall(w.live, b, 'updateClient', idsO.clientId, clientIn('Sneaky')))).toEqual({ ok: false, reason: 'not-found' })
+    expect(result(await pcall(w.live, b, 'createCase', idsO.clientId, caseIn('Sneaky')))).toEqual({ ok: false, reason: 'not-found' })
+    expect(diffManifests(before, manifestNow())).toEqual([])
+    // The grant is the only reason B can read: the grantor is still the owner.
+    expect(withData((d) => d.ownership.getClientOwner(idsO.clientId)?.ownerUserId)).toBe(w.users.o.id)
+
+    withData((d) => {
+      expect(d.ownership.revokeClientGrant({ clientId: idsO.clientId, granteeUserId: w.users.b.id, revokedBy: w.users.o.id })).toMatchObject({ ok: true, revoked: true })
+    })
+    expect(result(await pcall(w.live, b, 'getClient', idsO.clientId))).toBeNull()
+    expect(result<{ id: string }[]>(await pcall(w.live, b, 'listClients', listQuery)).map((c) => c.id)).toEqual([idsB.clientId])
+    await expectDeniedLikeMissing('owner after revoke', (name, ...args) => pcall(w.live, b, name, ...args), idsO, markers('Alfa'))
+  })
+
+  it('derives the owner of a new client from the session, whatever owner the request names', async () => {
+    const { w, o, b } = await twoOwners()
+    const named = { owner: { kind: 'user', userId: w.users.b.id, actor: w.users.b.id }, ownerUserId: w.users.b.id, ownership: { ownerUserId: w.users.b.id } }
+    // Extra fields on the input, and a second argument naming B: either is refused or ignored, never obeyed.
+    await pcall(w.live, o, 'createClient', { ...clientIn('Alfa Client'), ...named })
+    await pcall(w.live, o, 'createClient', clientIn('Alfa Second Client'), { kind: 'user', userId: w.users.b.id, actor: w.users.b.id })
+    await pcall(w.live, o, 'createClient', clientIn('Alfa Third Client'), w.users.b.id)
+
+    const owners = withData((d) => d.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL).map((c) => ({ name: c.displayName, owner: d.ownership.getClientOwner(c.id)?.ownerUserId })))
+    expect(owners.filter((x) => x.owner === w.users.b.id)).toEqual([])
+    for (const made of owners) expect(made.owner, made.name).toBe(w.users.o.id)
+    // The plain request still works and is O's.
+    const plain = idOf(await pcall(w.live, o, 'createClient', clientIn('Alfa Plain Client')), 'client')
+    expect(withData((d) => d.ownership.getClientOwner(plain))).toMatchObject({ ownerUserId: w.users.o.id })
+    expect(result<unknown[]>(await pcall(w.live, b, 'listClients', listQuery))).toEqual([])
+  })
+})
+
 describe('unclaimed legacy records and the host', () => {
   it('stay invisible to every user and to the host session, and the host cannot create ownerless clients', async () => {
     const legacy = { clientId: '', caseId: '' }
