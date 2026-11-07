@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -431,7 +432,7 @@ describe('CaseJournalRepository', () => {
     const marker = 'JOURNAL-ONLY-TEXT'
     saved(journal.create(caseA, { ...entry, body: marker, activity: marker }))
     expect(JSON.stringify(cases.get(caseA))).not.toContain(marker)
-    expect(JSON.stringify(cases.list({ text: '', states: [], archived: 'all', clientId: null, sort: 'updated' }))).not.toContain(marker)
+    expect(JSON.stringify(cases.list({ text: '', states: [], archived: 'all', clientId: null, sort: 'updated' }, SCOPE_ALL))).not.toContain(marker)
     expect(JSON.stringify(new CaseBriefRepository(db).get(caseA))).not.toContain(marker)
   })
 
@@ -642,7 +643,7 @@ describe('backup and restore with journal entries', () => {
   })
 
   function seedCase(title: string): string {
-    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]
+    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)[0]
     let clientId = client?.id
     if (!clientId) {
       const created = data.clients.create(clientInput, { kind: 'unowned' })

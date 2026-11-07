@@ -11,7 +11,7 @@ import {
 } from '../../shared/client-model'
 import type { ClientMutationResult } from '../../shared/ipc'
 import { insertOwnershipEvent } from './ownership-repository'
-import { SCOPE_ALL, scopeCondition, type ResearchScope } from './research-access'
+import { scopeCondition, type ResearchScope } from './research-access'
 
 // Client persistence (client-model/v1). Every write re-runs the shared rules, so
 // the renderer's checks are never trusted. All SQL is parameterized.
@@ -85,7 +85,7 @@ export class ClientRepository {
    * Phase 1 directories hold at most a few hundred clients, so filtering and
    * accent-insensitive search run in JS with the same rules as the prototype.
    */
-  list(query: DirectoryQuery, scope: ResearchScope = SCOPE_ALL): Client[] {
+  list(query: DirectoryQuery, scope: ResearchScope): Client[] {
     return queryClients(this.readableRows(scope).map(toClient), query)
   }
 
@@ -103,7 +103,7 @@ export class ClientRepository {
    * included (client-model/v1 §4.3). Advisory only; invalid input has none. Only clients `scope`
    * may read are compared, so a duplicate check never reveals another account's client (#210).
    */
-  findDuplicates(raw: ClientInput, excludeId: string | null, scope: ResearchScope = SCOPE_ALL): DuplicateCandidate[] {
+  findDuplicates(raw: ClientInput, excludeId: string | null, scope: ResearchScope): DuplicateCandidate[] {
     const { input } = checkClient(raw)
     if (!input) return []
     return findDuplicates(input, this.readableRows(scope).map(toClient), excludeId ?? undefined)

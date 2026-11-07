@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -640,7 +641,7 @@ describe('backup and restore with tasks', () => {
   })
 
   function seedCase(title: string): string {
-    let clientId = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]?.id
+    let clientId = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)[0]?.id
     if (!clientId) {
       const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')

@@ -174,7 +174,7 @@ function bindServices(current: () => AppData, scopeOf: () => ResearchScope): Dat
         current().notebook.restoreRevision(writeCase(caseId), pageId, revisionId, baseVersion)
     },
     studio: {
-      summary: () => current().studio.summary(undefined, scopeOf())
+      summary: () => current().studio.summary(scopeOf())
     }
   }
 }

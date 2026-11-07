@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
@@ -513,7 +514,7 @@ describe('two researchers', () => {
       expect(reply.status, name).toBe(401)
       expect(reply.json(), name).toEqual({ error: 'not-signed-in' })
     }
-    expect(withData((d) => d.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }).map((c) => c.displayName))).not.toContain('After off')
+    expect(withData((d) => d.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL).map((c) => c.displayName))).not.toContain('After off')
   })
 })
 

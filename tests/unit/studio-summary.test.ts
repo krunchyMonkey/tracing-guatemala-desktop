@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CaseJournalRepository } from '../../src/main/database/case-journal-repository'
@@ -105,7 +106,7 @@ describe('shared helpers', () => {
 
 describe('an empty database', () => {
   it('returns zeros, empty lists and no continue case', () => {
-    expect(t.repos.studio.summary(NOW)).toEqual({
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW)).toEqual({
       today: '2026-10-28',
       counts: {
         activeClients: 0,
@@ -124,7 +125,7 @@ describe('an empty database', () => {
 
   it('counts a client with no cases as an active client', () => {
     t.client('Ana Ejemplo')
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     expect(s.counts.activeClients).toBe(1)
     expect(s.counts.openCases).toBe(0)
     expect(s.continueCase).toBeNull()
@@ -149,7 +150,7 @@ describe('counts and ordering', () => {
     const waiting = t.newCase(ana, 'Waiting case', 'waiting')
     t.task(waiting, 'Soon task', '2026-10-30')
 
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     expect(s.counts).toEqual({
       activeClients: 1,
       openCases: 3,
@@ -181,7 +182,7 @@ describe('counts and ordering', () => {
     t.task(c, 'In seven days', '2026-11-04')
     t.task(c, 'In eight days', '2026-11-05')
     for (const moment of [new Date(2026, 9, 28, 0, 0, 0), new Date(2026, 9, 28, 23, 59, 59)]) {
-      const s = t.repos.studio.summary(moment)
+      const s = t.repos.studio.summary(SCOPE_ALL, moment)
       expect(s.counts.overdueTasks).toBe(1)
       expect(s.counts.tasksDueSoon).toBe(2)
       expect(s.upcomingTasks.map((x) => [x.title, x.overdue])).toEqual([
@@ -192,7 +193,7 @@ describe('counts and ordering', () => {
       ])
     }
     // One second later the day has turned: "Today" is now overdue.
-    const next = t.repos.studio.summary(new Date(2026, 9, 29, 0, 0, 0))
+    const next = t.repos.studio.summary(SCOPE_ALL, new Date(2026, 9, 29, 0, 0, 0))
     expect(next.counts.overdueTasks).toBe(2)
   })
 
@@ -205,7 +206,7 @@ describe('counts and ordering', () => {
     t.hours(open, '2026-10-25', 120) // previous Sunday: month only
     t.hours(done, '2026-10-28', 15) // delivered cases still count
     t.hours(open, '2026-09-30', 500) // previous month
-    expect(t.repos.studio.summary(NOW).hours).toEqual({ weekMinutes: 105, monthMinutes: 195 })
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).hours).toEqual({ weekMinutes: 105, monthMinutes: 195 })
   })
 })
 
@@ -224,7 +225,7 @@ describe('archived work is excluded everywhere', () => {
     expect(t.repos.cases.archive(archivedCase).ok).toBe(true)
     expect(t.repos.clients.archive(bea).ok).toBe(true)
 
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     const everything = JSON.stringify(s)
     expect(everything).not.toContain('Archived case')
     expect(everything).not.toContain('Locked case')
@@ -243,9 +244,9 @@ describe('archived work is excluded everywhere', () => {
     const ana = t.client('Ana Ejemplo')
     const c = t.newCase(ana, 'Came back', 'active')
     t.repos.cases.archive(c)
-    expect(t.repos.studio.summary(NOW).counts.openCases).toBe(0)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).counts.openCases).toBe(0)
     t.repos.cases.unarchive(c)
-    expect(t.repos.studio.summary(NOW).counts.openCases).toBe(1)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).counts.openCases).toBe(1)
   })
 })
 
@@ -258,7 +259,7 @@ describe('limits', () => {
       ids.push(t.newCase(ana, `Case ${i}`, 'active'))
     }
     for (let i = 0; i < 12; i++) t.task(ids[9]!, `Task ${String(i).padStart(2, '0')}`, `2026-11-${String(i + 1).padStart(2, '0')}`)
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     expect(s.counts.openCases).toBe(10)
     expect(s.counts.tasksDueSoon).toBe(4) // 11-01 to 11-04
     expect(s.activeCases).toHaveLength(6)
@@ -276,11 +277,11 @@ describe('continue case', () => {
     const intake = t.newCase(ana, 'Intake', 'intake')
     t.at('2026-10-21T09:00:00.000Z')
     t.newCase(ana, 'Delivered', 'delivered')
-    expect(t.repos.studio.summary(NOW).continueCase?.caseId).toBe(intake)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase?.caseId).toBe(intake)
 
     t.at('2026-10-22T09:00:00.000Z')
     const waiting = t.newCase(ana, 'Waiting', 'waiting')
-    expect(t.repos.studio.summary(NOW).continueCase?.caseId).toBe(waiting)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase?.caseId).toBe(waiting)
 
     t.at('2026-10-23T09:00:00.000Z')
     const oldActive = t.newCase(ana, 'Active older', 'active')
@@ -288,21 +289,21 @@ describe('continue case', () => {
     const newActive = t.newCase(ana, 'Active newer', 'active')
     t.at('2026-10-25T09:00:00.000Z')
     t.newCase(ana, 'Waiting newest', 'waiting')
-    expect(t.repos.studio.summary(NOW).continueCase?.caseId).toBe(newActive)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase?.caseId).toBe(newActive)
 
     // Touching the older active case makes it the most recently updated.
     t.at('2026-10-26T09:00:00.000Z')
     t.task(oldActive, 'Touch', null)
-    expect(t.repos.studio.summary(NOW).continueCase?.caseId).toBe(oldActive)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase?.caseId).toBe(oldActive)
 
     t.repos.cases.archive(oldActive)
-    expect(t.repos.studio.summary(NOW).continueCase?.caseId).toBe(newActive)
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase?.caseId).toBe(newActive)
   })
 
   it('is null when only finished cases remain', () => {
     const ana = t.client('Ana Ejemplo')
     t.newCase(ana, 'Done', 'closed')
-    expect(t.repos.studio.summary(NOW).continueCase).toBeNull()
+    expect(t.repos.studio.summary(SCOPE_ALL, NOW).continueCase).toBeNull()
   })
 })
 
@@ -320,7 +321,7 @@ describe('recent activity', () => {
     t.at('2026-10-24T09:00:00.000Z')
     t.repos.cases.setState(c, 'waiting')
 
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     expect(s.recentActivity.map((a) => [a.kind, a.label, a.at])).toEqual([
       ['event', 'Waiting on someone', '2026-10-24T09:00:00.000Z'],
       ['time', 'Logged 1h 30m', '2026-10-23T09:00:00.000Z'],
@@ -340,7 +341,7 @@ describe('privacy and attribution', () => {
     t.task(c, 'A task', '2026-10-20')
     t.entry(c)
     t.hours(c, '2026-10-27', 30)
-    const json = JSON.stringify(t.repos.studio.summary(NOW))
+    const json = JSON.stringify(t.repos.studio.summary(SCOPE_ALL, NOW))
     expect(json).not.toContain(SECRET)
     expect(json).not.toContain('ana@example.com')
     expect(json).not.toMatch(/"(body|description|goal|note|email|otherContact)"/)
@@ -357,7 +358,7 @@ describe('privacy and attribution', () => {
     const beaTask = t.task(beaCase, 'Bea task', '2026-10-26')
     t.hours(beaCase, '2026-10-27', 45)
 
-    const s = t.repos.studio.summary(NOW)
+    const s = t.repos.studio.summary(SCOPE_ALL, NOW)
     const byTask = new Map(s.upcomingTasks.map((x) => [x.taskId, x]))
     expect(byTask.get(anaTask)).toMatchObject({ caseId: anaCase, clientId: ana, caseTitle: 'Ana case', clientDisplayName: 'Ana Ejemplo' })
     expect(byTask.get(beaTask)).toMatchObject({ caseId: beaCase, clientId: bea, caseTitle: 'Bea case', clientDisplayName: 'Bea Muestra' })

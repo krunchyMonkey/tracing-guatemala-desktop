@@ -17,7 +17,7 @@ import {
   type StudioSummary,
   type StudioTask
 } from '../../shared/studio-summary'
-import { SCOPE_ALL, scopeCondition, type ResearchScope } from './research-access'
+import { scopeCondition, type ResearchScope } from './research-access'
 
 // Research Studio summary (studio-summary/v1, #116): read-only aggregate queries for
 // the Home dashboard, a handful of joined statements instead of one call per case.
@@ -101,9 +101,9 @@ export class StudioSummaryRepository {
 
   /**
    * The dashboard figures for local today (the injected clock's date), counting only what `scope` may
-   * read (#210). The default scope is everything, for trusted internal callers.
+   * read (#210). Scope is required; trusted internal callers pass SCOPE_ALL explicitly.
    */
-  summary(now: Date = this.clock.now(), scope: ResearchScope = SCOPE_ALL): StudioSummary {
+  summary(scope: ResearchScope, now: Date = this.clock.now()): StudioSummary {
     const today = localDateString(now)
     const soonEnd = addDays(today, STUDIO_DUE_WINDOW_DAYS)
     const { weekStart, weekEnd, monthPrefix } = hoursRanges(today)

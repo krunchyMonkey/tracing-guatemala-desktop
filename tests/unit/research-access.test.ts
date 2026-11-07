@@ -546,7 +546,7 @@ describe('a profile migrated from schema 9', () => {
     const local = services().forLocalOperator()
     expect(local.clients.list(everyone)).toEqual([])
     expect(local.clients.get(LEGACY.clients.ana)).toBeNull()
-    expect(data.clients.list(everyone)).toHaveLength(3) // still there, just sealed
+    expect(data.clients.list(everyone, SCOPE_ALL)).toHaveLength(3) // still there, just sealed
   })
 })
 
@@ -656,5 +656,41 @@ describe('the global timer', () => {
     // The same case is returned unchanged for a writer.
     expect(as(w.cato).time.start(w.k1)).toMatchObject({ ok: true, timer: { caseId: w.k1, version: 1 } })
     expect(data.db.prepare('SELECT count(*) AS n FROM case_active_timer').get()).toEqual({ n: 1 })
+  })
+})
+
+describe('repository scope parameters are required', () => {
+  it('refuses to compile a call that omits the scope', () => {
+    const w = world()
+    const probe = (): void => {
+      // @ts-expect-error scope is required: a missing scope must never mean everyone
+      data.clients.list(everyone)
+      // @ts-expect-error scope is required
+      data.clients.findDuplicates(clientInput('Client One'), null)
+      // @ts-expect-error scope is required
+      data.cases.list(allCases)
+      // @ts-expect-error scope is required
+      data.studio.summary()
+    }
+    expect(typeof probe).toBe('function')
+    expect(w.c1).toBeTruthy()
+  })
+
+  it('returns nothing for no scope and only the person\'s own rows for a user scope', () => {
+    const w = world()
+    const mine = scopeOf(w.ana)
+    const candidate = clientInput('Client One')
+
+    expect(data.clients.list(everyone, SCOPE_NONE)).toEqual([])
+    expect(data.clients.list(everyone, mine).map((c) => c.displayName)).toEqual(['Client One'])
+    expect(data.clients.findDuplicates(candidate, null, SCOPE_NONE)).toEqual([])
+    expect(data.clients.findDuplicates(candidate, null, scopeOf(w.beto))).toEqual([])
+    expect(data.clients.findDuplicates(candidate, null, mine).map((m) => m.client.displayName)).toEqual(['Client One'])
+
+    expect(data.cases.list(allCases, SCOPE_NONE)).toEqual([])
+    expect(data.cases.list(allCases, mine).map((c) => c.title).sort()).toEqual(['Case One', 'Case Two'])
+
+    expect(data.studio.summary(SCOPE_NONE).activeCases).toEqual([])
+    expect(data.studio.summary(mine).activeCases.length).toBe(2)
   })
 })

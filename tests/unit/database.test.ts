@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -217,7 +218,7 @@ describe('ClientRepository', () => {
       ]
     })
     expect(JSON.stringify(result)).not.toContain(secret)
-    expect(repo.list({ ...defaultQuery, status: 'all' })).toEqual([])
+    expect(repo.list({ ...defaultQuery, status: 'all' }, SCOPE_ALL)).toEqual([])
   })
 
   it('stores SQL-like text literally', () => {
@@ -274,11 +275,11 @@ describe('ClientRepository', () => {
     const carl = create({ displayName: 'Carlos Ficticio', fiverrUsername: 'other_handle' })
     repo.archive(carl.id)
 
-    expect(repo.list(defaultQuery).map((c) => c.id)).toEqual([ana.id, bea.id])
-    expect(repo.list({ ...defaultQuery, status: 'archived' }).map((c) => c.id)).toEqual([carl.id])
-    expect(repo.list({ ...defaultQuery, sources: ['referral'] }).map((c) => c.id)).toEqual([bea.id])
-    expect(repo.list({ ...defaultQuery, text: 'ana' }).map((c) => c.id)).toEqual([ana.id])
-    expect(repo.list({ ...defaultQuery, status: 'all', sort: 'updated' }).map((c) => c.id)).toEqual([carl.id, bea.id, ana.id])
+    expect(repo.list(defaultQuery, SCOPE_ALL).map((c) => c.id)).toEqual([ana.id, bea.id])
+    expect(repo.list({ ...defaultQuery, status: 'archived' }, SCOPE_ALL).map((c) => c.id)).toEqual([carl.id])
+    expect(repo.list({ ...defaultQuery, sources: ['referral'] }, SCOPE_ALL).map((c) => c.id)).toEqual([bea.id])
+    expect(repo.list({ ...defaultQuery, text: 'ana' }, SCOPE_ALL).map((c) => c.id)).toEqual([ana.id])
+    expect(repo.list({ ...defaultQuery, status: 'all', sort: 'updated' }, SCOPE_ALL).map((c) => c.id)).toEqual([carl.id, bea.id, ana.id])
   })
 
   it('persists across reopening the database file', () => {

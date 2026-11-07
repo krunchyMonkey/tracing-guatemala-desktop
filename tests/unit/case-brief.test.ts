@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -471,7 +472,7 @@ describe('backup and restore with briefs', () => {
   })
 
   function seedCase(title: string): string {
-    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]
+    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)[0]
     let clientId = client?.id
     if (!clientId) {
       const created = data.clients.create(clientInput, { kind: 'unowned' })

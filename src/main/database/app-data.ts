@@ -14,6 +14,7 @@ import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, ty
 import { getSchemaVersion, migrate } from './migrations'
 import { NoteRepository } from './note-repository'
 import { NotebookRepository } from './notebook-repository'
+import { SCOPE_ALL } from './research-access'
 import { OwnershipRepository } from './ownership-repository'
 import { UserRepository } from './user-repository'
 
@@ -211,7 +212,7 @@ export class AppData {
     try {
       renameSync(staging, live)
       this.reopen()
-      const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }).length
+      const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL).length
       if (restoredClients !== expected.clients) throw new Error('restored client count differs from the backup')
       if (count(this.opened.db, 'research_cases') !== expected.cases) {
         throw new Error('restored case count differs from the backup')

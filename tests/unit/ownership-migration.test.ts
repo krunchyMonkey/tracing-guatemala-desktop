@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -286,6 +287,6 @@ describe('backup and restore across the ownership schema', () => {
     expect(foreignKeyViolations(data.db)).toEqual([])
     expect(data.ownership.listUnclaimedClients({ limit: 500 })).toHaveLength(LEGACY_COUNTS.clients)
     // And an old case on a restored client still derives "unclaimed".
-    expect(data.ownership.getCaseOwner(data.cases.list({ clientId: null, archived: 'all', states: [], text: '', sort: 'created' })[0]!.id)).toBeNull()
+    expect(data.ownership.getCaseOwner(data.cases.list({ clientId: null, archived: 'all', states: [], text: '', sort: 'created' }, SCOPE_ALL)[0]!.id)).toBeNull()
   })
 })
