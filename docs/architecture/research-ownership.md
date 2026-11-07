@@ -1,6 +1,6 @@
 # Research ownership and access grants (#209)
 
-**Status:** Source only. This stores ownership and grants and provides a host-only legacy claim. It does **not** enforce privacy: every read and write API still behaves as before. Enforcement is #210.
+**Status:** Source only. This stores ownership and grants and provides a host-only legacy claim. It does **not** enforce access itself: enforcement is #210 and is described in [research-authorization.md](research-authorization.md). #209 and #210 together are still **not** a Live deployment: #211 owns the cutover and #212 owns the sharing UI.
 
 > **Do not deploy #209 alone.** See [Why #209 must not ship alone](#why-209-must-not-ship-alone).
 
@@ -34,7 +34,7 @@ Each write is one `BEGIN IMMEDIATE` transaction that also appends the audit even
 - Granting the same person again changes the permission (one row, `grant-changed`) or does nothing if it is the same (`unchanged`). Only `permission` and `updated_at` can change.
 - Revoking deletes the grant row (a grant is a permission, not a research record) and appends `grant-revoked`. Revoking is allowed even if the grantee has since been disabled.
 
-How a case grant and a client grant combine is a #210/#212 policy decision, not stored here.
+How a case grant and a client grant combine is decided by #210: see [research-authorization.md](research-authorization.md#effective-access-rules).
 
 ## Creating clients
 
@@ -58,7 +58,7 @@ Only the single root row is written, so a partially assigned family tree is impo
 
 ## What #209 does not do
 
-- **No enforcement.** Listing, reading and writing records is unchanged for every principal. That is #210.
+- **No enforcement.** Listing, reading and writing records is unchanged for every principal in this change alone. That is #210 ([research-authorization.md](research-authorization.md)).
 - **No sharing UI or sharing API.** That is #212.
 - **No Live cutover, claim or deployment.** That is #211, with fresh owner authorization.
 - No ownership transfer, no automatic claim by Google subject, email, login, role or "first user".
@@ -69,7 +69,7 @@ Only the single root row is written, so a partially assigned family tree is impo
 - **The Live profile migrates on open.** Starting a build that contains migration 10 against a Live profile upgrades it to schema 10 at once. A pre-migration snapshot is taken first, but writes can resume immediately after.
 - **An older build then refuses the database** (`DatabaseTooNewError`, fail closed; it cannot corrupt it). Rollback is therefore "old build plus the pre-migration snapshot taken before writes resumed". Anything written after the upgrade is not in that snapshot, so rollback after writes resume loses those writes. It cannot be done blindly.
 - **Host creates are refused in a profile with users** until #210/#212 provide owner selection, so the host loopback session can no longer create clients in the Live profile as it exists today.
-- **Nothing is protected.** Records created by users are owned, but every approved user can still read and write every record until #210 lands.
+- **Nothing is protected by #209 alone.** Records created by users are owned, but every approved user can still read and write every record until #210 lands. With #210 the host and every approved user are scoped; the cutover is still #211.
 
 #209, #210 and the #211 cutover must be released together, in a separately owner-approved step.
 

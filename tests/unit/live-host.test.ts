@@ -203,15 +203,19 @@ describe('user directory (#179)', () => {
     expect(refused.status).toBe(409)
     expect(refused.json()).toEqual({ error: 'owner-required' })
     expect(refused.text).not.toContain('Bruno')
-    expect((await call<{ id: string }[]>(live, host, 'listClients', everyone)).map((c) => c.id)).toEqual([first.client.id])
+    // #210: once the profile has users, the host session has no implicit read of research content, so the
+    // unclaimed client is sealed from it (it is still in the database, checked below) until it is reconciled.
+    expect(await call<{ id: string }[]>(live, host, 'listClients', everyone)).toEqual([])
+    expect(await call(live, host, 'getClient', first.client.id)).toBeNull()
 
     await server!.close()
     server = null
     const db = new DatabaseSync(join(dataDir, 'data', 'tracing-guatemala.sqlite'), { readOnly: true })
     const owned = (db.prepare('SELECT count(*) AS n FROM client_ownership').get() as { n: number }).n
     const events = (db.prepare('SELECT count(*) AS n FROM ownership_events').get() as { n: number }).n
+    const clients = (db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n
     db.close()
-    expect([owned, events]).toEqual([0, 0])
+    expect([owned, events, clients]).toEqual([0, 0, 1])
   })
 
   it('rejects malformed user calls', async () => {

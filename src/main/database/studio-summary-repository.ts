@@ -17,6 +17,7 @@ import {
   type StudioSummary,
   type StudioTask
 } from '../../shared/studio-summary'
+import { SCOPE_ALL, scopeCondition, type ResearchScope } from './research-access'
 
 // Research Studio summary (studio-summary/v1, #116): read-only aggregate queries for
 // the Home dashboard, a handful of joined statements instead of one call per case.
@@ -58,12 +59,28 @@ interface ActivityRow {
   display_name: string
 }
 
-const LIVE = `
+/** What a case-only grantee sees instead of a client name they may not read (#210). */
+const SHARED_CASE_LABEL = 'Shared case'
+
+/**
+ * The `live` CTE limited to the cases `scope` may read (#210), with its positional parameters. A case
+ * reached only through a case grant shows no client name: client-level access is a separate right.
+ */
+function liveCte(scope: ResearchScope): { sql: string; params: string[] } {
+  const clientRead = scopeCondition(scope, 'cl.id', 'client')
+  const caseRead = scopeCondition(scope, 'c.id', 'case')
+  return {
+    sql: `
   WITH live AS (
-    SELECT c.id AS case_id, c.client_id, c.title, cl.display_name, c.state, c.due_date, c.updated_at
+    SELECT c.id AS case_id, c.client_id, c.title,
+           CASE WHEN ${clientRead.sql} THEN cl.display_name ELSE '${SHARED_CASE_LABEL}' END AS display_name,
+           c.state, c.due_date, c.updated_at
     FROM research_cases c JOIN clients cl ON cl.id = c.client_id
-    WHERE cl.status = 'active' AND c.archived_at IS NULL
-  )`
+    WHERE cl.status = 'active' AND c.archived_at IS NULL AND ${caseRead.sql}
+  )`,
+    params: [...clientRead.params, ...caseRead.params]
+  }
+}
 
 const OPEN = `state IN (${OPEN_STATES.map((s) => `'${s}'`).join(', ')})`
 
@@ -82,49 +99,55 @@ export class StudioSummaryRepository {
     private readonly clock: { now: () => Date } = { now: () => new Date() }
   ) {}
 
-  /** The dashboard figures for local today (the injected clock's date). */
-  summary(now: Date = this.clock.now()): StudioSummary {
+  /**
+   * The dashboard figures for local today (the injected clock's date), counting only what `scope` may
+   * read (#210). The default scope is everything, for trusted internal callers.
+   */
+  summary(now: Date = this.clock.now(), scope: ResearchScope = SCOPE_ALL): StudioSummary {
     const today = localDateString(now)
     const soonEnd = addDays(today, STUDIO_DUE_WINDOW_DAYS)
     const { weekStart, weekEnd, monthPrefix } = hoursRanges(today)
-    const one = <T>(sql: string, ...params: (string | number)[]) => this.db.prepare(sql).get(...params) as unknown as T
-    const all = <T>(sql: string, ...params: (string | number)[]) => this.db.prepare(sql).all(...params) as unknown as T[]
+    const one = <T>(sql: string, params: (string | number)[]) => this.db.prepare(sql).get(...params) as unknown as T
+    const all = <T>(sql: string, params: (string | number)[]) => this.db.prepare(sql).all(...params) as unknown as T[]
+    // Every statement below starts with the scoped `live` CTE; its parameters come first, then the statement's own.
+    const LIVE = liveCte(scope)
 
-    const activeClients = one<{ n: number }>(`SELECT count(*) AS n FROM clients WHERE status = 'active'`).n
+    const clientRead = scopeCondition(scope, 'id', 'client')
+    const activeClients = one<{ n: number }>(`SELECT count(*) AS n FROM clients WHERE status = 'active' AND ${clientRead.sql}`, clientRead.params).n
 
     const casesByState = emptyStateCounts()
-    for (const row of all<{ state: CaseState; n: number }>(`${LIVE} SELECT state, count(*) AS n FROM live GROUP BY state`)) {
+    for (const row of all<{ state: CaseState; n: number }>(`${LIVE.sql} SELECT state, count(*) AS n FROM live GROUP BY state`, LIVE.params)) {
       casesByState[row.state] = row.n
     }
 
     const taskCounts = one<{ overdue: number; soon: number }>(
-      `${LIVE}
-       SELECT coalesce(sum(t.due_date < ?1), 0) AS overdue,
-              coalesce(sum(t.due_date >= ?1 AND t.due_date <= ?2), 0) AS soon
+      `${LIVE.sql}
+       SELECT coalesce(sum(t.due_date < ?), 0) AS overdue,
+              coalesce(sum(t.due_date >= ? AND t.due_date <= ?), 0) AS soon
        FROM case_tasks t JOIN live l ON l.case_id = t.case_id
        WHERE t.status = 'pending' AND t.due_date IS NOT NULL AND l.${OPEN}`,
-      today,
-      soonEnd
+      [...LIVE.params, today, today, soonEnd]
     )
 
     const caseColumns = 'case_id, client_id, title, display_name, state, due_date'
     const continueRow = one<CaseRow | undefined>(
-      `${LIVE} SELECT ${caseColumns} FROM live WHERE ${OPEN}
-       ORDER BY CASE state WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END, updated_at DESC, case_id LIMIT 1`
+      `${LIVE.sql} SELECT ${caseColumns} FROM live WHERE ${OPEN}
+       ORDER BY CASE state WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END, updated_at DESC, case_id LIMIT 1`,
+      LIVE.params
     )
     const activeCases = all<CaseRow>(
-      `${LIVE} SELECT ${caseColumns} FROM live WHERE ${OPEN} ORDER BY updated_at DESC, case_id LIMIT ?`,
-      STUDIO_ACTIVE_CASES_LIMIT
+      `${LIVE.sql} SELECT ${caseColumns} FROM live WHERE ${OPEN} ORDER BY updated_at DESC, case_id LIMIT ?`,
+      [...LIVE.params, STUDIO_ACTIVE_CASES_LIMIT]
     ).map(toCase)
 
     const upcomingTasks = all<TaskRow>(
-      `${LIVE}
+      `${LIVE.sql}
        SELECT t.id AS task_id, t.title AS task_title, t.due_date AS task_due,
               l.case_id, l.client_id, l.title, l.display_name
        FROM case_tasks t JOIN live l ON l.case_id = t.case_id
        WHERE t.status = 'pending' AND t.due_date IS NOT NULL AND l.${OPEN}
        ORDER BY t.due_date, t.created_at, t.id LIMIT ?`,
-      STUDIO_TASKS_LIMIT
+      [...LIVE.params, STUDIO_TASKS_LIMIT]
     ).map(
       (r): StudioTask => ({
         caseId: r.case_id,
@@ -139,7 +162,7 @@ export class StudioSummaryRepository {
     )
 
     const recentActivity = all<ActivityRow>(
-      `${LIVE}
+      `${LIVE.sql}
        SELECT * FROM (
          SELECT 'event' AS kind, e.id, e.occurred_at AS at, e.kind AS event_kind, e.from_state, e.to_state,
                 NULL AS minutes, l.case_id, l.client_id, l.title, l.display_name
@@ -151,7 +174,7 @@ export class StudioSummaryRepository {
          SELECT 'time', t.id, t.created_at, NULL, NULL, NULL, t.duration_minutes, l.case_id, l.client_id, l.title, l.display_name
          FROM case_time_entries t JOIN live l ON l.case_id = t.case_id
        ) ORDER BY at DESC, kind, id LIMIT ?`,
-      STUDIO_ACTIVITY_LIMIT
+      [...LIVE.params, STUDIO_ACTIVITY_LIMIT]
     )
       .map(
         (r): StudioActivity => ({
@@ -173,13 +196,11 @@ export class StudioSummaryRepository {
       .sort(compareActivity)
 
     const hours = one<{ week: number; month: number }>(
-      `${LIVE}
-       SELECT coalesce(sum(CASE WHEN t.work_date BETWEEN ?1 AND ?2 THEN t.duration_minutes END), 0) AS week,
-              coalesce(sum(CASE WHEN substr(t.work_date, 1, 7) = ?3 THEN t.duration_minutes END), 0) AS month
+      `${LIVE.sql}
+       SELECT coalesce(sum(CASE WHEN t.work_date BETWEEN ? AND ? THEN t.duration_minutes END), 0) AS week,
+              coalesce(sum(CASE WHEN substr(t.work_date, 1, 7) = ? THEN t.duration_minutes END), 0) AS month
        FROM case_time_entries t JOIN live l ON l.case_id = t.case_id`,
-      weekStart,
-      weekEnd,
-      monthPrefix
+      [...LIVE.params, weekStart, weekEnd, monthPrefix]
     )
 
     return {

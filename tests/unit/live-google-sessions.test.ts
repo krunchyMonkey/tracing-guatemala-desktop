@@ -9,6 +9,7 @@ import type { AppUser, SignInRequest, UserMutationResult, UserRole } from '../..
 import { createFakeIdentityProvider } from '../../src/server/auth/fake-provider'
 import type { VerifiedIdentity } from '../../src/server/auth/identity'
 import { authorizeCall, type Principal } from '../../src/server/auth/policy'
+import { RESEARCH_CLASS } from '../../src/server/auth/research-policy'
 import { fakeIdentityAllowed, testFakeProvider } from '../../src/server/auth/provider-selection'
 import { createMemoryUserSessionStore, type UserSessionStore } from '../../src/server/auth/user-sessions'
 import { initLanTestProfile, LAN_TEST_MARKER } from '../../src/server/lan-profile'
@@ -251,10 +252,11 @@ describe('authorization policy table', () => {
     for (const name of [...NEVER, ...ADMIN, ...SELF]) expect(CALL_NAMES).toContain(name)
   })
 
-  // The policy allows remote users every call it doesn't list as special, so a new call must be
+  // The role policy allows remote users every call it doesn't list as special, so a new call must be
   // classified on purpose: adding one fails here until it is placed in this list or a policy set.
+  // Since #210 each of the research calls is also resource-scoped (research-policy.ts, exhaustive at compile time).
   it('classifies every call name explicitly (a new call fails until it is reviewed)', () => {
-    const SHARED_WORKSPACE = [
+    const RESEARCH_CALLS = [
       'getAppInfo', 'listClients', 'getClient', 'createClient', 'updateClient', 'archiveClient', 'restoreClient', 'findDuplicateClients',
       'listNotes', 'createNote', 'updateNote', 'listCases', 'getCase', 'listCaseEvents', 'createCase', 'updateCase', 'setCaseState',
       'archiveCase', 'unarchiveCase', 'getCaseBrief', 'saveCaseBrief', 'listJournalEntries', 'createJournalEntry', 'updateJournalEntry',
@@ -265,7 +267,16 @@ describe('authorization policy table', () => {
       'updateTimeEntry', 'deleteTimeEntry', 'getActiveTimer', 'startTimer', 'pauseTimer', 'resumeTimer', 'heartbeatTimer',
       'stopAndSaveTimer', 'discardTimer', 'getStudioSummary'
     ]
-    expect([...CALL_NAMES].sort()).toEqual([...SHARED_WORKSPACE, ...NEVER, ...ADMIN, ...SELF].sort())
+    expect([...CALL_NAMES].sort()).toEqual([...RESEARCH_CALLS, ...NEVER, ...ADMIN, ...SELF].sort())
+  })
+
+  it('keeps the research classification in step with the role policy sets', () => {
+    expect(Object.keys(RESEARCH_CLASS).sort()).toEqual([...CALL_NAMES].sort())
+    const noResearch = Object.entries(RESEARCH_CLASS)
+      .filter(([, kind]) => kind === 'no-research')
+      .map(([name]) => name)
+      .sort()
+    expect(noResearch).toEqual(['getAppInfo', ...NEVER, ...ADMIN, ...SELF].sort())
   })
 
   it.each(principals)('%s: every call name', (_label, principal) => {
@@ -458,7 +469,7 @@ describe('the sign-in callback', () => {
 })
 
 describe('what each role may call', () => {
-  it('lets a researcher use the shared workspace and refuses the user directory', async () => {
+  it('lets a researcher use their own workspace and refuses the user directory', async () => {
     const { live, researcher } = await world()
     expect((await pcall(live, researcher, 'listClients', listQuery)).status).toBe(200)
     const client = result<{ ok: true; client: { id: string } }>(await pcall(live, researcher, 'createClient', clientInput))

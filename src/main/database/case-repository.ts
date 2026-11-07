@@ -12,6 +12,7 @@ import {
   type ResearchCase
 } from '../../shared/case-model'
 import type { RepositoryClock } from './client-repository'
+import { SCOPE_ALL, scopeCondition, type ResearchScope } from './research-access'
 
 // Research case persistence (case-model/v1). Every change reads the case and
 // its client, checks the rules, writes the row and appends its case_events row
@@ -81,11 +82,14 @@ export class CaseRepository {
   ) {}
 
   /** Phase 2 holds at most a few hundred cases, so text search and sorting run in JS (shared with the demo). */
-  list(query: CaseQuery): ResearchCase[] {
+  list(query: CaseQuery, scope: ResearchScope = SCOPE_ALL): ResearchCase[] {
+    // Filtered in SQL to the cases `scope` may read (#210). The default scope is every row for trusted
+    // internal callers; the data services always pass the request's scope.
+    const only = scopeCondition(scope, 'id', 'case')
     const rows = (
       query.clientId === null
-        ? this.db.prepare('SELECT * FROM research_cases').all()
-        : this.db.prepare('SELECT * FROM research_cases WHERE client_id = ?').all(query.clientId)
+        ? this.db.prepare(`SELECT * FROM research_cases WHERE ${only.sql}`).all(...only.params)
+        : this.db.prepare(`SELECT * FROM research_cases WHERE client_id = ? AND ${only.sql}`).all(query.clientId, ...only.params)
     ) as unknown as CaseRow[]
     return queryCases(rows.map(toCase), query)
   }

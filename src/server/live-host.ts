@@ -2,9 +2,10 @@ import { createReadStream, statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
 import { caseContracts, contracts, liveContracts, type CallContract } from '../main/contracts'
-import { createDataServices } from '../main/data-services'
+import { createDataServices, type DataServices } from '../main/data-services'
 import { ClientOwnershipError, type ClientCreateOwnership } from '../main/database/client-repository'
 import type { AppData } from '../main/database/app-data'
+import { researchSchemaReady, ResearchUnavailableError, SCOPE_NONE, userScope } from '../main/database/research-access'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
 import { buildContentSecurityPolicy } from '../shared/csp'
 import type { AppInfo } from '../shared/ipc'
@@ -27,6 +28,7 @@ import {
 import { DeviceAccess, type Device, type DeviceSession } from './devices'
 import { signIn, type AccountDecision, type IdentityFailure, type IdentityProvider, type VerifiedIdentity } from './auth/identity'
 import { authorizeCall, NEVER_REMOTE_CALLS, SELF_CALLS, USER_ADMIN_CALLS, type Principal } from './auth/policy'
+import { isResearchCall } from './auth/research-policy'
 import {
   clearLoginCookie,
   clearUserSessionCookie,
@@ -161,6 +163,11 @@ interface CallContext {
   sessionId: string | null
   /** Headers an implementation wants on the response (e.g. clearing the session cookie). */
   headers: Record<string, string>
+  /**
+   * The research services bound to this request's scope (#210). Calls without research content get a
+   * 'none' scope, so a research service reached from such a call returns nothing.
+   */
+  data: DataServices
 }
 
 const enrollBody = z.strictObject({ code: z.string().max(20), deviceName: z.string().max(200).optional() })
@@ -187,6 +194,8 @@ export type ApiErrorCode =
   | 'lan-off'
   | 'restore-disabled-while-lan'
   | 'owner-required'
+  /** The ownership schema is missing or incomplete: every research call is refused (#210). Never falls back to shared access. */
+  | 'research-unavailable'
 
 /** What one listener accepts: its Host allowlist and its own origin (scheme included). */
 export interface ListenerPolicy {
@@ -316,7 +325,20 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
   const clock = options.now
   const userSessions = options.userSessions ?? createMemoryUserSessionStore(clock ? { now: () => clock().getTime() } : {})
   const backup = createWebBackupService(options.dataDir, data, options.now)
-  const { clients, notes, cases, briefs, journal, notebook, tasks, time, studio } = createDataServices(data)
+  const dataServices = createDataServices(data)
+
+  /**
+   * Binds the research services to the request's principal (#210). A signed-in user is scoped to its own
+   * id (the SQL re-checks that it is active on every call); the host and paired devices act for the
+   * single operator and see everything only in a profile without users, resolved on every call. An
+   * incompatible schema refuses the call before anything is read.
+   */
+  function bindData(name: CallName, principal: Principal): DataServices {
+    if (!isResearchCall(name)) return dataServices.forScope(SCOPE_NONE)
+    const db = data().db
+    if (!researchSchemaReady(db)) throw new RequestError(503, 'research-unavailable')
+    return principal.kind === 'user' ? dataServices.forScope(userScope(db, principal.userId)) : dataServices.forLocalOperator()
+  }
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
   let lan: ListenerPolicy | null = !options.lan
     ? null
@@ -340,8 +362,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
 
   const implementations: { [K in CallName]: (args: z.output<(typeof callable)[K]['args']>, ctx: CallContext) => unknown } = {
     getAppInfo: () => appInfo,
-    listClients: ([query]) => clients.list(query),
-    getClient: ([id]) => clients.get(id),
+    listClients: ([query], ctx) => ctx.data.clients.list(query),
+    getClient: ([id], ctx) => ctx.data.clients.get(id),
     createClient: ([input], ctx) => {
       // The owner comes from the validated session, never from the request body (the input schema is strict).
       // Host and paired devices have no signed-in researcher: their create works only in a profile without
@@ -349,7 +371,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       const ownership: ClientCreateOwnership =
         ctx.principal.kind === 'user' ? { kind: 'user', userId: ctx.principal.userId, actor: ctx.principal.userId } : { kind: 'unowned' }
       try {
-        return clients.create(input, ownership)
+        return ctx.data.clients.create(input, ownership)
       } catch (error) {
         if (error instanceof ClientOwnershipError) {
           throw error.reason === 'owner-required' ? new RequestError(409, 'owner-required') : new RequestError(403, 'forbidden')
@@ -357,62 +379,62 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
         throw error
       }
     },
-    updateClient: ([id, input]) => clients.update(id, input),
-    archiveClient: ([id]) => clients.archive(id),
-    restoreClient: ([id]) => clients.restore(id),
-    findDuplicateClients: ([input, excludeId]) => clients.findDuplicates(input, excludeId),
-    listNotes: ([clientId]) => notes.list(clientId),
-    createNote: ([clientId, input]) => notes.create(clientId, input),
-    updateNote: ([clientId, noteId, input]) => notes.update(clientId, noteId, input),
+    updateClient: ([id, input], ctx) => ctx.data.clients.update(id, input),
+    archiveClient: ([id], ctx) => ctx.data.clients.archive(id),
+    restoreClient: ([id], ctx) => ctx.data.clients.restore(id),
+    findDuplicateClients: ([input, excludeId], ctx) => ctx.data.clients.findDuplicates(input, excludeId),
+    listNotes: ([clientId], ctx) => ctx.data.notes.list(clientId),
+    createNote: ([clientId, input], ctx) => ctx.data.notes.create(clientId, input),
+    updateNote: ([clientId, noteId, input], ctx) => ctx.data.notes.update(clientId, noteId, input),
     createBackup: () => backup.create(),
     restoreBackup: ([token]) => backup.restore(token),
     getBackupStatus: () => backup.status(),
-    listCases: ([query]) => cases.list(query),
-    getCase: ([id]) => cases.get(id),
-    listCaseEvents: ([caseId]) => cases.listEvents(caseId),
-    createCase: ([clientId, input]) => cases.create(clientId, input),
-    updateCase: ([id, input]) => cases.update(id, input),
-    setCaseState: ([id, to]) => cases.setState(id, to),
-    archiveCase: ([id]) => cases.archive(id),
-    unarchiveCase: ([id]) => cases.unarchive(id),
-    getCaseBrief: ([caseId]) => briefs.get(caseId),
-    saveCaseBrief: ([caseId, input]) => briefs.save(caseId, input),
-    listJournalEntries: ([caseId]) => journal.list(caseId),
-    createJournalEntry: ([caseId, input]) => journal.create(caseId, input),
-    updateJournalEntry: ([caseId, entryId, input]) => journal.update(caseId, entryId, input),
-    getNotebook: ([caseId]) => notebook.getOutline(caseId),
-    createNotebookSection: ([caseId, input]) => notebook.createSection(caseId, input),
-    renameNotebookSection: ([caseId, sectionId, input]) => notebook.renameSection(caseId, sectionId, input),
-    moveNotebookSection: ([caseId, sectionId, toIndex]) => notebook.moveSection(caseId, sectionId, toIndex),
-    archiveNotebookSection: ([caseId, sectionId]) => notebook.archiveSection(caseId, sectionId),
-    unarchiveNotebookSection: ([caseId, sectionId]) => notebook.unarchiveSection(caseId, sectionId),
-    createNotebookPage: ([caseId, sectionId, input]) => notebook.createPage(caseId, sectionId, input),
-    getNotebookPage: ([caseId, pageId]) => notebook.getPage(caseId, pageId),
-    renameNotebookPage: ([caseId, pageId, input]) => notebook.renamePage(caseId, pageId, input),
-    moveNotebookPage: ([caseId, pageId, move]) => notebook.movePage(caseId, pageId, move),
-    archiveNotebookPage: ([caseId, pageId]) => notebook.archivePage(caseId, pageId),
-    unarchiveNotebookPage: ([caseId, pageId]) => notebook.unarchivePage(caseId, pageId),
-    saveNotebookPage: ([caseId, pageId, save]) => notebook.savePage(caseId, pageId, save),
-    listPageRevisions: ([caseId, pageId]) => notebook.listRevisions(caseId, pageId),
-    getPageRevision: ([caseId, pageId, revisionId]) => notebook.getRevision(caseId, pageId, revisionId),
-    restorePageRevision: ([caseId, pageId, revisionId, baseVersion]) => notebook.restoreRevision(caseId, pageId, revisionId, baseVersion),
-    listCaseTasks: ([caseId]) => tasks.list(caseId),
-    createCaseTask: ([caseId, input]) => tasks.create(caseId, input),
-    updateCaseTask: ([caseId, taskId, input]) => tasks.update(caseId, taskId, input),
-    completeCaseTask: ([caseId, taskId]) => tasks.complete(caseId, taskId),
-    reopenCaseTask: ([caseId, taskId]) => tasks.reopen(caseId, taskId),
-    listTimeEntries: ([caseId]) => time.list(caseId),
-    createTimeEntry: ([caseId, input]) => time.create(caseId, input),
-    updateTimeEntry: ([caseId, entryId, input]) => time.update(caseId, entryId, input),
-    deleteTimeEntry: ([caseId, entryId]) => time.delete(caseId, entryId),
-    getActiveTimer: () => time.getActiveTimer(),
-    startTimer: ([caseId]) => time.start(caseId),
-    pauseTimer: ([version]) => time.pause(version),
-    resumeTimer: ([version]) => time.resume(version),
-    heartbeatTimer: ([version]) => time.heartbeat(version),
-    stopAndSaveTimer: ([version, options]) => time.stopAndSave(version, options),
-    discardTimer: ([version]) => time.discard(version),
-    getStudioSummary: () => studio.summary(),
+    listCases: ([query], ctx) => ctx.data.cases.list(query),
+    getCase: ([id], ctx) => ctx.data.cases.get(id),
+    listCaseEvents: ([caseId], ctx) => ctx.data.cases.listEvents(caseId),
+    createCase: ([clientId, input], ctx) => ctx.data.cases.create(clientId, input),
+    updateCase: ([id, input], ctx) => ctx.data.cases.update(id, input),
+    setCaseState: ([id, to], ctx) => ctx.data.cases.setState(id, to),
+    archiveCase: ([id], ctx) => ctx.data.cases.archive(id),
+    unarchiveCase: ([id], ctx) => ctx.data.cases.unarchive(id),
+    getCaseBrief: ([caseId], ctx) => ctx.data.briefs.get(caseId),
+    saveCaseBrief: ([caseId, input], ctx) => ctx.data.briefs.save(caseId, input),
+    listJournalEntries: ([caseId], ctx) => ctx.data.journal.list(caseId),
+    createJournalEntry: ([caseId, input], ctx) => ctx.data.journal.create(caseId, input),
+    updateJournalEntry: ([caseId, entryId, input], ctx) => ctx.data.journal.update(caseId, entryId, input),
+    getNotebook: ([caseId], ctx) => ctx.data.notebook.getOutline(caseId),
+    createNotebookSection: ([caseId, input], ctx) => ctx.data.notebook.createSection(caseId, input),
+    renameNotebookSection: ([caseId, sectionId, input], ctx) => ctx.data.notebook.renameSection(caseId, sectionId, input),
+    moveNotebookSection: ([caseId, sectionId, toIndex], ctx) => ctx.data.notebook.moveSection(caseId, sectionId, toIndex),
+    archiveNotebookSection: ([caseId, sectionId], ctx) => ctx.data.notebook.archiveSection(caseId, sectionId),
+    unarchiveNotebookSection: ([caseId, sectionId], ctx) => ctx.data.notebook.unarchiveSection(caseId, sectionId),
+    createNotebookPage: ([caseId, sectionId, input], ctx) => ctx.data.notebook.createPage(caseId, sectionId, input),
+    getNotebookPage: ([caseId, pageId], ctx) => ctx.data.notebook.getPage(caseId, pageId),
+    renameNotebookPage: ([caseId, pageId, input], ctx) => ctx.data.notebook.renamePage(caseId, pageId, input),
+    moveNotebookPage: ([caseId, pageId, move], ctx) => ctx.data.notebook.movePage(caseId, pageId, move),
+    archiveNotebookPage: ([caseId, pageId], ctx) => ctx.data.notebook.archivePage(caseId, pageId),
+    unarchiveNotebookPage: ([caseId, pageId], ctx) => ctx.data.notebook.unarchivePage(caseId, pageId),
+    saveNotebookPage: ([caseId, pageId, save], ctx) => ctx.data.notebook.savePage(caseId, pageId, save),
+    listPageRevisions: ([caseId, pageId], ctx) => ctx.data.notebook.listRevisions(caseId, pageId),
+    getPageRevision: ([caseId, pageId, revisionId], ctx) => ctx.data.notebook.getRevision(caseId, pageId, revisionId),
+    restorePageRevision: ([caseId, pageId, revisionId, baseVersion], ctx) => ctx.data.notebook.restoreRevision(caseId, pageId, revisionId, baseVersion),
+    listCaseTasks: ([caseId], ctx) => ctx.data.tasks.list(caseId),
+    createCaseTask: ([caseId, input], ctx) => ctx.data.tasks.create(caseId, input),
+    updateCaseTask: ([caseId, taskId, input], ctx) => ctx.data.tasks.update(caseId, taskId, input),
+    completeCaseTask: ([caseId, taskId], ctx) => ctx.data.tasks.complete(caseId, taskId),
+    reopenCaseTask: ([caseId, taskId], ctx) => ctx.data.tasks.reopen(caseId, taskId),
+    listTimeEntries: ([caseId], ctx) => ctx.data.time.list(caseId),
+    createTimeEntry: ([caseId, input], ctx) => ctx.data.time.create(caseId, input),
+    updateTimeEntry: ([caseId, entryId, input], ctx) => ctx.data.time.update(caseId, entryId, input),
+    deleteTimeEntry: ([caseId, entryId], ctx) => ctx.data.time.delete(caseId, entryId),
+    getActiveTimer: (_args, ctx) => ctx.data.time.getActiveTimer(),
+    startTimer: ([caseId], ctx) => ctx.data.time.start(caseId),
+    pauseTimer: ([version], ctx) => ctx.data.time.pause(version),
+    resumeTimer: ([version], ctx) => ctx.data.time.resume(version),
+    heartbeatTimer: ([version], ctx) => ctx.data.time.heartbeat(version),
+    stopAndSaveTimer: ([version, options], ctx) => ctx.data.time.stopAndSave(version, options),
+    discardTimer: ([version], ctx) => ctx.data.time.discard(version),
+    getStudioSummary: (_args, ctx) => ctx.data.studio.summary(),
     getLanStatus: () => ({ enabled: lan !== null, origin: lan?.origin ?? null }),
     createPairingCode: () => {
       if (!lan) throw new RequestError(409, 'lan-off')
@@ -514,14 +536,14 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       const principal: Principal = { kind: 'user', role: state.role, userId: session.userId }
       const decision = authorizeCall(name, principal)
       if (!decision.allowed) throw new RequestError(403, decision.code)
-      ctx = { principal, actor: session.userId, userId: session.userId, sessionId: session.id, headers: {} }
+      ctx = { principal, actor: session.userId, userId: session.userId, sessionId: session.id, headers: {}, data: bindData(name as CallName, principal) }
     } else if (remote) {
       authorizeLan(req, remote)
       const principal: Principal = { kind: 'device' }
       if (!Object.hasOwn(callable, name)) throw new RequestError(403, 'host-only')
       const decision = authorizeCall(name, principal)
       if (!decision.allowed) throw new RequestError(403, decision.code)
-      ctx = { principal, actor: HOST_ACTOR, userId: null, sessionId: null, headers: {} }
+      ctx = { principal, actor: HOST_ACTOR, userId: null, sessionId: null, headers: {}, data: bindData(name as CallName, principal) }
     } else {
       authorizeWrite(req)
       if (!Object.hasOwn(callable, name)) throw new RequestError(404, 'not-found')
@@ -535,7 +557,8 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
         actor: HOST_ACTOR,
         userId: null,
         sessionId: null,
-        headers: {}
+        headers: {},
+        data: bindData(name as CallName, principal)
       }
     }
     if (mediaType(req) !== 'application/json') throw new RequestError(415, 'unsupported-media-type')
@@ -553,6 +576,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
       result = contract.result.parse(await impl(parsed.data, ctx))
     } catch (error) {
       if (error instanceof RequestError) throw error
+      if (error instanceof ResearchUnavailableError) throw new RequestError(503, 'research-unavailable')
       // Database and schema errors can quote stored values: log only the error name.
       console.error(`API ${name} failed: ${error instanceof Error ? error.name : 'unknown error'}`)
       throw new RequestError(500, 'internal-error')

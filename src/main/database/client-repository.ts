@@ -11,6 +11,7 @@ import {
 } from '../../shared/client-model'
 import type { ClientMutationResult } from '../../shared/ipc'
 import { insertOwnershipEvent } from './ownership-repository'
+import { SCOPE_ALL, scopeCondition, type ResearchScope } from './research-access'
 
 // Client persistence (client-model/v1). Every write re-runs the shared rules, so
 // the renderer's checks are never trusted. All SQL is parameterized.
@@ -84,20 +85,28 @@ export class ClientRepository {
    * Phase 1 directories hold at most a few hundred clients, so filtering and
    * accent-insensitive search run in JS with the same rules as the prototype.
    */
-  list(query: DirectoryQuery): Client[] {
-    const rows = this.db.prepare('SELECT * FROM clients').all() as unknown as ClientRow[]
-    return queryClients(rows.map(toClient), query)
+  list(query: DirectoryQuery, scope: ResearchScope = SCOPE_ALL): Client[] {
+    return queryClients(this.readableRows(scope).map(toClient), query)
+  }
+
+  /**
+   * Rows `scope` may read, filtered in SQL (#210). The default scope is every row for trusted
+   * internal callers (restore verification, fixtures); the data services always pass the request's scope.
+   */
+  private readableRows(scope: ResearchScope): ClientRow[] {
+    const only = scopeCondition(scope, 'id', 'client')
+    return this.db.prepare(`SELECT * FROM clients WHERE ${only.sql}`).all(...only.params) as unknown as ClientRow[]
   }
 
   /**
    * Possible duplicates of the normalized input among all clients, archived
-   * included (client-model/v1 §4.3). Advisory only; invalid input has none.
+   * included (client-model/v1 §4.3). Advisory only; invalid input has none. Only clients `scope`
+   * may read are compared, so a duplicate check never reveals another account's client (#210).
    */
-  findDuplicates(raw: ClientInput, excludeId: string | null): DuplicateCandidate[] {
+  findDuplicates(raw: ClientInput, excludeId: string | null, scope: ResearchScope = SCOPE_ALL): DuplicateCandidate[] {
     const { input } = checkClient(raw)
     if (!input) return []
-    const rows = this.db.prepare('SELECT * FROM clients').all() as unknown as ClientRow[]
-    return findDuplicates(input, rows.map(toClient), excludeId ?? undefined)
+    return findDuplicates(input, this.readableRows(scope).map(toClient), excludeId ?? undefined)
   }
 
   get(id: string): Client | null {
