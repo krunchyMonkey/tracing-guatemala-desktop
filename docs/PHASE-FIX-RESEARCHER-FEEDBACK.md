@@ -28,14 +28,31 @@
 
 **Status:** this section authorizes planning and issue grooming only. It does not approve touching or deploying to private Live, restoring backups, transferring client data, or changing source PR merge gates.
 
+## Current P0 privacy workstream (updated 2026-11-07)
+**Source state at grooming:** [PR #238](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/238) (ownership) and stacked [PR #244](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/244) (authorization) are open with passing GitHub-hosted CI, neither merged nor deployed. This does not constitute independent security approval.
+
+Mandatory preservation-first follow-ups:
+- [#248](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/248): production startup refuses pending SQLite auto-migrations; upgrade requires explicit owner-controlled maintenance with backups, offline writer and schema/version checks. **Eligible for isolated Claude work now.**
+- [#245](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/245): host-only bulk/per-client **legacy ownership wizard**, consent, restore-verified backups, auditable claims, unchanged notes/notebook revisions.
+- [#246](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/246): separate host-operator from ordinary signed-in researcher creation, explicit approved target account/audit for host-only exceptional operations; no remote admin override.
+- [#247](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/247): independent timers per researcher and careful reconciliation of the existing global active timer without lost history or cross-account busy signals.
+- [#212](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/212): researcher-sharing UI must make **case-only shares usable** with scoped minimal context even if `getClient` returns null, and revoke access on the next request.
+- [#211](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/211): **cannot be closed or deployed** until #209/#210/#212/#245/#246/#247/#248, independent privacy review, complete synthetic restore/rollback, two recoverable consistent backups, human owner/researcher sign-off, and successful verification that historic records are visible to the assigned researcher.
+
+No default production migration is authorized by a source merge, issue closure, `claude-ready` label or green CI. Existing Live must remain running and untouched unless user gives **fresh explicit deployment consent**. Note that the repository is PUBLIC: never paste real data, owner consent artifacts with names, paths, row hashes, backups or screenshots into public GitHub. All rehearsals use fictional data and isolated CI/worktrees/ports. No commands on the Windows host that may run Live tests or open production SQLite.
+
 ## Current backlog
 
 | Issue | User outcome | Status |
 | --- | --- | --- |
 | [#209](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/209) | Ownership/ACL persistence and safe host-only legacy claim | **Privacy P0 · first** |
 | [#210](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/210) | Enforce resource authorization for all Live APIs and nested records | **Privacy P0 · after #209** |
+| [#248](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/248) | Guard production SQLite startup; migration requires explicit maintenance authorization | **Privacy P0 · isolated work can start now** |
+| [#245](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/245) | Host-only legacy ownership wizard and consented bulk claim | **Privacy P0 · after #209/#210 security review** |
+| [#246](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/246) | Signed-in researcher vs host-operator account creation and recovery | **Privacy P0 · after #209/#210** |
+| [#247](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/247) | One active timer per researcher, preserve legacy elapsed time | **Privacy P0 · after #209/#210** |
 | [#212](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/212) | Explicit sharing UI, viewer/editor grants and instant revocation | **Privacy P0 · after #210** |
-| [#211](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/211) | Cross-user security validation, safe rollout, researcher sign-off | **Privacy P0 · after #212** |
+| [#211](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/211) | Cross-user security validation, safe rollout, researcher sign-off | **Privacy P0 · after #212/#245/#246/#247/#248** |
 | [#213](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/213) | Per-user configurable source/contact catalog, immutable reserved defaults, seeded editable TikTok | **After Privacy #208, before #214/#205** |
 | [#214](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/214) | Settings hub with My Workspace category management, user administration and host-only backups | **After #213, before #205** |
 | [#205](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/205) | Use configured values (TikTok plus future new platforms) in client source, case source and contact **Via** | **After #213 and #214** |
@@ -74,4 +91,4 @@ Store the text and inline attachment references in stable order and keep image b
 
 ## Agent handoff
 
-Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, **prioritize #209 → #210 → #212 → #211**, including migration/privacy/owner gates. Next implement **#213 → #214 → #205 → #206 → #207**, honoring user-scoped catalogs and owner-only private feedback/image-upload gates. Resume numbered feature phases afterward. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
+Read `CLAUDE_HANDOFF.md`, this file, epic #204 and child #205 before selecting the next issue. If safe, **prioritize #209/#210 review + #248, then #245/#246/#247/#212 → #211**, including migration/privacy/owner gates. Next implement **#213 → #214 → #205 → #206 → #207**, honoring user-scoped catalogs and owner-only private feedback/image-upload gates. Resume numbered feature phases afterward. Return to numbered feature phases only after verified merge and no ready P0 Phase FIX work.
