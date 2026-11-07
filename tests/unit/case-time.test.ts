@@ -703,17 +703,11 @@ describe('migration 7 (case_time_entries, case_active_timer)', () => {
     expect(before.tasks).toHaveLength(1)
 
     const report = migrateProfile({
-
       dataDir: userData,
-
       expectFrom: 6,
-
       expectTo: migrations.length,
-
       confirm: confirmationPhrase(6, migrations.length),
-
       now: () => new Date('2026-10-29T12:00:00.000Z')
-
     })
 
     const opened = openAppDatabase(userData)

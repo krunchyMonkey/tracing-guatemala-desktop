@@ -4,7 +4,7 @@ Status: engineering reference for issue #248. **Merging this to source is not pr
 
 ## Why startup refuses
 
-A newer build used to upgrade any existing profile silently when it started. It no longer does. On start, before anything is created or opened for writing, the app looks at the profile (a read of the first 100 bytes of the database file, plus a read-only version check if a write-ahead log is present) and decides:
+A newer build used to upgrade any existing profile silently when it started. It no longer does. On start, before anything is created or opened for writing, the app looks at the profile (a plain read of the first 100 bytes of the database file; a write-ahead log is never opened at this point) and decides:
 
 | Profile | What start does |
 |---|---|
@@ -67,7 +67,7 @@ A restore moves the live file to `tracing-guatemala.sqlite.replaced-<id>` before
 3. If `tracing-guatemala.sqlite` **exists**, decide which one you want. The restored one is the live file; the `.replaced-<id>` file is the data from before the restore (a verified copy is also in `data/pre-restore/`). Move the one you do not want out of the folder; do not leave a `.replaced-*` file in `data/`.
 4. Start the app.
 
-Other refusals: *missing database* (the folder has `pre-restore/`, `maintenance/` or other `.sqlite` files but no database file: find the right file in those folders or restore from a backup), *not an app database*, *unreadable* (check permissions), and *not closed cleanly* (a write-ahead log exists but could not be read read-only: start and stop the version that wrote it once).
+Other refusals: *missing database* (the folder has `pre-restore/`, `maintenance/` or other `.sqlite` files but no database file: find the right file in those folders or restore from a backup), *not an app database*, *unreadable* (check permissions), and *not closed cleanly* (a write-ahead log exists and the database header is too short to tell the version: start and stop the version that wrote it once).
 
 ## Restoring a backup from an older version
 
@@ -76,6 +76,6 @@ Restore still works for an older backup. The backup file and the live file are n
 ## Limits
 
 - The folder lock is advisory and is only taken by web hosts and this command using this code. It does not stop another program, an older build or the Electron app from opening the same file. Electron uses a separate profile and never shares the web profile.
-- The write-ahead-log check relies on SQLite: a read-only open can create an empty `-shm` file; the command removes empty leftovers it created.
+- Startup never opens a write-ahead log to read the version; it relies on the header as a lower bound. The maintenance command opens the database read-only (only after refusing a non-empty `-wal`), which can create an empty `-shm`; it removes empty leftovers it created while holding the lock.
 - The command's snapshot, original and records are in the same folder as the data. They protect against a bad upgrade, not against losing the disk.
 - A migration that changes existing columns (not just adds tables or columns) is refused by the content check. Such a migration needs its own reviewed procedure.

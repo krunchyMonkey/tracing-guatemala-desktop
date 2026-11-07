@@ -31,6 +31,7 @@ import {
   type ResearchCase
 } from '../../src/shared/case-model'
 import type { ClientInput, DirectoryQuery, NoteInput } from '../../src/shared/client-model'
+import { MigrationRequiredError } from '../../src/main/database/schema-preflight'
 import { confirmationPhrase, migrateProfile } from '../../src/server/maintenance/migrate-database'
 
 // Research cases through the real SQLite repositories, in memory and in
@@ -587,17 +588,11 @@ describe('migration 3 (research_cases)', () => {
     expect(before.notes).toHaveLength(3)
 
     const report = migrateProfile({
-
       dataDir: userData,
-
       expectFrom: 2,
-
       expectTo: migrations.length,
-
       confirm: confirmationPhrase(2, migrations.length),
-
       now: () => new Date('2026-10-29T12:00:00.000Z')
-
     })
 
     const opened = openAppDatabase(userData)
@@ -620,8 +615,15 @@ describe('migration 3 (research_cases)', () => {
     copy.close()
   })
 
-  it('lets the upgraded database take cases for its old clients', () => {
+  it('refuses a v2 profile on a normal open, then takes cases for its old clients once migrated', () => {
     buildV2Profile()
+    expect(() => new AppData(userData)).toThrow(MigrationRequiredError)
+    migrateProfile({
+      dataDir: userData,
+      expectFrom: 2,
+      expectTo: migrations.length,
+      confirm: confirmationPhrase(2, migrations.length)
+    })
     const data = new AppData(userData)
     try {
       const [first] = data.clients.list({ text: 'Ana', status: 'all', sources: [], sort: 'name' })

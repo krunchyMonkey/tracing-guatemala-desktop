@@ -585,17 +585,11 @@ describe('migration 6 (case_tasks)', () => {
     expect(before.journal).toHaveLength(1)
 
     const report = migrateProfile({
-
       dataDir: userData,
-
       expectFrom: 5,
-
       expectTo: migrations.length,
-
       confirm: confirmationPhrase(5, migrations.length),
-
       now: () => new Date('2026-10-29T12:00:00.000Z')
-
     })
 
     const opened = openAppDatabase(userData)

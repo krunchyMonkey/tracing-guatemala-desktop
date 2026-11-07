@@ -630,17 +630,11 @@ describe('on disk', () => {
       expect(migrations[7]?.name).toBe('research_notebooks')
 
       const report = migrateProfile({
-
         dataDir: userData,
-
         expectFrom: 7,
-
         expectTo: migrations.length,
-
         confirm: confirmationPhrase(7, migrations.length),
-
         now: () => new Date('2026-10-29T12:00:00.000Z')
-
       })
 
       const opened = openAppDatabase(userData)

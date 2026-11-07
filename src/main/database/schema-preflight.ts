@@ -1,6 +1,5 @@
 import { type Stats, closeSync, existsSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { APPLICATION_ID, DATABASE_FILE_NAME, dataDirectory } from './identity'
 
 // A look at a data profile that never changes it (#248). Startup runs this before
@@ -136,23 +135,13 @@ export function inspectProfile(userDataDir: string, latest: number, tolerate: Pr
     return { kind: 'unsafe', reason: 'unreadable' }
   }
 
-  if (wal > 0) {
-    // The header can be older than the log: ask SQLite, read-only, never read-write.
-    let db: DatabaseSync | null = null
-    try {
-      db = new DatabaseSync(file, { readOnly: true })
-      version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
-      applicationId = (db.prepare('PRAGMA application_id').get() as { application_id: number }).application_id
-    } catch {
-      return { kind: 'unsafe', reason: 'wal-pending' }
-    } finally {
-      try {
-        db?.close()
-      } catch {
-        // Nothing to clean up.
-      }
-    }
-  }
+  // A non-empty log is never opened here, not even read-only: SQLite would create a -shm file,
+  // and preflight must not create anything. The header is a safe lower bound of the version
+  // (a log only holds newer pages, and nothing migrates in place any more): below latest is
+  // reported as migration-required, which the maintenance command then refuses until the old
+  // app closes cleanly; at latest the normal open recovers the log and migrate() still refuses
+  // a newer version before any schema write. Only a header too short to read is undecidable.
+  if (wal > 0 && version === 0 && applicationId === 0) return { kind: 'unsafe', reason: 'wal-pending' }
 
   if (applicationId !== 0 && applicationId !== APPLICATION_ID) return { kind: 'unsafe', reason: 'not-an-app-database' }
   if (version === 0) return { kind: 'unsafe', reason: 'not-an-app-database' }

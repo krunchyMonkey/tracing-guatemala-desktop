@@ -266,9 +266,10 @@ describe('startup never migrates an existing profile', () => {
       mkdirSync(live(), { recursive: true })
     })
     unsafe('wal-pending', () => {
-      // A valid-looking header with a log next to it that SQLite cannot read read-only.
+      // A main file too short to hold a header, with a log next to it: the version can't be
+      // known without opening the log, which preflight never does.
       mkdirSync(dataDirectory(root), { recursive: true })
-      writeFileSync(live(), header(latest, APPLICATION_ID, 0))
+      writeFileSync(live(), Buffer.alloc(40, 0))
       writeFileSync(`${live()}-wal`, Buffer.alloc(32, 7))
     })
   })
