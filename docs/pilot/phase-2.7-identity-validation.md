@@ -26,21 +26,23 @@ The local gate is lint, typecheck, `npx vitest run --maxWorkers=4` and `npm run 
 | Last-owner guard (API and UI) | `tests/unit/users.test.ts`, browser E2E | pass |
 | Restart, LAN turn-off and backup restore end every session; idle and absolute expiry | `live-google-sessions.test.ts` | pass |
 | Google session can't be used on loopback, on HTTP LAN or pairing-mode HTTPS, on the demo, or on a second host | `tests/unit/identity-bypass.test.ts` | pass |
-| Shared workspace with two identities; recorded concurrency behaviour (below) | `identity-bypass.test.ts` | pass |
+| ~~Shared workspace with two identities~~ superseded by #210: private by default, per-user research authorization (see below and [research-authorization.md](../architecture/research-authorization.md)) | `identity-bypass.test.ts`, `live-authorization.test.ts` | see #210 |
 | Migration 8→9, users kept after reopen, backup round trip, restore of a v8 backup | `users.test.ts`, `backup.test.ts`, `database.test.ts` | pass |
 | No codes, tokens, emails, names or cookies in logs | `google-identity.test.ts`, `live-google-sessions.test.ts` | pass |
 
 **Gate on this PR:** see the PR description for the exact counts. Known flakes under full-suite load, which pass on rerun: `live-lan.spec.ts:245` (also fails on the code from before Phase 2.7), plus intermittent `CaseHours`, `notebook-boundary`, `live-host` and `live-lan-security` timing failures in full-parallel Vitest.
 
-### Shared workspace: recorded behaviour
+### Shared workspace: recorded behaviour (superseded by #210)
 
-Phase 2.7 has **no per-user partitioning**. Every approved person, owner or researcher, works in the same shared research workspace. `identity-bypass.test.ts` records what actually happens with two signed-in people:
+> **Superseded.** This section recorded Phase 2.7 as validated by #182: no per-user partitioning, every approved person saw every client and case. **#210 replaces it with private-by-default research authorization**: each person sees only the records they own or were explicitly granted, an app-level `owner` has no implicit read, and the host session sees no research content once the profile has users. See [research-authorization.md](../architecture/research-authorization.md). The text below is kept as the historical Phase 2.7 record only and is no longer the behavior. The Phase 2.7 pilot must not be used with real records, and #209 + #210 are not a Live deployment (#211 owns the cutover, #212 the sharing UI).
 
-- There is no per-user partitioning: every signed-in person sees all clients and cases.
-- A researcher can edit a client that the owner created.
-- **Client edits are last-write-wins.** `updateClient` carries no version, so a second edit made from a stale view silently replaces the first. Two edits sent at the same moment both succeed, and exactly one of the two names remains.
-- **Notebook pages are protected.** A save made against an old page version by the other person is refused with `conflict` and the current page, so nothing is overwritten.
-- **There is one timer for the whole workspace.** `getActiveTimer` returns the same running timer to everyone, and nobody else can start a timer on another case while it runs (`other-case-timer`).
+Phase 2.7 as recorded had **no per-user partitioning**. Every approved person, owner or researcher, worked in the same shared research workspace. `identity-bypass.test.ts` then recorded what happened with two signed-in people:
+
+- There was no per-user partitioning: every signed-in person saw all clients and cases. (Now: private by default, #210.)
+- A researcher could edit a client that the owner created. (Now: only the owner or a granted editor can.)
+- **Client edits are last-write-wins.** `updateClient` carries no version, so a second edit made from a stale view silently replaces the first. This still holds for the one person (or granted editor) who may edit.
+- **Notebook pages are protected.** A save made against an old page version is refused with `conflict` and the current page, so nothing is overwritten. (Another account's save is now "not found".)
+- **There is one timer for the whole workspace.** This remains the case (one global row), but `getActiveTimer` now returns it only to people who can read its case, and another account's start is answered only with `conflict` and no details. Per-user timers are a follow-up.
 - A role change ends the person's existing session at once (401), and they sign in again with the new role.
 - Each role change is logged with the acting owner's id as the actor, never the affected person.
 
@@ -130,4 +132,4 @@ Use a **fictional profile** (`--init-lan-test-profile`) and fictional records on
 
 ### What stays host-only, even for owners
 
-Remote owners can never reach backups (create, restore, upload, download), device pairing and the device list, home-network status and turn-off, or the launch link. Remote owners can manage users. Everything else is the shared workspace.
+Remote owners can never reach backups (create, restore, upload, download), device pairing and the device list, home-network status and turn-off, or the launch link. Remote owners can manage users. Everything else is research content, which since #210 is private to its owner and explicit grantees; the app-level owner role reads none of it.

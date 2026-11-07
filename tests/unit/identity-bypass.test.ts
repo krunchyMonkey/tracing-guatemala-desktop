@@ -13,7 +13,7 @@ import type { NoteBlock, NoteContent } from '../../src/shared/note-content'
 import type { SignInRequest, AppUser, UserMutationResult } from '../../src/shared/users'
 import { call, send, signIn, type Reply, type Signed } from './live-helpers'
 
-// #182: identity bypass attempts and the shared-workspace behaviour with two signed-in people.
+// #182: identity bypass attempts and, since #210, the separate workspaces of two signed-in people.
 // Google mode uses the deterministic fake identity provider (no Google, no network).
 // Fictional people only.
 
@@ -251,44 +251,44 @@ describe('a Google session opens nothing elsewhere', () => {
   })
 })
 
-describe('two identities share one workspace', () => {
+describe('two identities have separate workspaces', () => {
   const blockId = (n: number) => `b0000000-0000-4000-8000-${String(n).padStart(12, '0')}`
   const paragraph = (text: string): NoteBlock => ({ id: blockId(1), type: 'paragraph', indent: 0, content: [{ text }] })
   const doc = (...blocks: NoteBlock[]): NoteContent => ({ format: 'tg-note', version: 1, blocks })
   type Created = { ok: true; client: { id: string; displayName: string } }
 
-  it('shows both people the same clients and cases, and lets either edit what the other made', async () => {
-    const { live, ana, ben } = await googleWorld('shared')
+  // #210 replaces the Phase 2.7 shared workspace recorded by #182: records are private to their owner.
+  // The full per-call deny matrix lives in live-authorization.test.ts; this keeps the identity-focused cases.
+  it('shows each person only their own clients and cases and refuses another person’s ids', async () => {
+    const { live, ana, ben } = await googleWorld('private')
     const made = result<Created>(await pcall(live, ana, 'createClient', clientInput('Cliente Uno')))
-    // Recorded behaviour (#182): there is no per-user partitioning; every signed-in person sees all clients and cases.
-    const seen = result<{ id: string }[]>(await pcall(live, ben, 'listClients', listQuery))
-    expect(seen.map((c) => c.id)).toEqual([made.client.id])
-    expect(result<{ ok: boolean }>(await pcall(live, ben, 'createCase', made.client.id, caseInput)).ok).toBe(true)
+    expect(result<{ id: string }[]>(await pcall(live, ben, 'listClients', listQuery))).toEqual([])
+    expect(result(await pcall(live, ben, 'getClient', made.client.id))).toBeNull()
+    expect(result(await pcall(live, ben, 'createCase', made.client.id, caseInput))).toEqual({ ok: false, reason: 'not-found' })
+    expect(result(await pcall(live, ben, 'updateClient', made.client.id, clientInput('Cliente Editado')))).toEqual({ ok: false, reason: 'not-found' })
+    // Ana still has her client, unchanged, and can work on it.
+    expect(result<{ displayName: string }>(await pcall(live, ana, 'getClient', made.client.id)).displayName).toBe('Cliente Uno')
+    expect(result<{ ok: boolean }>(await pcall(live, ana, 'createCase', made.client.id, caseInput)).ok).toBe(true)
     expect(result<{ id: string }[]>(await pcall(live, ana, 'listCases', everything))).toHaveLength(1)
-    // Recorded behaviour (#182): a researcher can edit a client that the owner created.
-    const edited = result<{ ok: boolean; client: { displayName: string } }>(await pcall(live, ben, 'updateClient', made.client.id, clientInput('Cliente Editado')))
-    expect(edited).toMatchObject({ ok: true, client: { displayName: 'Cliente Editado' } })
-    expect(result<{ displayName: string }>(await pcall(live, ana, 'getClient', made.client.id)).displayName).toBe('Cliente Editado')
+    expect(result<{ id: string }[]>(await pcall(live, ben, 'listCases', everything))).toEqual([])
   })
 
-  it('edits of the same client are last-write-wins with no conflict result', async () => {
+  it('lets only the owner edit a client, so two people never overwrite each other', async () => {
     const { live, ana, ben } = await googleWorld('lww')
     const made = result<Created>(await pcall(live, ana, 'createClient', clientInput('Cliente Uno')))
-    // Recorded behaviour (#182): updateClient carries no version, so a second edit made from a stale view silently replaces the first (last write wins).
     expect(result<{ ok: boolean }>(await pcall(live, ana, 'updateClient', made.client.id, clientInput('Version de Ana'))).ok).toBe(true)
-    expect(result<{ ok: boolean }>(await pcall(live, ben, 'updateClient', made.client.id, clientInput('Version de Ben'))).ok).toBe(true)
-    expect(result<{ displayName: string }>(await pcall(live, ana, 'getClient', made.client.id)).displayName).toBe('Version de Ben')
-    // Recorded behaviour (#182): two edits sent at the same moment both succeed and exactly one of the two names remains.
+    expect(result(await pcall(live, ben, 'updateClient', made.client.id, clientInput('Version de Ben')))).toEqual({ ok: false, reason: 'not-found' })
+    // Two edits sent at the same moment: only the owner's one is accepted.
     const [r1, r2] = await Promise.all([
       pcall(live, ana, 'updateClient', made.client.id, clientInput('Ana a la vez')),
       pcall(live, ben, 'updateClient', made.client.id, clientInput('Ben a la vez'))
     ])
-    expect([r1.status, r2.status]).toEqual([200, 200])
-    const final = result<{ displayName: string }>(await pcall(live, ana, 'getClient', made.client.id)).displayName
-    expect(['Ana a la vez', 'Ben a la vez']).toContain(final)
+    expect(result<{ ok: boolean }>(r1).ok).toBe(true)
+    expect(result(r2)).toEqual({ ok: false, reason: 'not-found' })
+    expect(result<{ displayName: string }>(await pcall(live, ana, 'getClient', made.client.id)).displayName).toBe('Ana a la vez')
   })
 
-  it('answers a stale notebook save by the second person with the conflict result', async () => {
+  it('refuses a notebook save by the other person and leaves the page as the owner wrote it', async () => {
     const { live, ana, ben } = await googleWorld('notebook')
     const made = result<Created>(await pcall(live, ana, 'createClient', clientInput('Cliente Uno')))
     const caseId = result<{ ok: true; case: { id: string } }>(await pcall(live, ana, 'createCase', made.client.id, caseInput)).case.id
@@ -296,24 +296,25 @@ describe('two identities share one workspace', () => {
     const page = result<{ ok: true; page: { id: string } }>(await pcall(live, ana, 'createNotebookPage', caseId, section.section.id, { title: 'First visit' }))
     const pageId = page.page.id
     expect(result<{ ok: boolean }>(await pcall(live, ana, 'saveNotebookPage', caseId, pageId, { baseVersion: 1, content: doc(paragraph('Ana wrote this')) })).ok).toBe(true)
-    // Recorded behaviour (#182): a notebook save made against an old page version by the other person is refused with reason "conflict" and the current page; nothing is overwritten.
-    const stale = result<{ ok: false; reason: string; page: { version: number } }>(
-      await pcall(live, ben, 'saveNotebookPage', caseId, pageId, { baseVersion: 1, content: doc(paragraph('Ben wrote this')) })
-    )
-    expect(stale).toMatchObject({ ok: false, reason: 'conflict', page: { version: 2 } })
+    // The other person gets the answer for a page that does not exist, not a version conflict that would reveal it.
+    expect(result(await pcall(live, ben, 'saveNotebookPage', caseId, pageId, { baseVersion: 1, content: doc(paragraph('Ben wrote this')) }))).toEqual({ ok: false, reason: 'not-found' })
+    expect(result(await pcall(live, ben, 'getNotebookPage', caseId, pageId))).toBeNull()
+    expect(result<{ version: number }>(await pcall(live, ana, 'getNotebookPage', caseId, pageId)).version).toBe(2)
   })
 
-  it('shows the running timer to the other person: the timer belongs to the workspace, not a person', async () => {
+  it('keeps the running timer to its owner: the other person sees none and is only told the timer is busy', async () => {
     const { live, ana, ben } = await googleWorld('timer')
     const made = result<Created>(await pcall(live, ana, 'createClient', clientInput('Cliente Uno')))
     const c1 = result<{ ok: true; case: { id: string } }>(await pcall(live, ana, 'createCase', made.client.id, caseInput)).case.id
-    const c2 = result<{ ok: true; case: { id: string } }>(await pcall(live, ana, 'createCase', made.client.id, { ...caseInput, title: 'Paternal side' })).case.id
+    const benClient = result<Created>(await pcall(live, ben, 'createClient', clientInput('Cliente Dos')))
+    const benCase = result<{ ok: true; case: { id: string } }>(await pcall(live, ben, 'createCase', benClient.client.id, { ...caseInput, title: 'Paternal side' })).case.id
     expect(result(await pcall(live, ben, 'getActiveTimer'))).toBeNull()
-    const started = result<{ ok: true; timer: { caseId: string } }>(await pcall(live, ana, 'startTimer', c1))
-    // Recorded behaviour (#182): getActiveTimer returns the same running timer to every signed-in person; there is one timer for the whole workspace.
-    expect(result<{ caseId: string } | null>(await pcall(live, ben, 'getActiveTimer'))).toMatchObject({ caseId: started.timer.caseId })
-    // Recorded behaviour (#182): the other person cannot start a timer on a different case while it runs (reason "other-case-timer").
-    expect(result(await pcall(live, ben, 'startTimer', c2))).toMatchObject({ ok: false, reason: 'other-case-timer', timer: { caseId: c1 } })
+    const started = result<{ ok: true; timer: { caseId: string; version: number } }>(await pcall(live, ana, 'startTimer', c1))
+    // Known limitation (one global timer): the other person learns only that a timer is busy, never whose or where.
+    expect(result(await pcall(live, ben, 'getActiveTimer'))).toBeNull()
+    expect(result(await pcall(live, ben, 'startTimer', benCase))).toEqual({ ok: false, reason: 'conflict', timer: null })
+    expect(result(await pcall(live, ben, 'discardTimer', started.timer.version))).toEqual({ ok: false, reason: 'not-found' })
+    expect(result<{ caseId: string } | null>(await pcall(live, ana, 'getActiveTimer'))).toMatchObject({ caseId: c1 })
   })
 })
 

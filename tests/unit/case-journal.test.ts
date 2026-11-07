@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -205,7 +206,7 @@ describe('CaseJournalRepository', () => {
   let clientB: string
 
   function newClient(name: string): string {
-    const created = clients.create({ ...clientInput, displayName: name })
+    const created = clients.create({ ...clientInput, displayName: name }, { kind: 'unowned' })
     if (!created.ok) throw new Error('fixture client invalid')
     return created.client.id
   }
@@ -431,7 +432,7 @@ describe('CaseJournalRepository', () => {
     const marker = 'JOURNAL-ONLY-TEXT'
     saved(journal.create(caseA, { ...entry, body: marker, activity: marker }))
     expect(JSON.stringify(cases.get(caseA))).not.toContain(marker)
-    expect(JSON.stringify(cases.list({ text: '', states: [], archived: 'all', clientId: null, sort: 'updated' }))).not.toContain(marker)
+    expect(JSON.stringify(cases.list({ text: '', states: [], archived: 'all', clientId: null, sort: 'updated' }, SCOPE_ALL))).not.toContain(marker)
     expect(JSON.stringify(new CaseBriefRepository(db).get(caseA))).not.toContain(marker)
   })
 
@@ -510,7 +511,7 @@ describe('CaseJournalRepository', () => {
 describe('persistence', () => {
   it('keeps entries across closing and reopening, with their order and the case’s updated time', () => {
     const first = new AppData(userData)
-    const client = first.clients.create(clientInput)
+    const client = first.clients.create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const created = first.cases.create(client.client.id, caseInput)
     if (!created.ok) throw new Error('fixture case invalid')
@@ -551,8 +552,8 @@ describe('migration 5 (case_journal_entries)', () => {
     db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
     const clients = new ClientRepository(db)
     const cases = new CaseRepository(db)
-    const archived = clients.create({ ...clientInput, displayName: 'Archived Client' })
-    const active = clients.create({ ...clientInput, displayName: 'Active Client' })
+    const archived = clients.create({ ...clientInput, displayName: 'Archived Client' }, { kind: 'unowned' })
+    const active = clients.create({ ...clientInput, displayName: 'Active Client' }, { kind: 'unowned' })
     if (!archived.ok || !active.ok) throw new Error('fixture client invalid')
     const one = cases.create(active.client.id, caseInput)
     const two = cases.create(archived.client.id, { ...caseInput, title: 'Second case' })
@@ -642,10 +643,10 @@ describe('backup and restore with journal entries', () => {
   })
 
   function seedCase(title: string): string {
-    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]
+    const client = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)[0]
     let clientId = client?.id
     if (!clientId) {
-      const created = data.clients.create(clientInput)
+      const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       clientId = created.client.id
     }
@@ -681,7 +682,7 @@ describe('backup and restore with journal entries', () => {
     configureConnection(old)
     migrate(old, {}, migrations.slice(0, 4))
     old.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-    const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' })
+    const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' }, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const oldCase = new CaseRepository(old).create(client.client.id, caseInput)
     if (!oldCase.ok) throw new Error('fixture case invalid')
