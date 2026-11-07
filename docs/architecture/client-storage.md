@@ -25,7 +25,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 | --- | --- |
 | `src/shared/client-model.ts` | `client-model/v1` types and pure rules: normalization, validation (field and rule codes only), duplicate keys, directory query. Used by both the main process and the renderer. |
 | `src/main/database/migrations.ts` | Forward-only numbered migrations and the runner. |
-| `src/main/database/connection.ts` | Opens the database file, sets pragmas, runs migrations, takes the pre-migration copy. The only place the driver is configured. |
+| `src/main/database/connection.ts` | Opens the database file and sets pragmas; creates a new database at the latest schema and refuses an existing one that is older, newer or unsafe (#248). The only place the driver is configured. |
 | `src/main/database/client-repository.ts` | Client reads and writes. Re-runs `checkClient` on every write; renderer checks are never trusted. |
 | `src/main/database/app-data.ts` | Owns the live connection and repositories; backup, backup inspection and restore with rollback (#11). |
 | `src/main/backup.ts` | Backup service behind native dialogs; paths stay in main, the renderer gets a one-time token. |
@@ -42,7 +42,7 @@ Both candidates were loaded inside Electron 45.1.0 (Node 24.22.1, `NODE_MODULE_V
 ## Migrations
 
 - Tracked with `PRAGMA user_version`. Each migration runs in its own `BEGIN IMMEDIATE` transaction together with the version bump, so a failure rolls back to the previous version.
-- Before upgrading an existing database, a consistent copy is written with `VACUUM INTO` to `data/pre-migration/tracing-guatemala.sqlite.v<from>.<timestamp>.sqlite`. A new empty database is not copied.
+- Opening never upgrades an existing database (#248): an older one is refused with `MigrationRequiredError` and upgraded only by the operator's maintenance command, which writes a verified snapshot under `data/maintenance/<stamp>/` first. See [migration-safety.md](migration-safety.md) and [../operations/database-migration.md](../operations/database-migration.md). Older builds wrote `data/pre-migration/` copies; those folders are left alone.
 - A database with a higher version than the app knows (written by a newer build) is refused without changes, with an explanatory dialog.
 - Any open or migration failure shows a generic dialog ("Nothing was changed or deleted") and exits. Only the error name is logged, never the message, because SQLite messages can quote stored values.
 

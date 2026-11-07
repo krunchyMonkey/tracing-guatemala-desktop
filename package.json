@@ -33,7 +33,9 @@
     "smoke:live": "node --disable-warning=ExperimentalWarning scripts/live-smoke.mjs",
     "pilot:rehearsal": "node --disable-warning=ExperimentalWarning scripts/pilot-rehearsal.mjs",
     "lan:rehearsal": "node --disable-warning=ExperimentalWarning scripts/lan-rehearsal.mjs",
-    "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs"
+    "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs",
+    "db:migrate": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --migrate-database",
+    "db:revert-migration": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --revert-migration"
   },
   "dependencies": {
     "@tiptap/core": "3.31.4",

@@ -22,6 +22,7 @@ import {
   type NotebookSectionResult
 } from '../../src/shared/notebook'
 import { emptyNoteContent, serializeNoteContent, type NoteBlock, type NoteContent } from '../../src/shared/note-content'
+import { confirmationPhrase, migrateProfile } from '../../src/server/maintenance/migrate-database'
 
 // Research notebook storage (#147): the SQLite repository on real migrations,
 // the database triggers, a host restart, migration 8 on a real v7 profile and
@@ -628,9 +629,17 @@ describe('on disk', () => {
       old.close()
       expect(migrations[7]?.name).toBe('research_notebooks')
 
-      const opened = openAppDatabase(userData, () => new Date('2026-10-29T12:00:00.000Z'))
+      const report = migrateProfile({
+        dataDir: userData,
+        expectFrom: 7,
+        expectTo: migrations.length,
+        confirm: confirmationPhrase(7, migrations.length),
+        now: () => new Date('2026-10-29T12:00:00.000Z')
+      })
+
+      const opened = openAppDatabase(userData)
       try {
-        expect(opened.migration).toEqual({ from: 7, to: migrations.length })
+        expect(report).toMatchObject({ from: 7, to: migrations.length })
         expect(opened.db.prepare('SELECT * FROM research_cases ORDER BY id').all()).toEqual(cases)
         expect(count(opened.db, 'case_notebooks')).toBe(0)
         expect(opened.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
