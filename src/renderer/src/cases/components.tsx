@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { describeFailure } from '../runtime/errorText'
 import { Alert } from '../clients/components'
 import { formatDueDate, isOverdue, localDateString, stateLabels, type CaseState, type ResearchCase } from './model'
 
@@ -32,10 +33,10 @@ export function CaseNotFound() {
   )
 }
 
-export function CasesLoadError({ onRetry, what = 'Your cases' }: { onRetry(): void; what?: string }) {
+export function CasesLoadError({ onRetry, what = 'Your cases', error }: { onRetry(): void; what?: string; error?: unknown }) {
   return (
     <Alert tone="error" title={`${what} couldn’t be loaded`}>
-      <p>Nothing was changed or lost. Try again, or restart the app if this keeps happening.</p>
+      <p>{describeFailure(error, 'Nothing was changed or lost. Try again, or restart the app if this keeps happening.')}</p>
       <button type="button" className="button button-secondary" onClick={onRetry}>
         Try again
       </button>

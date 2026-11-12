@@ -145,6 +145,8 @@ export type AppRuntime =
       account?: AccountApi
       /** Google sessions only. */
       person?: SignedInPerson
+      /** What this session reaches in research (#246), from the host; display only. Undefined: no notice. */
+      research?: 'own' | 'all' | 'none'
       /** Remote only: ends this device's session on the host. */
       signOut?: () => Promise<void>
     }

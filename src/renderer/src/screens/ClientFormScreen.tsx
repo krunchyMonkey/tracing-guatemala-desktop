@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useClientStore, type SaveResult } from '../clients/ClientStore'
+import { refusalKind, refusalMessage, type RefusalKind } from '../runtime/errorText'
 import { Alert, ConfirmDialog, StatusBadge } from '../clients/components'
 import {
   NAME_MAX,
@@ -22,9 +23,12 @@ import {
 // Add/edit form (#3 baseline, saved through the main process since #6). Fields and
 // rules follow client-model/v1; the main process re-checks every save.
 
-type SaveError = 'failed' | 'not-found' | 'wrong-status' | 'duplicate-check-failed'
+type SaveError = 'failed' | 'not-found' | 'wrong-status' | 'duplicate-check-failed' | RefusalKind
 
 const saveErrorMessages: Record<SaveError, string> = {
+  'owner-required': refusalMessage('owner-required'),
+  'research-unavailable': refusalMessage('research-unavailable'),
+  forbidden: refusalMessage('forbidden'),
   failed: 'Something went wrong while saving. Your changes are still here, so you can try again.',
   'not-found': 'This client couldn’t be found any more. Your changes are still here; copy anything you need.',
   'wrong-status': 'This client was archived, so it can’t be edited. Restore it from the profile first.',
@@ -103,6 +107,9 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
     let result: SaveResult
     try {
       result = clientId !== undefined ? await store.updateClient(clientId, valid) : await store.createClient(valid)
+    } catch (error) {
+      // The store reports failures as results; this keeps a thrown one from escaping as an unhandled rejection.
+      result = { ok: false, reason: refusalKind(error) ?? 'failed' }
     } finally {
       setSaving(false)
     }
@@ -134,9 +141,9 @@ function ClientForm({ clientId, initial = emptyFormValues }: { clientId?: string
     let matches: DuplicateCandidate[]
     try {
       matches = await store.findDuplicates(input, clientId ?? null)
-    } catch {
+    } catch (error) {
       setSaving(false)
-      setSaveError('duplicate-check-failed')
+      setSaveError(refusalKind(error) ?? 'duplicate-check-failed')
       return
     }
     setSaving(false)

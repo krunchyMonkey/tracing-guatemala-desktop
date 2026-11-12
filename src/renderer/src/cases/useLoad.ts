@@ -7,8 +7,12 @@ export type LoadStatus = 'loading' | 'ready' | 'error'
  * available while a new load runs, and an older, slower response never replaces a
  * newer one.
  */
-export function useLoad<T>(load: () => Promise<T>, key: string): { status: LoadStatus; data: T | undefined; retry(): void } {
-  const [state, setState] = useState<{ status: LoadStatus; data: T | undefined }>({ status: 'loading', data: undefined })
+export function useLoad<T>(load: () => Promise<T>, key: string): { status: LoadStatus; data: T | undefined; error: unknown; retry(): void } {
+  const [state, setState] = useState<{ status: LoadStatus; data: T | undefined; error: unknown }>({
+    status: 'loading',
+    data: undefined,
+    error: undefined
+  })
   const [attempt, setAttempt] = useState(0)
   const loadRef = useRef(load)
 
@@ -20,10 +24,10 @@ export function useLoad<T>(load: () => Promise<T>, key: string): { status: LoadS
     let current = true
     loadRef.current().then(
       (data) => {
-        if (current) setState({ status: 'ready', data })
+        if (current) setState({ status: 'ready', data, error: undefined })
       },
-      () => {
-        if (current) setState((s) => ({ status: 'error', data: s.data }))
+      (error: unknown) => {
+        if (current) setState((s) => ({ status: 'error', data: s.data, error }))
       }
     )
     return () => {
@@ -32,7 +36,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string): { status: LoadS
   }, [key, attempt])
 
   const retry = useCallback(() => {
-    setState((s) => ({ status: 'loading', data: s.data }))
+    setState((s) => ({ status: 'loading', data: s.data, error: undefined }))
     setAttempt((n) => n + 1)
   }, [])
 

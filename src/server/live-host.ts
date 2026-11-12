@@ -5,7 +5,7 @@ import { caseContracts, contracts, liveContracts, type CallContract } from '../m
 import { createDataServices, type DataServices } from '../main/data-services'
 import { ClientOwnershipError, type ClientCreateOwnership } from '../main/database/client-repository'
 import type { AppData } from '../main/database/app-data'
-import { researchSchemaReady, ResearchUnavailableError, SCOPE_NONE, userScope } from '../main/database/research-access'
+import { localScope, researchSchemaReady, ResearchUnavailableError, SCOPE_NONE, userScope } from '../main/database/research-access'
 import { contentTypeFor, resolveStaticPath } from '../main/renderer-files'
 import { buildContentSecurityPolicy } from '../shared/csp'
 import type { AppInfo } from '../shared/ipc'
@@ -338,6 +338,21 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     const db = data().db
     if (!researchSchemaReady(db)) throw new RequestError(503, 'research-unavailable')
     return principal.kind === 'user' ? dataServices.forScope(userScope(db, principal.userId)) : dataServices.forLocalOperator()
+  }
+  /**
+   * What the session may reach in research, for display only (#246): the same rule `bindData` enforces,
+   * never a decision. A signed-in user works on their own research; the host and paired devices see all
+   * of it only while the profile has no users. An unready schema reports 'none'.
+   */
+  function researchReach(kind: 'user' | 'local'): 'own' | 'all' | 'none' {
+    if (kind === 'user') return 'own'
+    try {
+      const db = data().db
+      if (!researchSchemaReady(db)) return 'none'
+      return localScope(db).kind === 'all' ? 'all' : 'none'
+    } catch {
+      return 'none'
+    }
   }
   const loopback: ListenerPolicy = { kind: 'loopback', hosts: allowedHosts(port), origin: `http://127.0.0.1:${port}` }
   let lan: ListenerPolicy | null = !options.lan
@@ -681,7 +696,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
     if (path === `${API_PREFIX}/session`) {
       if (method !== 'GET') throw new RequestError(405, 'method-not-allowed')
       const session = sessionOf(req)
-      send(res, 200, session ? { authenticated: true, csrfToken: session.csrfToken, demoUrl } : { authenticated: false, demoUrl })
+      send(res, 200, session ? { authenticated: true, csrfToken: session.csrfToken, demoUrl, research: researchReach('local') } : { authenticated: false, demoUrl })
       return path
     }
     if (path.startsWith(`${API_PREFIX}/call/`)) {
@@ -784,6 +799,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
           ? {
               authenticated: true,
               csrfToken: found.session.csrfToken,
+              research: researchReach('user'),
               remote: true,
               auth: 'google',
               demoUrl: null,
@@ -919,7 +935,7 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
         res,
         200,
         found
-          ? { authenticated: true, csrfToken: found.session.csrfToken, demoUrl: lanDemoUrl, remote: true, device: { name: found.device.name } }
+          ? { authenticated: true, csrfToken: found.session.csrfToken, demoUrl: lanDemoUrl, remote: true, device: { name: found.device.name }, research: researchReach('local') }
           : { authenticated: false, demoUrl: lanDemoUrl, remote: true }
       )
       return

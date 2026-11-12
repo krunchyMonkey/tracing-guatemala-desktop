@@ -48,6 +48,7 @@ try {
       onSessionLost: () => render(google ? <GoogleSignIn sessionEnded /> : remote ? <EnrollDevice sessionEnded /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />),
       ...(remote ? { onUnreachable: () => render(<HostUnreachable />) } : {})
     })
+    const research = session.research === 'own' || session.research === 'all' || session.research === 'none' ? session.research : undefined
     const userName = session.user?.displayName
     const userRole = session.user?.role
     const person: SignedInPerson | null = google && typeof userName === 'string' && isUserRole(userRole) ? { name: userName, role: userRole } : null
@@ -61,10 +62,11 @@ try {
           switcher,
           remote: true,
           signOut: live.signOut,
+          ...(research ? { research } : {}),
           // The server decides what a call may do; the owner's directory is only wired up for owners.
           ...(person ? { account: live.account, person, ...(person.role === 'owner' ? { users: live.users } : {}) } : {})
         }
-      : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users }
+      : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users, ...(research ? { research } : {}) }
     render(<App runtime={runtime} />)
   } else {
     render(google ? <GoogleSignIn reason={takeSignInReason()} /> : remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)

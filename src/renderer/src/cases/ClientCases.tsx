@@ -35,7 +35,7 @@ export function ClientCases({ client, api }: { client: Client; api: CaseApi }) {
       )}
 
       {loaded.status === 'error' && loaded.data === undefined ? (
-        <CasesLoadError onRetry={loaded.retry} what="This client’s cases" />
+        <CasesLoadError onRetry={loaded.retry} error={loaded.error} what="This client’s cases" />
       ) : loaded.data === undefined ? (
         <p className="muted" role="status">
           Loading cases…

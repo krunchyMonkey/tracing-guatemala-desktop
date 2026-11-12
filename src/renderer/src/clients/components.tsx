@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { Outlet } from 'react-router'
+import { describeFailure } from '../runtime/errorText'
 import { useClientStore } from './ClientStore'
 import { sourceLabels, type ClientSource, type ClientStatus } from './model'
 
@@ -106,7 +107,7 @@ export function ConfirmDialog({ title, children, confirmLabel, tone = 'default',
 
 /** Renders the client screens once the saved clients have loaded, with loading and retry states. */
 export function ClientsLoaded() {
-  const { loadState, reload } = useClientStore()
+  const { loadState, loadError, reload } = useClientStore()
   if (loadState === 'loading') {
     return (
       <p role="status" className="muted">
@@ -119,7 +120,7 @@ export function ClientsLoaded() {
       <section aria-labelledby="load-error-heading">
         <h1 id="load-error-heading">Clients</h1>
         <Alert tone="error" title="Your clients couldn’t be loaded">
-          <p>Nothing was changed or lost. Try again, or restart the app if this keeps happening.</p>
+          <p>{describeFailure(loadError, 'Nothing was changed or lost. Try again, or restart the app if this keeps happening.')}</p>
           <button type="button" className="button button-secondary" onClick={reload}>
             Try again
           </button>

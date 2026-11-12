@@ -96,7 +96,7 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
     return (
       <section aria-labelledby="notebook-error-heading">
         <h1 id="notebook-error-heading">Research notebook</h1>
-        <CasesLoadError onRetry={loadedCase.retry} what="This case" />
+        <CasesLoadError onRetry={loadedCase.retry} error={loadedCase.error} what="This case" />
       </section>
     )
   }
@@ -112,7 +112,7 @@ function Notebook({ caseId, pageId }: { caseId: string; pageId: string | undefin
     return (
       <section aria-labelledby="notebook-error-heading">
         <h1 id="notebook-error-heading">Research notebook</h1>
-        <CasesLoadError onRetry={outlineLoad.retry} what="The notebook" />
+        <CasesLoadError onRetry={outlineLoad.retry} error={outlineLoad.error} what="The notebook" />
       </section>
     )
   }
