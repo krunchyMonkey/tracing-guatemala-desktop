@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -104,7 +105,7 @@ describe('CaseRepository', () => {
   let clientB: string
 
   function newClient(name: string): string {
-    const created = clients.create({ ...clientInput, displayName: name, fiverrUsername: null, preferredContactChannel: 'unspecified' })
+    const created = clients.create({ ...clientInput, displayName: name, fiverrUsername: null, preferredContactChannel: 'unspecified' }, { kind: 'unowned' })
     if (!created.ok) throw new Error('fixture client invalid')
     return created.client.id
   }
@@ -238,12 +239,12 @@ describe('CaseRepository', () => {
       const undated = expectOk(cases.create(clientA, { ...caseInput, title: 'Mid line', dueDate: null }))
       expectOk(cases.setState(undated.id, 'active'))
 
-      expect(cases.list({ ...everything, sort: 'due' }).map((c) => c.id)).toEqual([late.id, early.id, undated.id])
-      expect(cases.list({ ...everything, sort: 'title' }).map((c) => c.title)).toEqual(['Alfa line', 'Mid line', 'Zeta line'])
-      expect(cases.list({ ...everything, clientId: clientA, sort: 'title' }).map((c) => c.id)).toEqual([undated.id, early.id])
-      expect(cases.list({ ...everything, states: ['active'] }).map((c) => c.id)).toEqual([undated.id])
-      expect(cases.list({ ...everything, text: 'fo-example-0099' }).map((c) => c.id)).toEqual([late.id])
-      expect(cases.list({ ...everything, sort: 'updated' })[0]!.id).toBe(undated.id)
+      expect(cases.list({ ...everything, sort: 'due' }, SCOPE_ALL).map((c) => c.id)).toEqual([late.id, early.id, undated.id])
+      expect(cases.list({ ...everything, sort: 'title' }, SCOPE_ALL).map((c) => c.title)).toEqual(['Alfa line', 'Mid line', 'Zeta line'])
+      expect(cases.list({ ...everything, clientId: clientA, sort: 'title' }, SCOPE_ALL).map((c) => c.id)).toEqual([undated.id, early.id])
+      expect(cases.list({ ...everything, states: ['active'] }, SCOPE_ALL).map((c) => c.id)).toEqual([undated.id])
+      expect(cases.list({ ...everything, text: 'fo-example-0099' }, SCOPE_ALL).map((c) => c.id)).toEqual([late.id])
+      expect(cases.list({ ...everything, sort: 'updated' }, SCOPE_ALL)[0]!.id).toBe(undated.id)
     })
   })
 
@@ -333,8 +334,8 @@ describe('CaseRepository', () => {
       expect(cases.setState(researchCase.id, 'waiting')).toEqual({ ok: false, reason: 'wrong-status' })
       expect(cases.setState(researchCase.id, 'intake')).toEqual({ ok: false, reason: 'wrong-status' })
       expect(snapshot()).toEqual(before)
-      expect(cases.list({ ...everything, archived: 'active' })).toEqual([])
-      expect(cases.list({ ...everything, archived: 'archived' }).map((c) => c.id)).toEqual([researchCase.id])
+      expect(cases.list({ ...everything, archived: 'active' }, SCOPE_ALL)).toEqual([])
+      expect(cases.list({ ...everything, archived: 'archived' }, SCOPE_ALL).map((c) => c.id)).toEqual([researchCase.id])
 
       expectOk(cases.unarchive(researchCase.id))
       expect(cases.setState(researchCase.id, 'waiting').ok).toBe(true)
@@ -371,7 +372,7 @@ describe('CaseRepository', () => {
 
       // Reading stays possible.
       expect(cases.get(open.id)?.title).toBe(caseInput.title)
-      expect(cases.list({ ...everything, clientId: clientA })).toHaveLength(2)
+      expect(cases.list({ ...everything, clientId: clientA }, SCOPE_ALL)).toHaveLength(2)
 
       expect(clients.restore(clientA).ok).toBe(true)
       expect(cases.update(open.id, { ...caseInput, title: 'Edited after restore' }).ok).toBe(true)
@@ -397,9 +398,9 @@ describe('CaseRepository', () => {
       const b = expectOk(cases.create(clientB, { ...caseInput, title: 'Case of B' }))
       expectOk(cases.setState(a.id, 'active'))
 
-      expect(cases.list({ ...everything, clientId: clientA }).map((c) => c.id)).toEqual([a.id])
-      expect(cases.list({ ...everything, clientId: clientB }).map((c) => c.id)).toEqual([b.id])
-      expect(cases.list({ ...everything, clientId: crypto.randomUUID() })).toEqual([])
+      expect(cases.list({ ...everything, clientId: clientA }, SCOPE_ALL).map((c) => c.id)).toEqual([a.id])
+      expect(cases.list({ ...everything, clientId: clientB }, SCOPE_ALL).map((c) => c.id)).toEqual([b.id])
+      expect(cases.list({ ...everything, clientId: crypto.randomUUID() }, SCOPE_ALL)).toEqual([])
       expect(cases.get(a.id)?.clientId).toBe(clientA)
       expect(cases.get(b.id)?.clientId).toBe(clientB)
 
@@ -414,7 +415,7 @@ describe('CaseRepository', () => {
       expectOk(cases.update(a.id, { ...caseInput, title: 'Edited' }))
       expectOk(cases.archive(a.id))
       expect(cases.get(a.id)?.clientId).toBe(clientA)
-      expect(cases.list({ ...everything, clientId: clientB })).toEqual([])
+      expect(cases.list({ ...everything, clientId: clientB }, SCOPE_ALL)).toEqual([])
     })
   })
 
@@ -523,20 +524,20 @@ describe('CaseRepository', () => {
 describe('persistence', () => {
   it('keeps cases, states, archive flags and events across closing and reopening', () => {
     let data = new AppData(userData)
-    const client = data.clients.create(clientInput)
+    const client = data.clients.create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const created = expectOk(data.cases.create(client.client.id, caseInput))
     expectOk(data.cases.setState(created.id, 'active'))
     expectOk(data.cases.setState(created.id, 'delivered'))
     const other = expectOk(data.cases.create(client.client.id, { ...caseInput, title: 'Archived order' }))
     expectOk(data.cases.archive(other.id))
-    const casesBefore = data.cases.list(everything)
+    const casesBefore = data.cases.list(everything, SCOPE_ALL)
     const eventsBefore = data.cases.listEvents(created.id)
     data.close()
 
     data = new AppData(userData)
     try {
-      expect(data.cases.list(everything)).toEqual(casesBefore)
+      expect(data.cases.list(everything, SCOPE_ALL)).toEqual(casesBefore)
       expect(data.cases.get(created.id)).toMatchObject({ state: 'delivered', archivedAt: null })
       expect(data.cases.get(other.id)?.archivedAt).not.toBeNull()
       expect(data.cases.listEvents(created.id)).toEqual(eventsBefore)
@@ -562,7 +563,7 @@ describe('migration 3 (research_cases)', () => {
     const clients = new ClientRepository(db)
     const notes = new NoteRepository(db)
     const ids = ['Ana Ejemplo', 'Bea Muestra', 'Carlos Ficticio'].map((displayName) => {
-      const created = clients.create({ ...clientInput, displayName, fiverrUsername: null, preferredContactChannel: 'unspecified' })
+      const created = clients.create({ ...clientInput, displayName, fiverrUsername: null, preferredContactChannel: 'unspecified' }, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       return created.client.id
     })
@@ -626,9 +627,9 @@ describe('migration 3 (research_cases)', () => {
     })
     const data = new AppData(userData)
     try {
-      const [first] = data.clients.list({ text: 'Ana', status: 'all', sources: [], sort: 'name' })
+      const [first] = data.clients.list({ text: 'Ana', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)
       expect(expectOk(data.cases.create(first!.id, caseInput)).clientId).toBe(first!.id)
-      const archived = data.clients.list({ text: 'Carlos', status: 'archived', sources: [], sort: 'name' })[0]!
+      const archived = data.clients.list({ text: 'Carlos', status: 'archived', sources: [], sort: 'name' }, SCOPE_ALL)[0]!
       expect(data.cases.create(archived.id, caseInput)).toEqual({ ok: false, reason: 'client-archived' })
     } finally {
       data.close()
@@ -680,10 +681,10 @@ describe('backup and restore with cases', () => {
   })
 
   function seedCase(title = caseInput.title): ResearchCase {
-    const existing = data.clients.list(everyoneClients)[0]
+    const existing = data.clients.list(everyoneClients, SCOPE_ALL)[0]
     let clientId = existing?.id
     if (!clientId) {
-      const created = data.clients.create(clientInput)
+      const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       clientId = created.client.id
     }
@@ -696,7 +697,7 @@ describe('backup and restore with cases', () => {
     expectOk(data.cases.setState(kept.id, 'delivered'))
     const archived = seedCase('Archived kept case')
     expectOk(data.cases.archive(archived.id))
-    const casesBefore = data.cases.list(everything)
+    const casesBefore = data.cases.list(everything, SCOPE_ALL)
     const eventsBefore = data.cases.listEvents(kept.id)
 
     const file = join(root, 'backup.tgbackup')
@@ -705,10 +706,10 @@ describe('backup and restore with cases', () => {
     // Change the data, then restore the backup.
     seedCase('Added after backup')
     expectOk(data.cases.setState(kept.id, 'closed'))
-    expect(data.cases.list(everything)).toHaveLength(3)
+    expect(data.cases.list(everything, SCOPE_ALL)).toHaveLength(3)
 
     expect(data.restoreBackup(file)).toEqual({ clients: 1, notes: 0, schemaVersion: migrations.length })
-    expect(data.cases.list(everything)).toEqual(casesBefore)
+    expect(data.cases.list(everything, SCOPE_ALL)).toEqual(casesBefore)
     expect(data.cases.listEvents(kept.id)).toEqual(eventsBefore)
     expect(data.cases.get(archived.id)?.archivedAt).not.toBeNull()
     // The restored repositories work.
@@ -721,17 +722,17 @@ describe('backup and restore with cases', () => {
     configureConnection(old)
     migrate(old, {}, migrations.slice(0, 2))
     old.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-    const oldClient = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' })
+    const oldClient = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' }, { kind: 'unowned' })
     if (!oldClient.ok) throw new Error('fixture client invalid')
     old.exec('PRAGMA journal_mode = DELETE')
     old.close()
     expect(inspectBackup(file)).toEqual({ clients: 1, notes: 0, schemaVersion: 2 })
 
     seedCase('Current case')
-    expect(data.cases.list(everything)).toHaveLength(1)
+    expect(data.cases.list(everything, SCOPE_ALL)).toHaveLength(1)
 
     expect(data.restoreBackup(file)).toEqual({ clients: 1, notes: 0, schemaVersion: migrations.length })
-    expect(data.cases.list(everything)).toEqual([])
+    expect(data.cases.list(everything, SCOPE_ALL)).toEqual([])
     expect(count(data.db, 'case_events')).toBe(0)
     expect(data.db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     expect(expectOk(data.cases.create(oldClient.client.id, caseInput)).clientId).toBe(oldClient.client.id)
@@ -747,7 +748,7 @@ describe('backup and restore with cases', () => {
 
     expect(() => inspectBackup(file)).toThrow(new BackupInvalidError('too-new'))
     expect(() => data.restoreBackup(file)).toThrow(new BackupInvalidError('too-new'))
-    expect(data.cases.list(everything)).toEqual([kept])
+    expect(data.cases.list(everything, SCOPE_ALL)).toEqual([kept])
     expect(existsSync(join(dataDirectory(join(root, 'profile')), 'pre-restore'))).toBe(false)
   })
 
@@ -757,7 +758,7 @@ describe('backup and restore with cases', () => {
     data.createBackup(file)
     const current = seedCase('Only in current data')
     expectOk(data.cases.setState(current.id, 'active'))
-    const casesBefore = data.cases.list(everything)
+    const casesBefore = data.cases.list(everything, SCOPE_ALL)
     const eventsBefore = data.cases.listEvents(current.id)
 
     expect(() =>
@@ -767,7 +768,7 @@ describe('backup and restore with cases', () => {
         }
       })
     ).toThrow(RestoreFailedError)
-    expect(data.cases.list(everything)).toEqual(casesBefore)
+    expect(data.cases.list(everything, SCOPE_ALL)).toEqual(casesBefore)
     expect(data.cases.listEvents(current.id)).toEqual(eventsBefore)
     expect(expectOk(data.cases.setState(current.id, 'waiting')).state).toBe('waiting')
   })

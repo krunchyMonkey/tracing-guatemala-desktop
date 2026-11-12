@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -49,14 +50,14 @@ afterEach(() => {
 })
 
 function seed(name = input.displayName) {
-  const created = data.clients.create({ ...input, displayName: name })
+  const created = data.clients.create({ ...input, displayName: name }, { kind: 'unowned' })
   if (!created.ok) throw new Error('seed failed')
   const added = data.notes.create(created.client.id, note)
   if (!added.ok) throw new Error('note failed')
   return created.client
 }
 
-const names = () => data.clients.list(everyone).map((c) => c.displayName)
+const names = () => data.clients.list(everyone, SCOPE_ALL).map((c) => c.displayName)
 
 describe('createBackup', () => {
   it('writes one self-contained, verified file with every client and note', () => {

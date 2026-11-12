@@ -1,9 +1,10 @@
 import type { UserRole } from '../../shared/users'
 
 // Server-side authorization of the data calls (#180): one function, one table.
-// The browser never decides; hiding a button is not a control.
+// The browser never decides; hiding a button is not a control. A user principal carries the
+// internal app_users id of the validated session (#209); no decision here uses it yet (#210).
 
-export type Principal = { kind: 'host' } | { kind: 'device' } | { kind: 'user'; role: UserRole }
+export type Principal = { kind: 'host' } | { kind: 'device' } | { kind: 'user'; role: UserRole; userId: string }
 
 /** Backups, device administration and LAN/network actions: the loopback host session only, whoever is signed in remotely. */
 export const NEVER_REMOTE_CALLS: ReadonlySet<string> = new Set([

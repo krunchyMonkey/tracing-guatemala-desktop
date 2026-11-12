@@ -9,12 +9,13 @@ import type { AppUser, SignInRequest, UserMutationResult, UserRole } from '../..
 import { createFakeIdentityProvider } from '../../src/server/auth/fake-provider'
 import type { VerifiedIdentity } from '../../src/server/auth/identity'
 import { authorizeCall, type Principal } from '../../src/server/auth/policy'
+import { RESEARCH_CLASS } from '../../src/server/auth/research-policy'
 import { fakeIdentityAllowed, testFakeProvider } from '../../src/server/auth/provider-selection'
 import { createMemoryUserSessionStore, type UserSessionStore } from '../../src/server/auth/user-sessions'
 import { initLanTestProfile, LAN_TEST_MARKER } from '../../src/server/lan-profile'
 import { CALL_NAMES } from '../../src/server/live-host'
 import { startLiveServer, type RunningLiveServer } from '../../src/server/server'
-import { call, send, signIn, type Reply, type Signed } from './live-helpers'
+import { call, send, signIn, writeHeaders, type Reply, type Signed } from './live-helpers'
 
 // #180: Google per-user sessions on the HTTPS proxy listener (--https-host with --google-client).
 // The identity provider is the deterministic fake (no Google, no network). Fictional people only.
@@ -22,6 +23,7 @@ import { call, send, signIn, type Reply, type Signed } from './live-helpers'
 const appInfo = { name: 'Tracing Guatemala', version: '0.0.0-test', platform: 'web' } as const
 const NAME = 'tg.example.com'
 const ORIGIN = `https://${NAME}`
+const USER_ID = '00000000-0000-4000-8000-0000000000aa'
 const listQuery = { text: '', status: 'all', sources: [], sort: 'name' }
 const clientInput = {
   displayName: 'Ana Ejemplo',
@@ -242,18 +244,19 @@ describe('authorization policy table', () => {
   const principals: [string, Principal][] = [
     ['host', { kind: 'host' }],
     ['device', { kind: 'device' }],
-    ['researcher', { kind: 'user', role: 'researcher' }],
-    ['owner', { kind: 'user', role: 'owner' }]
+    ['researcher', { kind: 'user', role: 'researcher', userId: USER_ID }],
+    ['owner', { kind: 'user', role: 'owner', userId: USER_ID }]
   ]
 
   it('lists the special calls as real call names', () => {
     for (const name of [...NEVER, ...ADMIN, ...SELF]) expect(CALL_NAMES).toContain(name)
   })
 
-  // The policy allows remote users every call it doesn't list as special, so a new call must be
+  // The role policy allows remote users every call it doesn't list as special, so a new call must be
   // classified on purpose: adding one fails here until it is placed in this list or a policy set.
+  // Since #210 each of the research calls is also resource-scoped (research-policy.ts, exhaustive at compile time).
   it('classifies every call name explicitly (a new call fails until it is reviewed)', () => {
-    const SHARED_WORKSPACE = [
+    const RESEARCH_CALLS = [
       'getAppInfo', 'listClients', 'getClient', 'createClient', 'updateClient', 'archiveClient', 'restoreClient', 'findDuplicateClients',
       'listNotes', 'createNote', 'updateNote', 'listCases', 'getCase', 'listCaseEvents', 'createCase', 'updateCase', 'setCaseState',
       'archiveCase', 'unarchiveCase', 'getCaseBrief', 'saveCaseBrief', 'listJournalEntries', 'createJournalEntry', 'updateJournalEntry',
@@ -264,7 +267,16 @@ describe('authorization policy table', () => {
       'updateTimeEntry', 'deleteTimeEntry', 'getActiveTimer', 'startTimer', 'pauseTimer', 'resumeTimer', 'heartbeatTimer',
       'stopAndSaveTimer', 'discardTimer', 'getStudioSummary'
     ]
-    expect([...CALL_NAMES].sort()).toEqual([...SHARED_WORKSPACE, ...NEVER, ...ADMIN, ...SELF].sort())
+    expect([...CALL_NAMES].sort()).toEqual([...RESEARCH_CALLS, ...NEVER, ...ADMIN, ...SELF].sort())
+  })
+
+  it('keeps the research classification in step with the role policy sets', () => {
+    expect(Object.keys(RESEARCH_CLASS).sort()).toEqual([...CALL_NAMES].sort())
+    const noResearch = Object.entries(RESEARCH_CLASS)
+      .filter(([, kind]) => kind === 'no-research')
+      .map(([name]) => name)
+      .sort()
+    expect(noResearch).toEqual(['getAppInfo', ...NEVER, ...ADMIN, ...SELF].sort())
   })
 
   it.each(principals)('%s: every call name', (_label, principal) => {
@@ -277,8 +289,8 @@ describe('authorization policy table', () => {
 
   it('never lets a remote principal reach backups, device admin or LAN calls, owner included', () => {
     for (const name of NEVER) {
-      expect(authorizeCall(name, { kind: 'user', role: 'owner' }).allowed, name).toBe(false)
-      expect(authorizeCall(name, { kind: 'user', role: 'researcher' }).allowed, name).toBe(false)
+      expect(authorizeCall(name, { kind: 'user', role: 'owner', userId: USER_ID }).allowed, name).toBe(false)
+      expect(authorizeCall(name, { kind: 'user', role: 'researcher', userId: USER_ID }).allowed, name).toBe(false)
       expect(authorizeCall(name, { kind: 'device' }).allowed, name).toBe(false)
     }
   })
@@ -457,7 +469,7 @@ describe('the sign-in callback', () => {
 })
 
 describe('what each role may call', () => {
-  it('lets a researcher use the shared workspace and refuses the user directory', async () => {
+  it('lets a researcher use their own workspace and refuses the user directory', async () => {
     const { live, researcher } = await world()
     expect((await pcall(live, researcher, 'listClients', listQuery)).status).toBe(200)
     const client = result<{ ok: true; client: { id: string } }>(await pcall(live, researcher, 'createClient', clientInput))
@@ -469,6 +481,48 @@ describe('what each role may call', () => {
       expect(reply.status, name).toBe(403)
       expect(reply.json(), name).toEqual({ error: 'forbidden' })
     }
+  })
+
+  it('owns a new client by the signed-in user and by nobody the request names', async () => {
+    const { live, host, owner, researcher } = await world()
+    const created = result<{ ok: true; client: { id: string } }>(await pcall(live, researcher, 'createClient', clientInput))
+    expect(created.ok).toBe(true)
+    const ownCase = result<{ ok: true; case: { id: string } }>(await pcall(live, researcher, 'createCase', created.client.id, caseInput))
+
+    // Smuggling an owner into the request fails validation before anything is written.
+    for (const smuggled of [{ ...clientInput, displayName: 'Smuggled Client', ownerUserId: owner.id }, { ...clientInput, displayName: 'Smuggled Client', owner: owner.id }]) {
+      const reply = await pcall(live, researcher, 'createClient', smuggled)
+      expect(reply.status, reply.text).toBe(400)
+      expect(reply.json()).toEqual({ error: 'invalid-arguments' })
+    }
+    const listed = result<{ displayName: string }[]>(await pcall(live, researcher, 'listClients', listQuery))
+    expect(listed.map((c) => c.displayName)).toEqual(['Ana Ejemplo'])
+
+    // A second user creating a client is its owner, not the first.
+    const second = result<{ ok: true; client: { id: string } }>(await pcall(live, owner, 'createClient', { ...clientInput, displayName: 'Ana Second' }))
+    expect(second.ok).toBe(true)
+
+    // The host session is not a signed-in researcher: in a profile with users it must choose an owner (not offered over HTTP yet).
+    const hostCreate = await send(live, 'POST', '/api/v1/call/createClient', writeHeaders(live, host), JSON.stringify({ args: [{ ...clientInput, displayName: 'Host Attempt' }] }))
+    expect(hostCreate.status).toBe(409)
+    expect(hostCreate.json()).toEqual({ error: 'owner-required' })
+
+    await running!.close()
+    running = null
+    const db = new DatabaseSync(join(dataDir, 'data', 'tracing-guatemala.sqlite'), { readOnly: true })
+    const ownership = db.prepare('SELECT client_id, owner_user_id, origin, assigned_by FROM client_ownership ORDER BY assigned_at, client_id').all() as Record<string, string>[]
+    const events = db.prepare('SELECT action, subject_user_id, actor FROM ownership_events ORDER BY rowid').all() as Record<string, string>[]
+    const caseOwner = db
+      .prepare('SELECT o.owner_user_id AS owner FROM research_cases c JOIN client_ownership o ON o.client_id = c.client_id WHERE c.id = ?')
+      .get(ownCase.case.id) as { owner: string }
+    const clientCount = (db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n
+    db.close()
+    expect(clientCount).toBe(2)
+    expect(ownership).toHaveLength(2)
+    expect(ownership.find((o) => o['client_id'] === created.client.id)).toMatchObject({ owner_user_id: researcher.id, origin: 'created', assigned_by: researcher.id })
+    expect(ownership.find((o) => o['client_id'] === second.client.id)).toMatchObject({ owner_user_id: owner.id, origin: 'created' })
+    expect(events).toEqual(expect.arrayContaining([{ action: 'owned-on-create', subject_user_id: researcher.id, actor: researcher.id }]))
+    expect(caseOwner.owner).toBe(researcher.id)
   })
 
   it('lets an owner manage accounts, recorded under the owner id, and nothing host-only', async () => {

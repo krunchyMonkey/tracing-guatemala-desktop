@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ClientRepository } from '../../src/main/database/client-repository'
@@ -21,14 +22,14 @@ beforeEach(() => {
     newId: () => crypto.randomUUID()
   })
   created = manyClientInputs().map((input, i) => {
-    const result = repo.create(input)
+    const result = repo.create(input, { kind: 'unowned' })
     if (!result.ok) throw new Error(`fixture ${i} invalid`)
     if (isArchivedIndex(i)) repo.archive(result.client.id)
     return result.client
   })
 })
 
-const list = (query: Partial<DirectoryQuery>) => repo.list({ ...defaultQuery, ...query })
+const list = (query: Partial<DirectoryQuery>) => repo.list({ ...defaultQuery, ...query }, SCOPE_ALL)
 
 describe('directory queries (60 fictional clients)', () => {
   it('shows active clients by default, with archived and all options', () => {

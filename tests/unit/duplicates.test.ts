@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ClientRepository } from '../../src/main/database/client-repository'
@@ -28,7 +29,7 @@ beforeEach(() => {
   migrate(db)
   repo = new ClientRepository(db)
   const create = (input: Partial<ClientInput>) => {
-    const result = repo.create({ ...blank, ...input })
+    const result = repo.create({ ...blank, ...input }, { kind: 'unowned' })
     if (!result.ok) throw new Error('fixture invalid')
     return result.client
   }
@@ -39,7 +40,7 @@ beforeEach(() => {
 })
 
 const check = (input: Partial<ClientInput>, excludeId: string | null = null) =>
-  repo.findDuplicates({ ...blank, displayName: 'Someone New', ...input }, excludeId).map((m) => ({
+  repo.findDuplicates({ ...blank, displayName: 'Someone New', ...input }, excludeId, SCOPE_ALL).map((m) => ({
     name: m.client.displayName,
     signals: m.signals
   }))
@@ -69,7 +70,7 @@ describe('ClientRepository.findDuplicates', () => {
   })
 
   it('includes archived clients', () => {
-    const [match] = repo.findDuplicates({ ...blank, displayName: 'tomas herrera' }, null)
+    const [match] = repo.findDuplicates({ ...blank, displayName: 'tomas herrera' }, null, SCOPE_ALL)
     expect(match?.client).toMatchObject({ id: tomas.id, status: 'archived' })
   })
 
@@ -95,13 +96,13 @@ describe('ClientRepository.findDuplicates', () => {
   })
 
   it('returns nothing for invalid input instead of guessing', () => {
-    expect(repo.findDuplicates({ ...blank, displayName: '   ' }, null)).toEqual([])
-    expect(repo.findDuplicates({ ...blank, displayName: 'Tomás Herrera', email: 'not-an-email' }, null)).toEqual([])
+    expect(repo.findDuplicates({ ...blank, displayName: '   ' }, null, SCOPE_ALL)).toEqual([])
+    expect(repo.findDuplicates({ ...blank, displayName: 'Tomás Herrera', email: 'not-an-email' }, null, SCOPE_ALL)).toEqual([])
   })
 
   it('never changes stored clients', () => {
-    const before = repo.list({ text: '', status: 'all', sources: [], sort: 'name' })
-    repo.findDuplicates({ ...blank, displayName: 'Tomás Herrera' }, null)
-    expect(repo.list({ text: '', status: 'all', sources: [], sort: 'name' })).toEqual(before)
+    const before = repo.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)
+    repo.findDuplicates({ ...blank, displayName: 'Tomás Herrera' }, null, SCOPE_ALL)
+    expect(repo.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)).toEqual(before)
   })
 })
