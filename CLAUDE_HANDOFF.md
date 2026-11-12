@@ -1,20 +1,23 @@
 # Claude handoff — Web-first (updated 2026-11-05 for Phase 2.7 identity; 2026-10-31 for Phase 2.9 + Claude-ready PR delivery policy)
 
-> **PHASE FIX STATUS - 2026-11-12 (latest, verified on GitHub):** Nothing merged; nothing deployed. Live untouched (read-only listener check only): node 73676 on 127.0.0.1:4190-4192, caddy 62388 on :443, checkout `e12c732`.
-> - **#249 (#248) at `1a4535a`: ready for an authorized source merge.** It is mergeable and clean, with no open threads. [Final assessment](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/249#issuecomment-6834532592). [CI 42421894333](https://github.com/krunchyMonkey/tracing-guatemala-desktop/actions/runs/42421894333) is green (its one rerun was the #250 flake). Electron E2E was not run. It waits only on the owner's merge authorization; the #211 cutover gates still apply.
-> - **#250 → PR #252 at `1624f4b`: ready for review, test-only.** The cause was unreliable keyboard steps (`Control+End` around reference blocks; the `Shift+Home` DOM/editor selection lag). The fix uses pointer-driven caret and selection plus failure-only trace and logs. Evidence: **220/220** zero-retry repetitions, and CI 43305941605 green on the first attempt. No application defect is confirmed.
-> - **#253 (temporary integration, `integration/249-privacy-ownership`, worktree `wt/integration-249-privacy`).** Code is at `312acbb`: #249 + #244 `5e7cc5a` (which carries #238), with the migration tests ported to `db:migrate`. CI 43295231225 is green. [Security review](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/253#issuecomment-6835914644): no defects; a v9 profile is never auto-upgraded.
-> - **Landing order:**
->   1. Merge #249 with a merge commit.
->   2. Retarget #253 to `main`, retitle it, run full CI on the final HEAD, and review.
->   3. Squash-merge #253 as one unit. This needs its own owner authorization.
->   4. Close #238 and #244 as superseded.
+> **PHASE FIX STATUS - 2026-11-12 (latest, verified on GitHub):** Live untouched (read-only listener check only): node 73676 on 127.0.0.1:4190-4192, caddy 62388 on :443, checkout `e12c732`. Merging source code deploys nothing; a push to `main` runs test-only CI. **Nothing has been migrated or claimed on real data.**
+> - **Merged (owner-authorized, source only):**
+>   - #249 (#248) as merge commit `4fe7934`: the startup migration guard; an existing profile upgrades only through `npm run db:migrate`.
+>   - #252 (#250, closed) as squash `9f76ddd`: the notebook test fix.
+>   - **#253 as squash `273e0a8`: research ownership (#209) + per-user authorization (#210) as one unit.** It was independently reviewed at `8e160a8`, with approval and non-blocking notes.
+>   - #238 and #244 are closed as superseded; #238 was never merged on its own.
+> - **Review follow-ups:**
+>   - #255: test gaps, transactional point checks, and docs on the backup exception.
+>   - #247: the stuck-global-timer case was added to its acceptance criteria.
+> - **Before any real cutover**, the #211 gates must be met. After `db:migrate` on real data, all historical research stays unreachable until `db:claim-legacy` (#245) runs in the same maintenance window.
+> - **Order:**
+>   1. #245 `db:claim-legacy`: explicit ids, atomic per client, resumable audited batches; the target is an active, bound account.
+>   2. #246-a, then #246-b (attach a sign-in through the host, building on `approveSignInRequest`; no unrestricted identity replacement).
+>   3. #247-a/b: per-user timers.
+>   4. #212-a/b: sharing.
+>   5. #255.
+>   6. #211: rehearsal following [privacy-rehearsal-plan.md](docs/operations/privacy-rehearsal-plan.md), then cutover.
 >
->   **#238 is never merged alone.** If #249 is squash-merged, merge `main` into #253 first.
-> - **#245 / #246: not claude-ready** (dependency-gated). The PR boundaries and test matrices are in [#245](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/245#issuecomment-6835899844) and [#246](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/246#issuecomment-6835900604).
->   - **Owner decisions needed:** whether #245 bulk claims are all-or-nothing and take explicit client ids only; and whether #246-c recovery of a misbound identity may relax the immutable-identities rule.
->   - An unbound account can already be attached through the host-approved `approveSignInRequest`.
-> - **Next safe task once #249 is merged:** retarget #253 and run CI. After the unit lands, start #245 `db:claim-legacy` and #246-a, the owner-required/Owner research-entry UX.
 >
 > **OWNER ACCOUNT IS ALSO PRIMARY RESEARCHER — PRODUCT CLARIFICATION 2026-11-07:** The primary researcher likely has an existing single app-level `owner` role; actual Live account metadata has NOT been inspected or verified. **Do not downgrade her, create a second `researcher` account, force a role switch or grant all Owner accounts blanket research access.** In `src/shared/users.ts`, `owner|researcher` are app-admin roles; in the Phase FIX #209/#210 model research ownership/grants are separate and tied to the same validated stable `app_users.id`. An active authenticated `owner` must be able to administer users AND research clients explicitly owned/shared to that account, while any other Owner sees none without grants. #246 owns verified existing-account/Google-binding continuity and normal signed-in Owner UX on any device; #245's consented, backup-verified offline legacy-claim command may target an explicitly confirmed **active Owner** account without changing role; #247 timers and #212 sharing must support Owner-as-researcher; #211 requires private preflight to verify actual account ID/status/identity linkage, no email/role inference, exact legacy-client ownership consent, complete research visibility/new writes/admin capability before resuming Live. #183/#240 must preserve the exact app user ID/role/identity/ACLs when eventually migrating to PostgreSQL. If identity is missing/disabled/ambiguous, HALT and use separately authorized #246 recovery—not automatic attribution. All tests use fictional accounts; **no operating Live access, DB inspection, user changes, data claims or deployment** without fresh explicit owner instruction.
 >
