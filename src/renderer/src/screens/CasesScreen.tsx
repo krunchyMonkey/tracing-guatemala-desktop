@@ -138,7 +138,7 @@ export function CasesScreen() {
         </Link>
       </header>
 
-      {loaded.status === 'error' && <CasesLoadError onRetry={loaded.retry} />}
+      {loaded.status === 'error' && <CasesLoadError onRetry={loaded.retry} error={loaded.error} />}
 
       {loaded.status === 'loading' && loaded.data === undefined && (
         <p role="status" className="muted">

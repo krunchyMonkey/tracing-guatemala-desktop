@@ -20,6 +20,8 @@ export type SessionState =
       auth?: 'device' | 'google'
       device?: { name?: unknown }
       user?: { displayName?: unknown; role?: unknown; email?: unknown }
+      /** What this session reaches in research (#246), for display only; untrusted until checked. */
+      research?: unknown
     }
   | {
       authenticated: false

@@ -2,14 +2,15 @@ import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '../App'
 import { isUserRole } from '../../../shared/users'
-import type { AppRuntime, SignedInPerson } from '../runtime/AppRuntime'
+import type { AppDataApi, AppRuntime, SignedInPerson } from '../runtime/AppRuntime'
 import '../styles.css'
 import { liveModeSwitch, validDemoHref } from './demoLink'
 import { EnrollDevice } from './EnrollDevice'
 import { HostUnreachable } from './HostUnreachable'
 import { LaunchRequired } from './LaunchRequired'
 import { GoogleSignIn, takeSignInReason } from './GoogleSignIn'
-import { createLiveApi, fetchSession } from './liveApi'
+import { createLiveApi, fetchSession, LiveApiError } from './liveApi'
+import { parseResearchReach } from './sessionResearch'
 
 // Entry point of the Live web app (#110, vite.web.config.ts): the shared UI
 // over the loopback local web host. Without a session (the browser didn't come
@@ -48,24 +49,48 @@ try {
       onSessionLost: () => render(google ? <GoogleSignIn sessionEnded /> : remote ? <EnrollDevice sessionEnded /> : <LaunchRequired reason="session-ended" demoHref={demoHref} />),
       ...(remote ? { onUnreachable: () => render(<HostUnreachable />) } : {})
     })
+    let research = parseResearchReach(session.research)
+    // The reach is read once at page load; a refused client create means it changed (the first account
+    // appeared), so read it again and show the host notice without a reload (#246).
+    const data: AppDataApi = {
+      ...live.data,
+      createClient: async (input) => {
+        try {
+          return await live.data.createClient(input)
+        } catch (error) {
+          if (error instanceof LiveApiError && error.code === 'owner-required') {
+            const fresh = await fetchSession().catch(() => null)
+            if (fresh?.authenticated) {
+              research = parseResearchReach(fresh.research)
+              showApp()
+            }
+          }
+          throw error
+        }
+      }
+    }
     const userName = session.user?.displayName
     const userRole = session.user?.role
     const person: SignedInPerson | null = google && typeof userName === 'string' && isUserRole(userRole) ? { name: userName, role: userRole } : null
-    const runtime: AppRuntime = remote
-      ? {
-          mode: 'live',
-          data: live.data,
-          backup: null,
-          backupStatus: null,
-          cases: live.cases,
-          switcher,
-          remote: true,
-          signOut: live.signOut,
-          // The server decides what a call may do; the owner's directory is only wired up for owners.
-          ...(person ? { account: live.account, person, ...(person.role === 'owner' ? { users: live.users } : {}) } : {})
-        }
-      : { mode: 'live', data: live.data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users }
-    render(<App runtime={runtime} />)
+    const showApp = () => {
+      const runtime: AppRuntime = remote
+        ? {
+            mode: 'live',
+            data,
+            backup: null,
+            backupStatus: null,
+            cases: live.cases,
+            switcher,
+            remote: true,
+            signOut: live.signOut,
+            ...(research ? { research } : {}),
+            // The server decides what a call may do; the owner's directory is only wired up for owners.
+            ...(person ? { account: live.account, person, ...(person.role === 'owner' ? { users: live.users } : {}) } : {})
+          }
+        : { mode: 'live', data, backup: live.backup, backupStatus: live.backupStatus, cases: live.cases, switcher, lan: live.lan, users: live.users, ...(research ? { research } : {}) }
+      render(<App runtime={runtime} />)
+    }
+    showApp()
   } else {
     render(google ? <GoogleSignIn reason={takeSignInReason()} /> : remote ? <EnrollDevice /> : <LaunchRequired reason="signed-out" demoHref={demoHref} />)
   }

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ClientMutationResult } from '../../../shared/ipc'
 import { useAppRuntime } from '../runtime/AppRuntime'
+import { refusalKind, type RefusalKind } from '../runtime/errorText'
 import type { Client, ClientInput, DirectoryQuery, DuplicateCandidate } from './model'
 
 // Client state for the renderer. Clients are persisted by the main process
@@ -9,13 +10,15 @@ import type { Client, ClientInput, DirectoryQuery, DuplicateCandidate } from './
 // loaded per profile (useClientNotes).
 
 /** A main-process outcome, or `failed` when the call itself did not complete. */
-export type SaveResult = ClientMutationResult | { ok: false; reason: 'failed' }
+export type SaveResult = ClientMutationResult | { ok: false; reason: 'failed' | RefusalKind }
 
 export type LoadState = 'loading' | 'ready' | 'error'
 
 export interface ClientStore {
   clients: Client[]
   loadState: LoadState
+  /** Why the last load failed (a thrown value, never shown raw), when loadState is 'error'. */
+  loadError: unknown
   reload(): void
   /** Re-reads one client from the main process into the cache (or drops it if it no longer exists). */
   refreshClient(id: string): Promise<void>
@@ -40,6 +43,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
   const runtime = useAppRuntime()
   const [clients, setClients] = useState<Client[]>([])
   const [loadState, setLoadState] = useState<LoadState>('loading')
+  const [loadError, setLoadError] = useState<unknown>(undefined)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [directorySearch, setDirectorySearch] = useState('')
 
@@ -53,8 +57,10 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
           setClients(list)
           setLoadState('ready')
         },
-        () => {
-          if (current) setLoadState('error')
+        (error: unknown) => {
+          if (!current) return
+          setLoadError(error)
+          setLoadState('error')
         }
       )
     return () => {
@@ -71,8 +77,8 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     let result: ClientMutationResult
     try {
       result = await call()
-    } catch {
-      return { ok: false, reason: 'failed' }
+    } catch (error) {
+      return { ok: false, reason: refusalKind(error) ?? 'failed' }
     }
     if (result.ok) {
       const saved = result.client
@@ -100,6 +106,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
     () => ({
       clients,
       loadState,
+      loadError,
       reload,
       refreshClient,
       searchClients: (query) => runtime.data.listClients(query),
@@ -111,7 +118,7 @@ export function ClientStoreProvider({ children }: { children: ReactNode }) {
       archiveClient: (id) => mutate(() => runtime.data.archiveClient(id)),
       restoreClient: (id) => mutate(() => runtime.data.restoreClient(id))
     }),
-    [runtime, clients, loadState, directorySearch, reload, refreshClient, mutate]
+    [runtime, clients, loadState, loadError, directorySearch, reload, refreshClient, mutate]
   )
 
   return <ClientStoreContext.Provider value={store}>{children}</ClientStoreContext.Provider>

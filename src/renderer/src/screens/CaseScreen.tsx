@@ -94,7 +94,7 @@ function CaseOverview({ caseId }: { caseId: string }) {
     return (
       <section aria-labelledby="case-error-heading">
         <h1 id="case-error-heading">Case</h1>
-        <CasesLoadError onRetry={loaded.retry} what="This case" />
+        <CasesLoadError onRetry={loaded.retry} error={loaded.error} what="This case" />
       </section>
     )
   }
@@ -421,7 +421,7 @@ function History({ caseId, version }: { caseId: string; version: number }) {
     <section className="card history" aria-labelledby="case-history-heading">
       <h2 id="case-history-heading">History</h2>
       {events.status === 'error' && events.data === undefined ? (
-        <CasesLoadError onRetry={events.retry} what="The history" />
+        <CasesLoadError onRetry={events.retry} error={events.error} what="The history" />
       ) : events.data === undefined ? (
         <p className="muted empty-history" role="status">
           Loading history…

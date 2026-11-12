@@ -196,6 +196,10 @@ Unknown call names are 404 for users. Backups, restore, device administration an
 
 **Why a link and not a form (decided in #181).** The E2E found that a form POST can't work with the host's existing headers: the page CSP has `form-action 'none'` (which also covers the redirect to Google), and `Referrer-Policy: no-referrer` makes browsers send `Origin: null` on form posts. Rather than relax either, the sign-in button is a same-origin link and the start route is a Fetch-Metadata-checked GET. Neither header changes. Starting a sign-in from another site, the public apex or `www`, `fetch()` or an iframe is refused. Forging a start gives an attacker nothing anyway, because the login is bound to the `__Host-tg_login` cookie, its `state` and its nonce.
 
+## Host session and signed-in research (#246)
+
+The host session (the launch link on the host computer, and a paired home-network device) manages the app: backups, network and accounts. Once any account exists it cannot open research, and creating a client from it is refused with an explanation. Research belongs to the signed-in account: sign in with your Google account, including as an Owner, to work on your own clients and cases. An Owner researches as the same account that administers Users, so nothing changes in Settings. The session response reports a `research` field (`own`, `all` or `none`) only so the app can say this; it never grants or removes access.
+
 ## Owner checklist (#177)
 
 - [ ] Google Cloud project, Branding and Audience configured as above (Testing status is fine for the pilot).

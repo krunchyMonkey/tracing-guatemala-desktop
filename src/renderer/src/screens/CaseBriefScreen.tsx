@@ -67,7 +67,7 @@ function EditBrief({ caseId }: { caseId: string }) {
     return (
       <section aria-labelledby="form-heading">
         <h1 id="form-heading">Research brief</h1>
-        <CasesLoadError onRetry={loaded.retry} what="This case" />
+        <CasesLoadError onRetry={loaded.retry} error={loaded.error} what="This case" />
       </section>
     )
   }

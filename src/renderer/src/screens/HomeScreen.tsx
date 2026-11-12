@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
+import { HostResearchNotice } from '../components/HostResearchNotice'
 import { BackupReminder } from '../components/BackupReminder'
 import { CasesLoadError, StateBadge } from '../cases/components'
 import { formatDueDate } from '../cases/model'
@@ -67,6 +68,7 @@ function Studio({ api, demo }: { api: CaseApi; demo: boolean }) {
   return (
     <section aria-labelledby="home-heading" className="studio">
       {!demo && <BackupReminder />}
+      <HostResearchNotice />
       <header className="studio-header" {...guideAnchor('home-welcome')}>
         <div className="studio-textile" aria-hidden="true" />
         <p className="studio-eyebrow">Research Studio</p>
@@ -74,7 +76,7 @@ function Studio({ api, demo }: { api: CaseApi; demo: boolean }) {
         <p className="studio-date">{todayFormat.format(new Date())}</p>
       </header>
 
-      {loaded.status === 'error' && <CasesLoadError onRetry={loaded.retry} what="The studio overview" />}
+      {loaded.status === 'error' && <CasesLoadError onRetry={loaded.retry} error={loaded.error} what="The studio overview" />}
       {loaded.status === 'loading' && !summary && (
         <p role="status" className="muted">
           Loading your studio…

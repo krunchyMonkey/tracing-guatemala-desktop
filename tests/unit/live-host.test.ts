@@ -149,7 +149,7 @@ describe('demo address (#114)', () => {
     expect(signedOut).toEqual({ authenticated: false, demoUrl: 'http://localhost:4181/?live=4180' })
     const signed = await signIn(server)
     const signedIn = (await send(server, 'GET', '/api/v1/session', { Cookie: signed.cookie })).json()
-    expect(signedIn).toEqual({ authenticated: true, csrfToken: signed.csrf, demoUrl: 'http://localhost:4181/?live=4180' })
+    expect(signedIn).toEqual({ authenticated: true, csrfToken: signed.csrf, demoUrl: 'http://localhost:4181/?live=4180', research: 'all' })
   })
 
   it('reports null when no demo mirror runs', async () => {

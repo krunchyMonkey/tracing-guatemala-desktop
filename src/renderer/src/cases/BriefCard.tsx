@@ -34,7 +34,7 @@ export function BriefCard({ researchCase, readOnly, readOnlyReason }: BriefCardP
       </div>
 
       {loaded.status === 'error' && brief === undefined ? (
-        <CasesLoadError onRetry={loaded.retry} what="The research brief" />
+        <CasesLoadError onRetry={loaded.retry} error={loaded.error} what="The research brief" />
       ) : !brief ? (
         <p className="muted" role="status">
           Loading the brief…

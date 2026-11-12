@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useClientStore } from '../clients/ClientStore'
 import { Alert, SourceTag, StatusBadge, formatDate } from '../clients/components'
+import { describeFailure } from '../runtime/errorText'
 import {
   defaultQuery,
   sourceLabels,
@@ -11,6 +12,7 @@ import {
   type SortOrder,
   type StatusFilter
 } from '../clients/model'
+import { HostResearchNotice } from '../components/HostResearchNotice'
 import { guideAnchor } from '../guidance/anchors'
 
 // Client directory (#3 baseline). Search, filters and sort run in the main
@@ -54,7 +56,7 @@ function writeQuery(query: DirectoryQuery): URLSearchParams {
   return params
 }
 
-type DirectoryResults = { state: 'loading' | 'ready' | 'error'; clients: Client[] }
+type DirectoryResults = { state: 'loading' | 'ready' | 'error'; clients: Client[]; error?: unknown }
 
 /**
  * Query results for the directory. Previous results stay visible while a new
@@ -73,8 +75,8 @@ function useDirectoryResults(query: DirectoryQuery): DirectoryResults & { retry(
       (list) => {
         if (current) setResults({ state: 'ready', clients: list })
       },
-      () => {
-        if (current) setResults((r) => ({ state: 'error', clients: r.clients }))
+      (error: unknown) => {
+        if (current) setResults((r) => ({ state: 'error', clients: r.clients, error }))
       }
     )
     return () => {
@@ -115,7 +117,7 @@ export function ClientsScreen() {
 
   return (
     <section aria-labelledby="clients-heading" className="clients">
-
+      <HostResearchNotice />
       <header className="page-header">
         <div>
           <h1 id="clients-heading">Clients</h1>
@@ -205,7 +207,9 @@ export function ClientsScreen() {
 
           {directory.state === 'error' && (
             <Alert tone="error" title="Search isn’t working right now">
-              <p>Your clients are safe. Try again, or restart the app if this keeps happening.</p>
+              <p>
+                {describeFailure(directory.error, 'Your clients are safe. Try again, or restart the app if this keeps happening.')}
+              </p>
               <button type="button" className="button button-secondary" onClick={directory.retry}>
                 Try again
               </button>

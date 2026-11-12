@@ -391,6 +391,7 @@ describe('the sign-in callback', () => {
     expect(probe).toEqual({
       authenticated: true,
       csrfToken: signed.csrf,
+      research: 'own',
       remote: true,
       auth: 'google',
       demoUrl: null,

@@ -56,6 +56,8 @@ At the **shared data-services boundary**, not in the HTTP layer and not in the U
 
 If the ownership tables are missing (schema older than 10, or an incomplete restore), `researchSchemaReady` is false and every research call is refused with HTTP **503** `research-unavailable` for users, the host and devices alike. There is no fallback to shared access. Calls without research content (`getAppInfo`, `getBackupStatus`, `getMyAccount`, backups) keep working. A test drops the ownership tables from a migrated profile and checks every research call.
 
+The session's `research` field (`own`, `all` or `none`) is display only. Host and device sessions learn whether any app users exist (`all` vs `none`); this is acceptable because the host administers accounts and a device could infer it from the 409 `owner-required`. Google users always get `own` (or `none` if the schema is not ready); signed-out responses carry no field.
+
 ## The host and physical administration boundary
 
 Be honest about what this does not protect:
