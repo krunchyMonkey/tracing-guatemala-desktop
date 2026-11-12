@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppData } from '../../src/main/database/app-data'
 import { dataDirectory, DATABASE_FILE_NAME } from '../../src/main/database/connection'
 import { migrations } from '../../src/main/database/migrations'
@@ -16,6 +16,11 @@ import { fid, buildLegacyProfile, LEGACY, migrateLegacyProfileForTest } from './
 import { activeUser, disabledUser, newCase, pendingUser } from './helpers/ownership-helpers'
 
 // #245: the offline, host-only `db:claim-legacy` command, on fictional temporary profiles.
+
+// Each test builds a v9 profile, runs the real db:migrate and takes VACUUM snapshots: fixed
+// disk work, no waiting on a race. On the Windows runner the first (cold) test passed 5 s
+// once, so give these tests the same kind of budget as the heavy migration-safety tests.
+vi.setConfig({ testTimeout: 30_000 })
 
 let root: string
 
