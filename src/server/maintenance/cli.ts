@@ -30,6 +30,8 @@ export interface MaintenanceArgs {
   clients?: readonly string[] | undefined
   operator?: string | undefined
   preview?: boolean | undefined
+  /** Adds display names to the plan output, only in an interactive terminal. */
+  showNames?: boolean | undefined
 }
 
 export interface MaintenanceIo {
@@ -75,13 +77,15 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
         ...(args.operator !== undefined ? { operator: args.operator } : {})
       }
       const plan = planClaim(options)
+      const showNames = args.showNames === true && io.isTTY
+      if (args.showNames === true && !io.isTTY) io.log('--show-names is ignored: this is not an interactive terminal. Ids and counts only.')
       if (args.preview === true) {
-        for (const line of formatPlan(plan)) io.log(line)
+        for (const line of formatPlan(plan, showNames)) io.log(line)
         io.log('Preview only. Nothing was changed.')
         return 0
       }
       if (plan.pending === 0) {
-        for (const line of formatPlan(plan)) io.log(line)
+        for (const line of formatPlan(plan, showNames)) io.log(line)
         return 0
       }
       let confirm = args.confirm
@@ -90,8 +94,9 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
           io.error('Not an interactive terminal: pass --confirm "<phrase>". Nothing was changed.')
           return 1
         }
-        for (const line of formatPlan(plan)) io.log(line)
+        for (const line of formatPlan(plan, showNames)) io.log(line)
         io.log('Stop the web app first and keep your own off-host copy of the data folder.')
+        io.log('Confirm the researcher has agreed to each listed client.')
         confirm = await io.prompt(`Type ${plan.phrase} to continue: `)
       }
       const report = applyClaim({ ...options, confirm }, deps.claim ?? {})
@@ -161,7 +166,17 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
       return 0
     }
   } catch (error) {
-    if (error instanceof MaintenanceError) io.error(error.message)
+    if (error instanceof MaintenanceError) {
+      const detail = error.detail
+      if (detail) {
+        io.log(`Batch ${detail.batchId}: claimed ${detail.claimed.length}, already done ${detail.done.length}, remaining ${detail.remaining.length}.`)
+        for (const id of detail.claimed) io.log(`  claimed ${id}`)
+        for (const id of detail.done) io.log(`  done ${id}`)
+        for (const id of detail.remaining) io.log(`  remaining ${id}`)
+        io.log(`The snapshot and report are kept in ${detail.folder}/.`)
+      }
+      io.error(error.message)
+    }
     else if (error instanceof DataDirInUseError) io.error('Tracing Guatemala is running with this data. Stop it first. Nothing was changed.')
     // Only the error name: SQLite messages can quote stored values.
     else io.error(`The maintenance command failed: ${error instanceof Error ? error.name : 'unknown error'}. See docs/operations/database-migration.md.`)

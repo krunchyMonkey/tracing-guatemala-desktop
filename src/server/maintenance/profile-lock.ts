@@ -37,6 +37,7 @@ export type MaintenanceCode =
   | 'target-unbound'
   | 'client-not-found'
   | 'ownership-conflict'
+  | 'claim-verify-failed'
   | `unsafe:${UnsafeReason}`
 
 const MESSAGES: Record<string, string> = {
@@ -70,12 +71,18 @@ const MESSAGES: Record<string, string> = {
   'target-inactive': 'The target user is not an active Owner or Researcher. Nothing was changed.',
   'target-unbound': 'The target user has no bound sign-in identity yet. Nothing was changed.',
   'client-not-found': 'A listed client does not exist. Nothing was changed.',
-  'ownership-conflict': 'A listed client is already claimed by a different user. Nothing was changed.'
+  'ownership-conflict': 'A listed client is already claimed by a different user. Nothing was changed.',
+  'claim-verify-failed':
+    'The post-checks after the claims did not hold. Claims may have been committed. Read maintenance/<folder>/report.json and follow docs/operations/ownership-reconciliation.md before doing anything else.'
 }
 
 /** A maintenance command refused or failed. Carries a code and a fixed message: no paths, no content. */
 export class MaintenanceError extends Error {
-  constructor(readonly code: MaintenanceCode) {
+  constructor(
+    readonly code: MaintenanceCode,
+    /** Ids and the relative report folder only, for the claim command's failure output. */
+    readonly detail?: { batchId: string; folder: string; claimed: string[]; done: string[]; remaining: string[] }
+  ) {
     super(
       code.startsWith('unsafe:')
         ? `The data folder is not safe to change (${code.slice(7)}). Nothing was changed.`

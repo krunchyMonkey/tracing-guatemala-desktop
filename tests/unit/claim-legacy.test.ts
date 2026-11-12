@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -8,6 +8,7 @@ import { AppData } from '../../src/main/database/app-data'
 import { dataDirectory, DATABASE_FILE_NAME } from '../../src/main/database/connection'
 import { migrations } from '../../src/main/database/migrations'
 import { caseAccess, clientAccess, type ResearchScope } from '../../src/main/database/research-access'
+import { acquireDataDirLock } from '../../src/server/data-dir'
 import { RESEARCH_CLASS } from '../../src/server/auth/research-policy'
 import { CALL_NAMES } from '../../src/server/live-host'
 import { applyClaim, planClaim, type ClaimFaultPoint } from '../../src/server/maintenance/claim-legacy'
@@ -124,15 +125,55 @@ describe('preview', () => {
     const result = await run({ targetUser: w.a, clients: ALL, preview: true })
     expect(result.code).toBe(0)
     expect(result.out).toContain(w.a)
-    expect(result.out).toContain('Alma Fictional')
+    expect(result.out).not.toContain('Fictional') // ids and counts only by default
     expect(result.out).toContain('role, identity and account will not change')
     expect(result.out).toContain('Sign-in identity bound: yes (google)')
-    expect(result.out).toContain('Ana Fictional')
+    expect(result.out).toContain(ana)
     expect(result.out).toContain('pending')
+    expect(result.out).toContain('Confirm the researcher has agreed to each listed client.')
     expect(result.out).toMatch(/\d+ cases, \d+ notebook pages, \d+ tasks, \d+ journal entries, \d+ time entries/)
     expect(result.out).toContain(`CLAIM 3 CLIENTS FOR ${w.a} `)
     expectClean(result)
     expect(state()).toEqual(before)
+  })
+
+  it('shows display names only with --show-names in an interactive terminal', async () => {
+    const w = world()
+    const before = state()
+    const tty = await run({ targetUser: w.a, clients: [ana], preview: true, showNames: true }, { tty: true })
+    expect(tty.out).toContain('Alma Fictional')
+    expect(tty.out).toContain('Ana Fictional')
+    const piped = await run({ targetUser: w.a, clients: [ana], preview: true, showNames: true }, { tty: false })
+    expect(piped.code).toBe(0)
+    expect(piped.out).not.toContain('Fictional')
+    expect(piped.out).toContain('--show-names is ignored')
+    const plain = await run({ targetUser: w.a, clients: [ana], preview: true }, { tty: true })
+    expect(plain.out).not.toContain('Fictional')
+    expect(state()).toEqual(before)
+  })
+
+  it('refuses a leftover write-ahead log as not cleanly closed, for preview and apply, changing no byte', async () => {
+    const w = world()
+    const holder = new DatabaseSync(live())
+    try {
+      holder.exec('PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0')
+      holder.exec(`UPDATE clients SET updated_at = '2026-10-02T00:00:00.000Z' WHERE id = '${ana}'`)
+      const wal = `${live()}-wal`
+      expect(statSync(wal).size).toBeGreaterThan(0)
+      const bytes = () => [readFileSync(live()), readFileSync(wal)]
+      const before = bytes()
+      for (const extra of [{ preview: true }, { confirm: 'CLAIM 1 CLIENTS FOR x y' }]) {
+        const result = await run({ targetUser: w.a, clients: [ana], ...extra })
+        expect(result.code).toBe(1)
+        expect(result.err).toContain('not closed cleanly')
+      }
+      const after = bytes()
+      expect(after[0]!.equals(before[0]!)).toBe(true)
+      expect(after[1]!.equals(before[1]!)).toBe(true)
+    } finally {
+      holder.close()
+    }
+    expect(ownershipCount()).toBe(0)
   })
 })
 
@@ -201,6 +242,7 @@ describe('apply', () => {
     const w = world()
     const result = await run({ targetUser: w.a, clients: [ana, ana] }, { tty: true, answer: phraseFor(w.a, [ana]) })
     expect(result.code).toBe(0)
+    expect(result.out).toContain('Confirm the researcher has agreed to each listed client.')
     expect(ownershipCount()).toBe(1) // the duplicate id was folded
   })
 
@@ -233,6 +275,36 @@ describe('apply', () => {
     expect(stale.code).toBe(1)
     expect(stale.err).toContain('confirmation phrase did not match')
     expect(state()).toEqual(afterAdd)
+    expect(ownershipCount()).toBe(0)
+  })
+
+  it('refuses when the target or a client changed after the preview (version, status)', async () => {
+    const w = world()
+    const phrase = phraseFor(w.a, [ana])
+    const db = new DatabaseSync(live())
+    try {
+      db.exec(`UPDATE app_users SET version = version + 1 WHERE id = '${w.a}'`)
+    } finally {
+      db.close()
+    }
+    const afterEdit = state()
+    const edited = await run({ targetUser: w.a, clients: [ana], confirm: phrase })
+    expect(edited.code).toBe(1)
+    expect(edited.err).toContain('confirmation phrase did not match')
+    expect(state()).toEqual(afterEdit)
+
+    const phrase2 = phraseFor(w.a, [ana])
+    const db2 = new DatabaseSync(live())
+    try {
+      db2.exec(`UPDATE clients SET status = 'archived', archived_at = '2026-10-03T00:00:00.000Z' WHERE id = '${ana}'`)
+    } finally {
+      db2.close()
+    }
+    const afterArchive = state()
+    const archived = await run({ targetUser: w.a, clients: [ana], confirm: phrase2 })
+    expect(archived.code).toBe(1)
+    expect(archived.err).toContain('confirmation phrase did not match')
+    expect(state()).toEqual(afterArchive)
     expect(ownershipCount()).toBe(0)
   })
 
@@ -343,6 +415,52 @@ describe('refusals write nothing', () => {
     expect(ownershipCount()).toBe(0)
   })
 
+  it('refuses a profile saved by a newer version', async () => {
+    const w = world()
+    const db = new DatabaseSync(live())
+    try {
+      db.exec(`PRAGMA user_version = ${migrations.length + 1}`)
+    } finally {
+      db.close()
+    }
+    await refused(w.a, [ana], /newer version/)
+  })
+
+  it('refuses a case id given as a client, and a folder whose lock a running web host holds, writing nothing', async () => {
+    const w = world()
+    await refused(w.a, [LEGACY.cases.anaActive], /client does not exist/)
+    const release = acquireDataDirLock(root)
+    try {
+      const before = state()
+      const result = await run({ targetUser: w.a, clients: [ana], confirm: 'x' })
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('is running')
+      expect(state()).toEqual(before)
+    } finally {
+      release()
+    }
+    expect(ownershipCount()).toBe(0)
+  })
+
+  it('treats an upper-case id as the same client, and claims duplicates once', async () => {
+    const w = world()
+    const lower = 'abcdefab-0000-4000-8000-00000000000a'
+    const db = new DatabaseSync(live())
+    try {
+      db.exec(
+        `INSERT INTO clients (id, display_name, source, source_detail, preferred_contact_channel, status, created_at, updated_at)
+         VALUES ('${lower}', 'Dora Fictional', 'other', 'Fictional detail', 'unspecified', 'active', '2026-09-05T10:00:00.000Z', '2026-09-05T10:00:00.000Z')`
+      )
+    } finally {
+      db.close()
+    }
+    const result = await run({ targetUser: w.a.toUpperCase(), clients: [lower, lower.toUpperCase(), lower], confirm: phraseFor(w.a, [lower]) })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain('claimed 1')
+    expect(ownerOf(lower)).toEqual([{ owner_user_id: w.a }])
+    expect(ownershipCount()).toBe(1)
+  })
+
   it('refuses a folder that is not a profile', async () => {
     const result = await run({ targetUser: fid(1), clients: [ana], confirm: 'x' })
     expect(result.code).toBe(1)
@@ -400,6 +518,37 @@ describe('a batch that stops part-way', () => {
     expect(ownershipCount()).toBe(0)
     const folders = claimFolders()
     expect(existsSync(join(dataDirectory(root), 'maintenance', folders[0]!, `snapshot-v${migrations.length}.sqlite`))).toBe(true)
+  })
+})
+
+describe('a post-check that fails after claims', () => {
+  it('reports claim-verify-failed, points to the report and the runbook, and still lists the ids', async () => {
+    const w = world()
+    const result = await run(
+      { targetUser: w.a, clients: [ana, beto], confirm: phraseFor(w.a, [ana, beto]) },
+      {
+        fault: (point) => {
+          if (point !== 'before-verify') return
+          const db = new DatabaseSync(live()) // a foreign write on a separate connection
+          try {
+            db.exec(`UPDATE clients SET display_name = 'Changed' WHERE id = '${carla}'`)
+          } finally {
+            db.close()
+          }
+        }
+      }
+    )
+    expect(result.code).toBe(1)
+    expect(result.err).toContain('Claims may have been committed')
+    expect(result.err).toContain('maintenance/<folder>/report.json')
+    expect(result.err).toContain('docs/operations/ownership-reconciliation.md')
+    expect(result.out).toContain(`claimed ${ana}`)
+    expect(result.out).toContain(`claimed ${beto}`)
+    expect(result.out).toContain('maintenance/claim-')
+    expectClean(result)
+    expect(ownershipCount()).toBe(2)
+    const dir = join(dataDirectory(root), 'maintenance', claimFolders()[0]!)
+    expect(JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8'))).toMatchObject({ verified: false, counts: { claimed: 2 } })
   })
 })
 

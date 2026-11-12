@@ -60,6 +60,7 @@ const { values } = parseArgs({
     client: { type: 'string', multiple: true },
     operator: { type: 'string' },
     preview: { type: 'boolean' },
+    'show-names': { type: 'boolean' },
     'expect-from': { type: 'string' },
     'expect-to': { type: 'string' },
     confirm: { type: 'string' }
@@ -89,6 +90,7 @@ if (values['migrate-database'] || values['revert-migration'] || values['claim-le
       clients: values.client ?? [],
       operator: values.operator,
       preview: values.preview === true,
+      showNames: values['show-names'] === true,
       dataDir: values['data-dir'],
       expectFrom: values['expect-from'],
       expectTo: values['expect-to'],

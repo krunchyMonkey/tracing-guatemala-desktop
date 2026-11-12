@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { hashFile } from '../../main/database/backup-file'
@@ -40,7 +40,7 @@ const OPERATOR_PATTERN = /^[A-Za-z0-9._-]{1,30}$/
 export const DEFAULT_OPERATOR = 'host'
 
 /** Test-only fault seam. `before-client-<k>` is 1-based over the pending clients, in the order given. */
-export type ClaimFaultPoint = 'after-snapshot' | `before-client-${number}`
+export type ClaimFaultPoint = 'after-snapshot' | 'before-verify' | `before-client-${number}`
 
 export interface ClaimDeps {
   /** Called at each point; a test throws from it to simulate a failure. Never wired to the environment. */
@@ -99,7 +99,9 @@ interface Normalized {
 
 function normalize(options: ClaimOptions): Normalized {
   const operator = options.operator ?? DEFAULT_OPERATOR
-  const clientIds = [...new Set(options.clientIds)]
+  // Ids are case-insensitive hex: fold to lower case so "A..." and "a..." are one client.
+  const lower = (value: unknown): unknown => (typeof value === 'string' ? value.toLowerCase() : value)
+  const clientIds = [...new Set(options.clientIds.map((id) => lower(id) as string))]
   if (
     typeof options.targetUserId !== 'string' ||
     !ID_PATTERN.test(options.targetUserId) ||
@@ -109,7 +111,7 @@ function normalize(options: ClaimOptions): Normalized {
   ) {
     throw new MaintenanceError('claim-input-invalid')
   }
-  return { targetUserId: options.targetUserId, clientIds, operator }
+  return { targetUserId: lower(options.targetUserId) as string, clientIds, operator }
 }
 
 export const claimActor = (operator: string): string => `cli:${operator}`
@@ -117,9 +119,17 @@ export const claimActor = (operator: string): string => `cli:${operator}`
 export const batchPhrase = (count: number, targetUserId: string, fingerprint: string): string =>
   `CLAIM ${count} CLIENTS FOR ${targetUserId} ${fingerprint}`
 
-function fingerprintOf(targetUserId: string, pending: ClaimPreview[]): string {
-  const pairs = pending.map((p): [string, string] => [p.clientId, p.scopeToken]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-  return createHash('sha256').update(JSON.stringify({ target: targetUserId, clients: pairs })).digest('hex').slice(0, 12)
+/** Covers the target's version, auth version, role, status and identity pairs, and each pending client's scope and status. */
+function fingerprintOf(
+  target: { id: string; version: number; auth_version: number; role: string; status: string },
+  identityDigest: string,
+  pending: ClaimPreview[]
+): string {
+  const triples = pending.map((p): [string, string, string] => [p.clientId, p.scopeToken, p.clientStatus]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  return createHash('sha256')
+    .update(JSON.stringify({ target: [target.id, target.version, target.auth_version, target.role, target.status, identityDigest], clients: triples }))
+    .digest('hex')
+    .slice(0, 12)
 }
 
 interface TargetRows {
@@ -137,11 +147,10 @@ function readTarget(db: DatabaseSync, targetUserId: string): TargetRows {
 /** The profile must be current at the latest schema; everything else is a refusal that wrote nothing. */
 function requireCurrent(dataDir: string): void {
   const latest = migrations.length
+  // A leftover write-ahead log means an unclean close. Refuse before anything opens the file:
+  // even the exclusive in-use probe would checkpoint it, and a preview must write nothing.
+  if (walSize(liveFileOf(dataDir)) > 0) throw new MaintenanceError('not-cleanly-closed')
   const state = inspectProfile(dataDir, latest)
-  const wal = walSize(liveFileOf(dataDir)) > 0
-  if (wal && (state.kind === 'migration-required' || (state.kind === 'unsafe' && state.reason === 'wal-unreadable'))) {
-    throw new MaintenanceError('not-cleanly-closed')
-  }
   if (state.kind === 'unsafe') throw new MaintenanceError(`unsafe:${state.reason}`)
   if (state.kind === 'too-new') throw new MaintenanceError('too-new')
   if (state.kind === 'migration-required') throw new MaintenanceError('migration-required')
@@ -149,13 +158,17 @@ function requireCurrent(dataDir: string): void {
 }
 
 function buildPlan(db: DatabaseSync, input: Normalized): Planned {
-  const target = db.prepare('SELECT id, display_name, role, status FROM app_users WHERE id = ?').get(input.targetUserId) as
-    | { id: string; display_name: string; role: string; status: string }
+  const target = db.prepare('SELECT id, display_name, role, status, version, auth_version FROM app_users WHERE id = ?').get(input.targetUserId) as
+    | { id: string; display_name: string; role: string; status: string; version: number; auth_version: number }
     | undefined
   if (!target) throw new MaintenanceError('target-not-found')
   if (target.status !== 'active' || (target.role !== 'owner' && target.role !== 'researcher')) throw new MaintenanceError('target-inactive')
-  const identities = db.prepare('SELECT provider FROM user_identities WHERE user_id = ? ORDER BY provider').all(target.id) as { provider: string }[]
+  const identities = db.prepare('SELECT provider, subject FROM user_identities WHERE user_id = ? ORDER BY provider, subject').all(target.id) as {
+    provider: string
+    subject: string
+  }[]
   if (identities.length === 0) throw new MaintenanceError('target-unbound')
+  const identityDigest = createHash('sha256').update(JSON.stringify(identities.map((i) => [i.provider, i.subject]))).digest('hex')
 
   const repo = new OwnershipRepository(db)
   const clients: PlanClient[] = []
@@ -186,7 +199,7 @@ function buildPlan(db: DatabaseSync, input: Normalized): Planned {
       }
     })
   }
-  const fingerprint = pendingPreviews.length === 0 ? '' : fingerprintOf(target.id, pendingPreviews)
+  const fingerprint = pendingPreviews.length === 0 ? '' : fingerprintOf(target, identityDigest, pendingPreviews)
   return {
     pendingPreviews,
     plan: {
@@ -222,6 +235,34 @@ function readPlan(dataDir: string, input: Normalized): Planned {
   }
 }
 
+function fsyncFile(file: string): void {
+  const fd = openSync(file, 'r+')
+  try {
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** Windows cannot open or sync a folder; that is the only failure tolerated. */
+function fsyncFolderBestEffort(folder: string): void {
+  try {
+    const fd = openSync(folder, 'r')
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+  } catch (error) {
+    if (!['EPERM', 'EISDIR', 'EINVAL'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error
+  }
+}
+
+function isBusyError(error: unknown): boolean {
+  const code = (error as { errcode?: number }).errcode
+  return (typeof code === 'number' && [5, 6].includes(code & 0xff)) || /locked|busy/i.test((error as Error).message ?? '')
+}
+
 const OWNERSHIP_TABLES = ['client_ownership', 'ownership_events']
 
 function withoutOwnership(manifest: Manifest): Manifest {
@@ -230,26 +271,33 @@ function withoutOwnership(manifest: Manifest): Manifest {
   return copy
 }
 
-/** Human-readable preview lines. Names and counts only. */
-export function formatPlan(plan: ClaimPlan): string[] {
+/** Human-readable preview lines: ids, status and counts. Display names only when `showNames` (an interactive terminal asked for them). */
+export function formatPlan(plan: ClaimPlan, showNames = false): string[] {
+  const named = (name: string): string => (showNames ? ` (${name})` : '')
   const lines = [
-    `Target account: ${plan.target.id} (${plan.target.displayName})`,
+    `Target account: ${plan.target.id}${named(plan.target.displayName)}`,
     `  Role: ${plan.target.role}. The role, identity and account will not change.`,
     `  Sign-in identity bound: yes (${plan.target.identityProviders.join(', ')})`,
     'Clients:'
   ]
   for (const client of plan.clients) {
     if (client.status === 'done' || !client.counts) {
-      lines.push(`  ${client.id} ${client.displayName}: done (already claimed by this account)`)
+      lines.push(`  ${client.id}${named(client.displayName)}: done (already claimed by this account)`)
       continue
     }
     const c = client.counts
     lines.push(
-      `  ${client.id} ${client.displayName} (${client.clientStatus}): pending; ${c.cases} cases, ${c.notebookPages} notebook pages, ${c.tasks} tasks, ${c.journalEntries} journal entries, ${c.timeEntries} time entries`
+      `  ${client.id}${named(client.displayName)} (${client.clientStatus}): pending; ${c.cases} cases, ${c.notebookPages} notebook pages, ${c.tasks} tasks, ${c.journalEntries} journal entries, ${c.timeEntries} time entries`
     )
   }
   if (plan.pending === 0) lines.push('Nothing to do: every listed client is already claimed by this account.')
-  else lines.push('Ownership cannot be changed afterwards except by restoring the snapshot.', `Confirmation phrase: ${plan.phrase}`)
+  else {
+    lines.push(
+      'Ownership cannot be changed afterwards except by restoring the snapshot.',
+      'Confirm the researcher has agreed to each listed client.',
+      `Confirmation phrase: ${plan.phrase}`
+    )
+  }
   return lines
 }
 
@@ -285,7 +333,8 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
     if (options.confirm !== plan.phrase) throw new MaintenanceError('not-confirmed')
     assertNoOtherConnections(live)
 
-    // a-b. Snapshot from a read-only connection, prove it, then record the manifest.
+    // a-b. One read-write connection holds the exclusive lock from before the snapshot until
+    // the last claim, so nothing else can write in between.
     const maintenanceDir = maintenanceDirOf(dataDir)
     mkdirSync(maintenanceDir, { recursive: true })
     const base = `claim-${stamped(now())}`
@@ -297,58 +346,63 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
     const snapshotName = `snapshot-v${version}.sqlite`
     const snapshot = join(stampDir, snapshotName)
 
-    let before: Manifest
-    let targetBefore: TargetRows
-    let evidence: BackupEvidence[]
-    let source: DatabaseSync | null = null
-    try {
-      source = new DatabaseSync(live, { readOnly: true })
-      if (!isHealthy(source)) throw new MaintenanceError('source-damaged')
-      before = computeManifest(source)
-      targetBefore = readTarget(source, input.targetUserId)
-      source.prepare('VACUUM INTO ?').run(snapshot)
-      const snap = new DatabaseSync(snapshot)
-      try {
-        snap.exec('PRAGMA journal_mode = DELETE')
-      } finally {
-        snap.close()
-      }
-      let verified = false
-      let check: DatabaseSync | null = null
-      try {
-        check = new DatabaseSync(snapshot, { readOnly: true })
-        verified = isHealthy(check) && getSchemaVersion(check) === version && manifestsEqual(computeManifest(check), before)
-      } catch {
-        verified = false
-      } finally {
-        closeQuietly(check)
-      }
-      if (!verified) throw new MaintenanceError('snapshot-unverified')
-      const repo = new OwnershipRepository(source)
-      evidence = pendingPreviews.map((preview) => {
-        const result = repo.verifyClaimBackup(snapshot, preview)
-        if (!result.ok) throw new MaintenanceError('snapshot-unverified')
-        return result.evidence
-      })
-    } catch (error) {
-      if (error instanceof MaintenanceError) throw error
-      throw new MaintenanceError('source-damaged')
-    } finally {
-      closeQuietly(source)
-      tidySideFiles(live)
-    }
-    fault('after-snapshot')
-    const snapshotFile = hashFile(snapshot)
-
-    // c. One transaction per client, stopping at the first failure.
     const batchId = randomUUID()
     const actor = claimActor(input.operator)
     const claimed: string[] = []
     let failure: string | null = null
+    let before: Manifest
+    let targetBefore: TargetRows
+    let snapshotFile: { sha256: string; bytes: number }
     let writer: DatabaseSync | null = null
     try {
-      writer = new DatabaseSync(live)
-      configureConnection(writer)
+      let evidence: BackupEvidence[]
+      try {
+        writer = new DatabaseSync(live)
+        writer.exec('PRAGMA locking_mode = EXCLUSIVE')
+        configureConnection(writer)
+        writer.exec('BEGIN EXCLUSIVE')
+        writer.exec('COMMIT')
+        if (!isHealthy(writer)) throw new MaintenanceError('source-damaged')
+        // Nothing can have changed since the plan, but the fingerprint is cheap to re-check under the exclusive lock.
+        if (buildPlan(writer, input).plan.fingerprint !== plan.fingerprint) throw new MaintenanceError('not-confirmed')
+        before = computeManifest(writer)
+        targetBefore = readTarget(writer, input.targetUserId)
+        writer.prepare('VACUUM INTO ?').run(snapshot)
+        const snap = new DatabaseSync(snapshot)
+        try {
+          snap.exec('PRAGMA journal_mode = DELETE')
+        } finally {
+          snap.close()
+        }
+        let verified = false
+        let check: DatabaseSync | null = null
+        try {
+          check = new DatabaseSync(snapshot, { readOnly: true })
+          verified = isHealthy(check) && getSchemaVersion(check) === version && manifestsEqual(computeManifest(check), before)
+        } catch {
+          verified = false
+        } finally {
+          closeQuietly(check)
+        }
+        if (!verified) throw new MaintenanceError('snapshot-unverified')
+        const verifier = new OwnershipRepository(writer)
+        evidence = pendingPreviews.map((preview) => {
+          const result = verifier.verifyClaimBackup(snapshot, preview)
+          if (!result.ok) throw new MaintenanceError('snapshot-unverified')
+          return result.evidence
+        })
+        // Make the snapshot durable before any claim: the file, then (best effort) its folder.
+        fsyncFile(snapshot)
+        fsyncFolderBestEffort(stampDir)
+        snapshotFile = hashFile(snapshot)
+      } catch (error) {
+        if (error instanceof MaintenanceError) throw error
+        if (isBusyError(error)) throw new MaintenanceError('in-use')
+        throw new MaintenanceError('source-damaged')
+      }
+      fault('after-snapshot')
+
+      // c. One transaction per client on the same connection, stopping at the first failure.
       const repo = new OwnershipRepository(writer, { now, newId: () => randomUUID() })
       for (const [index, preview] of pendingPreviews.entries()) {
         try {
@@ -373,14 +427,14 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
           break
         }
       }
-    } catch {
-      failure ??= 'error'
     } finally {
       closeQuietly(writer)
       tidySideFiles(live)
     }
 
     // d. Nothing but the ownership tables may differ; the target's rows must be exactly as before.
+    // Read from a separate read-only connection after the writer closed.
+    fault('before-verify')
     let verified: boolean
     let after: DatabaseSync | null = null
     try {
@@ -415,7 +469,9 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
       snapshot: { file: snapshotName, sha256: snapshotFile.sha256, bytes: snapshotFile.bytes }
     }
     writeFileSync(join(stampDir, 'report.json'), JSON.stringify(report, null, 2))
-    if (!verified) throw new MaintenanceError('verify-failed')
+    if (!verified) {
+      throw new MaintenanceError('claim-verify-failed', { batchId, folder: `maintenance/${folderName}`, claimed, done, remaining })
+    }
     return { nothingToDo: false, batchId, folder: `maintenance/${folderName}`, claimed, done, remaining, failure }
   })
 }
