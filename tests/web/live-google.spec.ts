@@ -4,6 +4,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { chromium, expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { markSyntheticTestProfile } from '../../src/server/data-dir'
 import { APP_NAME, APP_ORIGIN, opensslAvailable, startHttpsFront, type HttpsFront } from './https-front'
 
 // Google sign-in, Users administration and the account UI, end to end (#181).
@@ -99,6 +100,7 @@ test.describe.serial('Google sign-in over HTTPS', () => {
     mkdirSync(shots, { recursive: true })
     parent = mkdtempSync(join(tmpdir(), 'tg-google-e2e-'))
     port = await freePort()
+    markSyntheticTestProfile(join(parent, 'profile'))
     child = spawn(
       process.execPath,
       [

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { networkInterfaces, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { markSyntheticTestProfile } from '../../src/server/data-dir'
 
 // Shared by the home-network Live browser specs (#137, #138): this computer's
 // private IPv4 address (discovered at run time, never written down), free port
@@ -71,6 +72,7 @@ export async function startHost(port: number, options: StartOptions): Promise<{ 
     dataDir = join(parent, 'profile')
   }
   const init = options.init ?? !options.dataDir
+  markSyntheticTestProfile(dataDir) // test hooks are on below: only a marked temporary folder is allowed
   const args = ['--disable-warning=ExperimentalWarning', 'dist-web/server/main.mjs', '--port', String(port), '--data-dir', dataDir]
   if (options.withLan) {
     args.push('--lan-host', lanIp!)

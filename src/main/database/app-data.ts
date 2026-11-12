@@ -9,8 +9,8 @@ import { CaseTimeRepository } from './case-time-repository'
 import { StudioSummaryRepository } from './studio-summary-repository'
 import { CaseRepository } from './case-repository'
 import { ClientRepository } from './client-repository'
-import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase } from './connection'
-import { getSchemaVersion, migrate, migrations } from './migrations'
+import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase, type OpenOptions } from './connection'
+import { getSchemaVersion, migrate, migrations, type Migration } from './migrations'
 import { NoteRepository } from './note-repository'
 import { NotebookRepository } from './notebook-repository'
 import { UserRepository } from './user-repository'
@@ -130,8 +130,16 @@ export interface RestoreOptions {
   verify?: (data: AppData) => void
 }
 
+export interface AppDataOptions {
+  now?: () => Date
+  /** In-code test seam only (see OpenOptions). */
+  migrations?: readonly Migration[]
+}
+
 export class AppData {
   private opened: OpenedDatabase
+  private readonly now: () => Date
+  private readonly migrationList: readonly Migration[] | undefined
   clients: ClientRepository
   notes: NoteRepository
   cases: CaseRepository
@@ -145,9 +153,12 @@ export class AppData {
 
   constructor(
     private readonly userDataDir: string,
-    private readonly now: () => Date = () => new Date()
+    options: AppDataOptions | (() => Date) = {}
   ) {
-    this.opened = openAppDatabase(userDataDir, now)
+    const resolved: AppDataOptions = typeof options === 'function' ? { now: options } : options
+    this.now = resolved.now ?? (() => new Date())
+    this.migrationList = resolved.migrations
+    this.opened = openAppDatabase(userDataDir, this.openOptions())
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
     this.cases = new CaseRepository(this.opened.db)
@@ -158,6 +169,14 @@ export class AppData {
     this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
     this.users = new UserRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
+  }
+
+  private openOptions(tolerate?: OpenOptions['tolerate']): OpenOptions {
+    return {
+      now: this.now,
+      ...(this.migrationList ? { migrations: this.migrationList } : {}),
+      ...(tolerate ? { tolerate } : {})
+    }
   }
 
   get file(): string {
@@ -201,12 +220,14 @@ export class AppData {
     const staging = join(dir, `restore-staging-${randomUUID()}.sqlite`)
 
     // 1. Copy and bring the backup up to the current schema, away from the live file.
+    // An older backup is migrated as this staging copy only: neither the live file nor the
+    // backup file is ever migrated in place (#248), and the staging copy is what gets swapped in.
     try {
       copyFileSync(file, staging)
       const db = new DatabaseSync(staging)
       try {
         configureConnection(db)
-        migrate(db)
+        migrate(db, {}, this.migrationList ?? migrations)
         db.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
         if (db.prepare('PRAGMA foreign_key_check').all().length > 0) throw new BackupInvalidError('damaged')
       } finally {
@@ -231,7 +252,9 @@ export class AppData {
     for (const suffix of ['-wal', '-shm']) rmSync(`${live}${suffix}`, { force: true })
     try {
       renameSync(staging, live)
-      this.reopen()
+      // The replaced file is still here until the restore is verified; startup would refuse
+      // it (restore-interrupted), so this reopen names it as known.
+      this.reopen({ replacedFile: basename(replaced) })
       const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }).length
       if (restoredClients !== expected.clients) throw new Error('restored client count differs from the backup')
       if (count(this.opened.db, 'research_cases') !== expected.cases) {
@@ -250,6 +273,9 @@ export class AppData {
       } catch {
         // Already closed if reopening failed.
       }
+      // Never leave neither file: the live file is only removed right before the original
+      // is renamed back, and a failure here leaves the .replaced-* file, which the next
+      // start reports as an interrupted restore instead of creating an empty database.
       removeDatabaseFiles(live)
       removeDatabaseFiles(staging)
       renameSync(replaced, live)
@@ -264,8 +290,8 @@ export class AppData {
     }
   }
 
-  private reopen(): void {
-    this.opened = openAppDatabase(this.userDataDir, this.now)
+  private reopen(tolerate?: OpenOptions['tolerate']): void {
+    this.opened = openAppDatabase(this.userDataDir, this.openOptions(tolerate))
     this.clients = new ClientRepository(this.opened.db)
     this.notes = new NoteRepository(this.opened.db)
     this.cases = new CaseRepository(this.opened.db)

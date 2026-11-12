@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -12,6 +12,8 @@ import {
   MigrationFailedError,
   migrations
 } from '../../src/main/database/migrations'
+import { MigrationRequiredError } from '../../src/main/database/schema-preflight'
+import { confirmationPhrase, migrateProfile } from '../../src/server/maintenance/migrate-database'
 import { defaultQuery, type ClientInput } from '../../src/shared/client-model'
 
 // All data below is fictional.
@@ -130,7 +132,7 @@ describe('openAppDatabase', () => {
     expect(migration).toEqual({ from: 0, to: migrations.length })
   })
 
-  it('upgrades an older database in place, keeping data and a pre-migration copy', () => {
+  it('refuses an older database on open, then upgrades it through the maintenance command, keeping data and the original', () => {
     const first = openAppDatabase(userData)
     first.db.close()
     // Simulate a database left by an app version that only knew migration 1.
@@ -144,24 +146,35 @@ describe('openAppDatabase', () => {
       .run()
     old.close()
 
-    const upgraded = openAppDatabase(userData, () => new Date('2026-10-29T12:00:00.000Z'))
-    expect(upgraded.migration).toEqual({ from: 1, to: migrations.length })
+    expect(() => openAppDatabase(userData)).toThrow(MigrationRequiredError)
+
+    const report = migrateProfile({
+      dataDir: userData,
+      expectFrom: 1,
+      expectTo: migrations.length,
+      confirm: confirmationPhrase(1, migrations.length),
+      now: () => new Date('2026-10-29T12:00:00.000Z')
+    })
+    expect(report.folder).toBe('maintenance/2026-10-29T12-00-00-000Z')
+
+    const upgraded = openAppDatabase(userData)
+    expect(upgraded.migration).toEqual({ from: migrations.length, to: migrations.length })
     const repo = new ClientRepository(upgraded.db)
     expect(repo.get('00000000-0000-4000-8000-000000000001')?.displayName).toBe('Older Record')
     expect(repo.archive('00000000-0000-4000-8000-000000000001').ok).toBe(true)
     upgraded.db.close()
 
-    const backups = readdirSync(join(dataDirectory(userData), 'pre-migration'))
-    expect(backups).toEqual([`${DATABASE_FILE_NAME}.v1.2026-10-29T12-00-00-000Z.sqlite`])
-    const backup = new DatabaseSync(join(dataDirectory(userData), 'pre-migration', backups[0]!))
-    expect(getSchemaVersion(backup)).toBe(1)
-    expect(tableNames(backup)).toEqual(['clients'])
-    backup.close()
+    const kept = join(dataDirectory(userData), report.folder)
+    const original = new DatabaseSync(join(kept, 'original-v1.sqlite'), { readOnly: true })
+    expect(getSchemaVersion(original)).toBe(1)
+    expect(tableNames(original)).toEqual(['clients'])
+    original.close()
   })
 
-  it('does not take a pre-migration copy of a brand-new database', () => {
+  it('does not create a pre-migration copy or a maintenance folder for a brand-new database', () => {
     openAppDatabase(userData).db.close()
     expect(existsSync(join(dataDirectory(userData), 'pre-migration'))).toBe(false)
+    expect(existsSync(join(dataDirectory(userData), 'maintenance'))).toBe(false)
   })
 })
 
