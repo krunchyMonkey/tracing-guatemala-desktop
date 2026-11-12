@@ -64,4 +64,5 @@ Steps 11–13 are run once #247, #212 and #246 have landed. Until then they are 
 - Two verified backups exist, one protected and off the host.
 - The real target account is privately confirmed (id, status, bound identity).
 - The researcher has consented to each client claim.
+- The `db:claim-legacy` claims are scheduled in the **same** maintenance window as `db:migrate`. Without them, all historical research stays unreachable, even for its owner, once v10 is in place.
 - Owner and researcher accept after the cutover.
