@@ -12,8 +12,19 @@
 - The workflow token is `contents: read`. The workflow has no secrets and no deploy step, and it uses no self-hosted runner. Checkout does not persist credentials.
 - Every test server binds `127.0.0.1` (or, for the LAN-origin demo tests, the runner's own private IPv4) on the throwaway runner with a temporary data folder seeded with fictional records. Nothing reaches the private Live host, its network or its data.
 - Actions are pinned to full commit SHAs, with the release tag in a comment.
-- On failure, only `test-results/` (Playwright traces and screenshots of fictional data) is uploaded, and it is kept for 3 days.
+- On failure, only `test-results/` is uploaded, and it is kept for 3 days. It holds fictional data only: Playwright error context, plus a trace and a screenshot for each failed `web-live` test (`trace: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), plus the #250 selection log when a notebook selection step fails. Passing tests keep nothing.
 - A newer push to the same PR cancels the older PR run. Runs on `main` are never cancelled.
+
+## Notebook selection repeat (#250)
+
+`.github/workflows/notebook-selection-repeat.yml` runs on pull requests to `main` that touch notebook UI code, the notebook selection specs, `playwright.config.ts` or the workflow itself. It can also be started by hand, with repetition counts as inputs, once it is on `main`.
+
+It builds the web bundles and then runs, with `--retries 0`:
+
+- the autosave bridge test (link records, create a task from a selection), `--repeat-each 40` by default;
+- the Release A journey (`live-notebook-release-a.spec.ts`), `--repeat-each 15` by default.
+
+Every repetition has to pass on its own. It follows the same safety rules as `ci.yml`. Failed-test results are uploaded for 3 days.
 
 ## Not run in CI
 

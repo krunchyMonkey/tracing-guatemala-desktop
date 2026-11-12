@@ -1,0 +1,72 @@
+# Repeats the notebook "Create task from selection" browser tests many times (#250), so an
+# intermittent failure shows up in CI instead of hiding behind a single green run.
+#
+# Same rules as ci.yml: GitHub-hosted runners only, fictional temporary data folders,
+# read-only token, no secrets, no route to the private Live host, nothing deployed.
+# No retries: every repetition must pass on its own.
+name: Notebook selection repeat
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/renderer/src/notebook/**'
+      - 'tests/web/live-notebook-release-a.spec.ts'
+      - 'tests/web/live-notebook-autosave.spec.ts'
+      - 'tests/web/selection-diagnostics.ts'
+      - 'tests/web/notebook-selection.ts'
+      - 'playwright.config.ts'
+      - '.github/workflows/notebook-selection-repeat.yml'
+  workflow_dispatch:
+    inputs:
+      release_a_repeats:
+        description: Repetitions of the Release A journey (about 25 s each)
+        default: '15'
+      bridge_repeats:
+        description: Repetitions of the autosave bridge test (link records, task from selection)
+        default: '40'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notebook-selection-repeat-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  RELEASE_A_REPEATS: ${{ inputs.release_a_repeats || '15' }}
+  BRIDGE_REPEATS: ${{ inputs.bridge_repeats || '40' }}
+
+jobs:
+  repeat:
+    name: Repeat notebook selection tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Build demo and Live web bundles
+        run: npm run build && npm run web:build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Autosave bridge test, repeated
+        run: npx playwright test --project=web-live tests/web/live-notebook-autosave.spec.ts -g "creates a task from the selection" --repeat-each "$BRIDGE_REPEATS" --retries 0 --output test-results/bridge
+      - name: Release A journey, repeated
+        if: success() || failure()
+        run: npx playwright test --project=web-live tests/web/live-notebook-release-a.spec.ts --repeat-each "$RELEASE_A_REPEATS" --retries 0 --output test-results/release-a
+      - name: Upload failed-test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notebook-selection-repeat-results
+          path: test-results/
+          retention-days: 3
+          if-no-files-found: ignore

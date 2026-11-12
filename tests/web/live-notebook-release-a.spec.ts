@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { endOfFirstParagraph, selectLine } from './notebook-selection'
+import { markSelection, recordSelection, withSelectionLog } from './selection-diagnostics'
 
 // Phase 3 Release A, integrated verification (#145): one realistic, serial journey through
 // the built Live web app with the real editor, driven through the UI (plus the typed HTTP
@@ -478,6 +480,8 @@ test('Release A: one realistic journey from first notebook to backup, archive an
     await page.goto(`${origin}/#/cases/${alpha.id}/notebook/${letterId}`)
     await expect(page.getByLabel('Page title')).toHaveValue('Letter to the municipal archive')
     await expect(editor(page)).toHaveAttribute('contenteditable', 'true')
+    // Test-only selection log, attached only if the selection steps below fail (#250).
+    await recordSelection(page)
     await editor(page).click()
     await page.keyboard.type('Notes after the archive visit.')
     await toolbar(page).getByRole('button', { name: 'Link record' }).click()
@@ -485,24 +489,28 @@ test('Release A: one realistic journey from first notebook to backup, archive an
     await toolbar(page).getByRole('button', { name: 'Link record' }).click()
     await page.getByRole('dialog', { name: 'Link a record' }).getByRole('button', { name: /^Journal · .* · Archive search$/ }).click()
 
-    await editor(page).locator('p').first().click()
-    await page.keyboard.press('Control+End')
-    await page.keyboard.press('Enter')
-    await page.keyboard.type('Request the 1884 baptism index')
-    await page.keyboard.press('Shift+Home')
-    // Wait until the editor really holds the selection before using the toolbar (CI race, #190).
-    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Request the 1884 baptism index')
-    await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
     const taskDialog = page.getByRole('dialog', { name: 'Create a task from your notes' })
-    await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
-    // Nothing exists until the person confirms.
-    await taskDialog.getByRole('button', { name: 'Cancel' }).click()
-    await expect(editor(page).locator('.note-reference')).toHaveCount(2)
-    await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
-    await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
-    await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
-    const labels = editor(page).locator('.note-reference-label')
-    await expect(labels).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
+    await withSelectionLog(page, test.info(), 'release-a-step-8', async () => {
+      await endOfFirstParagraph(page)
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('Request the 1884 baptism index')
+      // The new line sits right after the first paragraph, before the two references.
+      const line = editor(page).locator('p').nth(1)
+      await expect(line).toHaveText('Request the 1884 baptism index')
+      await selectLine(line)
+      await markSelection(page, 'before toolbar click')
+      await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
+      await markSelection(page, 'after toolbar click')
+      await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
+      // Nothing exists until the person confirms.
+      await taskDialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(editor(page).locator('.note-reference')).toHaveCount(2)
+      await markSelection(page, 'before second toolbar click')
+      await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
+      await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
+      await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
+      await expect(editor(page).locator('.note-reference-label')).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
+    })
     await hostHasText(page, alpha.id, letterId, 'Request the 1884 baptism index')
     await expect(status(page)).toHaveText(SAVED)
 
