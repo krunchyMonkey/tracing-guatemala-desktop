@@ -225,6 +225,8 @@ export interface ClaimInput {
   confirmation: string
   /** Who performs the claim, recorded in the audit event ('host' for the host-local operator). */
   actor: string
+  /** Groups the claims of one operator batch (#245). A UUID when given; recorded in the event detail. */
+  batchId?: string
 }
 
 export type ClaimFailure =
@@ -237,6 +239,7 @@ export type ClaimFailure =
 export type ClaimResult = { ok: true; owner: ResourceOwner } | { ok: false; reason: ClaimFailure }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function validEvidence(backup: BackupEvidence): boolean {
   return (
@@ -446,6 +449,7 @@ export class OwnershipRepository {
     }
     if (!validEvidence(input.backup)) return { ok: false, reason: 'invalid-input' }
     if (typeof input.actor !== 'string' || input.actor.length < 1 || input.actor.length > 36) return { ok: false, reason: 'invalid-input' }
+    if (input.batchId !== undefined && (typeof input.batchId !== 'string' || !UUID.test(input.batchId))) return { ok: false, reason: 'invalid-input' }
 
     return this.transaction((): ClaimResult => {
       const target = this.db.prepare('SELECT status FROM app_users WHERE id = ?').get(input.targetUserId) as { status: string } | undefined
@@ -477,7 +481,8 @@ export class OwnershipRepository {
             backupBytes: input.backup.bytes,
             schemaVersion: input.backup.schemaVersion,
             scopeToken: scope.scopeToken,
-            counts: scope.counts
+            counts: scope.counts,
+            ...(input.batchId === undefined ? {} : { batchId: input.batchId })
           }
         },
         at

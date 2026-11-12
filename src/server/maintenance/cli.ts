@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import type { Migration } from '../../main/database/migrations'
 import { DataDirInUseError } from '../data-dir'
+import { applyClaim, formatPlan, planClaim, type ClaimDeps } from './claim-legacy'
 import {
   confirmationPhrase,
   MaintenanceError,
@@ -23,6 +24,12 @@ export interface MaintenanceArgs {
   expectFrom: string | undefined
   expectTo: string | undefined
   confirm: string | undefined
+  /** db:claim-legacy (#245). */
+  claim?: boolean
+  targetUser?: string | undefined
+  clients?: readonly string[] | undefined
+  operator?: string | undefined
+  preview?: boolean | undefined
 }
 
 export interface MaintenanceIo {
@@ -34,6 +41,7 @@ export interface MaintenanceIo {
 
 /** In-code seams for tests; the real command passes none. */
 export interface MaintenanceDeps {
+  claim?: ClaimDeps
   migrations?: readonly Migration[]
   now?: () => Date
 }
@@ -44,8 +52,8 @@ function wholeNumber(value: string | undefined): number | null {
 
 /** Runs one maintenance command and returns the process exit code (0 done, 1 refused or failed). */
 export async function runMaintenanceCommand(args: MaintenanceArgs, io: MaintenanceIo, deps: MaintenanceDeps = {}): Promise<number> {
-  if (args.migrate && args.revert) {
-    io.error('Use --migrate-database or --revert-migration, not both. Nothing was changed.')
+  if ([args.migrate, args.revert, args.claim === true].filter(Boolean).length > 1) {
+    io.error('Use only one of --migrate-database, --revert-migration and --claim-legacy. Nothing was changed.')
     return 1
   }
   if (args.dataDir === undefined) {
@@ -55,6 +63,54 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
   const dataDir = resolve(args.dataDir)
 
   try {
+    if (args.claim === true) {
+      if (args.targetUser === undefined || (args.clients ?? []).length === 0) {
+        io.error('--claim-legacy needs --target-user <id> and at least one --client <id>. Nothing was changed.')
+        return 1
+      }
+      const options = {
+        dataDir,
+        targetUserId: args.targetUser,
+        clientIds: args.clients ?? [],
+        ...(args.operator !== undefined ? { operator: args.operator } : {})
+      }
+      const plan = planClaim(options)
+      if (args.preview === true) {
+        for (const line of formatPlan(plan)) io.log(line)
+        io.log('Preview only. Nothing was changed.')
+        return 0
+      }
+      if (plan.pending === 0) {
+        for (const line of formatPlan(plan)) io.log(line)
+        return 0
+      }
+      let confirm = args.confirm
+      if (confirm === undefined) {
+        if (!io.isTTY) {
+          io.error('Not an interactive terminal: pass --confirm "<phrase>". Nothing was changed.')
+          return 1
+        }
+        for (const line of formatPlan(plan)) io.log(line)
+        io.log('Stop the web app first and keep your own off-host copy of the data folder.')
+        confirm = await io.prompt(`Type ${plan.phrase} to continue: `)
+      }
+      const report = applyClaim({ ...options, confirm }, deps.claim ?? {})
+      if (report.nothingToDo) {
+        io.log('Nothing to do: every listed client is already claimed by this account.')
+        return 0
+      }
+      io.log(`Batch ${report.batchId}: claimed ${report.claimed.length}, already done ${report.done.length}, remaining ${report.remaining.length}.`)
+      for (const id of report.claimed) io.log(`  claimed ${id}`)
+      for (const id of report.done) io.log(`  done ${id}`)
+      for (const id of report.remaining) io.log(`  remaining ${id}`)
+      io.log(`The snapshot and report are kept in ${report.folder}/.`)
+      if (report.failure !== null) {
+        io.error(`The batch stopped (${report.failure}). Run the same command again to claim what remains.`)
+        return 1
+      }
+      return 0
+    }
+
     if (args.migrate) {
       const expectFrom = wholeNumber(args.expectFrom)
       const expectTo = wholeNumber(args.expectTo)

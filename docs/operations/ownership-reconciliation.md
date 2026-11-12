@@ -22,6 +22,29 @@ Background: [research-ownership.md](../architecture/research-ownership.md). The 
 7. **Verify the audit.** Read the client's events: exactly one `legacy-claimed` event with the expected target, `actor` `host`, and the backup `sha256` and `bytes` matching the evidence. Confirm `getClientOwner` shows the target with origin `legacy-claim`, the cases derive that owner, and the other clients are still unclaimed. Confirm `PRAGMA integrity_check` is `ok` and `PRAGMA foreign_key_check` is empty.
 8. Repeat for the next client. Do not batch; each claim has its own preview, backup and confirmation.
 
+## The `db:claim-legacy` command (#245)
+
+An offline, host-only command that does steps 3 to 8 above for a list of clients. It never starts the server, has no HTTP route, and no environment variable can confirm or bypass anything. Stop the web app first and keep your own off-host copy of the data folder.
+
+```
+npm run db:claim-legacy -- --data-dir <folder> --target-user <app_users.id> --client <id> [--client <id> ...] [--operator <label>] [--preview] [--confirm "<phrase>"]
+```
+
+- `--data-dir`, `--target-user` and at least one `--client` are required. Every client is listed explicitly; there is no "all" option. Duplicate ids are folded. `--operator` (default `host`, characters `A-Z a-z 0-9 . _ -`, at most 30) is recorded as the audit actor `cli:<operator>`.
+- The data folder lock and an exclusive in-use probe are taken. The profile must already be at the current schema; an older one is refused and points to `npm run db:migrate`.
+- **Target:** an existing account that is active, role Owner or Researcher, with at least one bound sign-in identity. It is never looked up by email or name. The account, its role, status, version and identities are never changed.
+- **Preview:** `--preview` writes nothing at all (the profile stays byte-identical and no folder is created). It prints the target, per client the counts of cases, notebook pages, tasks, journal entries and time entries, whether each client is `pending` or `done`, and the typed phrase:
+  `CLAIM <n> CLIENTS FOR <targetUserId> <fingerprint>`.
+  The fingerprint (12 hex characters) covers the target and each pending client's scope token, so a preview made before any change to those clients cannot be confirmed.
+- **Apply:** pass `--confirm "<phrase>"`, or type the phrase when run in a terminal (without a terminal and without `--confirm` it refuses). The plan is recomputed inside the lock; a different phrase is refused as `not-confirmed`. Then, in order: a verified snapshot `maintenance/claim-<stamp>/snapshot-v<N>.sqlite` (`VACUUM INTO`, integrity check, content manifest, `verifyClaimBackup` per client); each client claimed in its own transaction with a shared batch id in the event detail; verification that every table except `client_ownership` and `ownership_events` is unchanged, that exactly the claimed number of ownership rows were added, and that the target's account and identity rows are deep-equal; finally `maintenance/claim-<stamp>/report.json` (batch id, target id, operator, client ids with `claimed`/`done`/`remaining`, counts, snapshot hash and size; no names or content).
+- **Resumable:** the first failure stops the batch. Clients before it stay claimed and audited, the failed one and the rest stay unclaimed (unclaimed means invisible), and the command prints which are claimed and which remain, exiting 1. Run the same command again (with the new phrase from a fresh `--preview`): clients already claimed by the same target are reported as `done`. When all are done it prints "Nothing to do" and exits 0.
+
+Refusals, all with zero writes: `claim-input-invalid`, `data-dir-missing`, `data-dir-refused`, `in-use`, `migration-required`, `too-new`, `not-cleanly-closed`, `unsafe:<reason>`, `target-not-found`, `target-inactive`, `target-unbound`, `client-not-found`, `ownership-conflict` (a listed client is claimed by someone else), `not-confirmed`, `snapshot-unverified` (the snapshot is kept; nothing was claimed). `verify-failed` after claiming means the post-checks did not hold: nothing is repaired automatically; the snapshot and `report.json` are kept; stop and ask.
+
+**Recovery:** ownership is immutable. If the wrong target was chosen, restore the snapshot from the batch's folder (the app's restore keeps a safety copy), provided nothing else has been written since; otherwise stop and ask, as in Rollback below. Check the target in the preview carefully.
+
+Fictional example: `npm run db:claim-legacy -- --data-dir ./pilot --target-user 00000000-0000-4000-8000-000000000101 --client 00000000-0000-4000-8000-000000000201 --preview`.
+
 ## What the claim changes
 
 Only the new tables: one `client_ownership` row and one `ownership_events` row per claim. No existing research row, id, timestamp, archive flag or relationship is modified.
