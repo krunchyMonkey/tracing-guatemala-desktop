@@ -37,7 +37,6 @@ export type MaintenanceCode =
   | 'target-unbound'
   | 'client-not-found'
   | 'ownership-conflict'
-  | 'claim-failed'
   | `unsafe:${UnsafeReason}`
 
 const MESSAGES: Record<string, string> = {
@@ -71,8 +70,7 @@ const MESSAGES: Record<string, string> = {
   'target-inactive': 'The target user is not an active Owner or Researcher. Nothing was changed.',
   'target-unbound': 'The target user has no bound sign-in identity yet. Nothing was changed.',
   'client-not-found': 'A listed client does not exist. Nothing was changed.',
-  'ownership-conflict': 'A listed client is already claimed by a different user. Nothing was changed.',
-  'claim-failed': 'A claim failed and the batch stopped. See the report for what was claimed and what remains.'
+  'ownership-conflict': 'A listed client is already claimed by a different user. Nothing was changed.'
 }
 
 /** A maintenance command refused or failed. Carries a code and a fixed message: no paths, no content. */
