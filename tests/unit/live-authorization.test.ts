@@ -1,11 +1,12 @@
 import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createDataServices } from '../../src/main/data-services'
 import { AppData } from '../../src/main/database/app-data'
 import { DATABASE_FILE_NAME } from '../../src/main/database/connection'
 import { createFakeIdentityProvider } from '../../src/server/auth/fake-provider'
@@ -18,7 +19,7 @@ import { startLiveServer, type RunningLiveServer } from '../../src/server/server
 import type { NoteContent } from '../../src/shared/note-content'
 import type { AppUser, UserMutationResult } from '../../src/shared/users'
 import { diffManifests, manifestOf } from './helpers/db-manifest'
-import { activeUser, newCase, newClient } from './helpers/ownership-helpers'
+import { activeUser, newCase, newClient, pendingUser } from './helpers/ownership-helpers'
 import { call, send, signIn, writeHeaders, type Reply, type Signed } from './live-helpers'
 
 // #210: per-user research authorization over real HTTP. The Google identity provider is the
@@ -43,7 +44,11 @@ const identityOf = (key: Key): VerifiedIdentity => ({
   emailAuthoritative: false,
   name: `Person ${key.toUpperCase()}`
 })
-const PEOPLE = Object.fromEntries(ALL_KEYS.map((key) => [`code-${key}`, identityOf(key)]))
+// 'code-p' is a person who is not bound to any app_users row (never approved, or only listed as pending).
+const PEOPLE: Record<string, VerifiedIdentity> = {
+  ...Object.fromEntries(ALL_KEYS.map((key) => [`code-${key}`, identityOf(key)])),
+  'code-p': { provider: 'google', subject: 'sub-pia', email: 'sub-pia@example.test', emailVerified: true, emailAuthoritative: false, name: 'Pia Fictional' }
+}
 
 // Each test seeds a profile and makes many requests or builds a world of people: allow for a loaded CI machine.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
@@ -978,5 +983,107 @@ describe('an incompatible schema', () => {
     expect((await hostCall(w.live, w.host, 'getAppInfo')).status).toBe(200)
     expect((await hostCall(w.live, w.host, 'getBackupStatus')).status).toBe(200)
     expect(result<AppUser>(await pcall(w.live, a, 'getMyAccount')).id).toBe(w.users.a.id)
+  })
+})
+
+// ---- #255: gaps found in the release-impact assessment ----------------------------------------------
+
+describe('a pending or never-approved person over Live (#255)', () => {
+  it('cannot obtain a session, so every research call stays refused, and the host sees none of the research either', async () => {
+    const w = await boot({ signedIn: ['a'] })
+    await populate(w.live, sessionOf(w, 'a'), 'Alfa')
+    const pia = withData((d) => pendingUser(d, 'Pia Fictional'))
+    expect(pia.status).toBe('pending')
+
+    // The identity sub-pia is bound to nothing: the callback ends with "not approved" and no session cookie.
+    const started = await viaProxy(w.live, 'GET', '/api/v1/auth/google/start', nav)
+    expect(started.status, started.text).toBe(303)
+    const callback = await viaProxy(w.live, 'GET', '/api/v1/auth/google/callback?code=code-p&state=s', { Cookie: cookieOf(started, LOGIN)!, ...cb })
+    expect(callback.status, callback.text).toBe(303)
+    expect(callback.headers['location']).toBe('/?signin=not-approved')
+    expect(cookieOf(callback, SESSION)).toBeNull()
+
+    // Without a session every research call is refused, and the pending row is still pending.
+    for (const [name, args] of [['listClients', [listQuery]], ['getStudioSummary', []], ['createClient', [clientIn('Pia Attempt')]]] as const) {
+      const reply = await viaProxy(w.live, 'POST', `/api/v1/call/${name}`, json({ Origin: ORIGIN }), JSON.stringify({ args }))
+      expect(reply.status, name).toBeGreaterThanOrEqual(401)
+      expect(reply.status, name).toBeLessThan(500)
+    }
+    expect(withData((d) => d.users.get(pia.id)?.status)).toBe('pending')
+    expect(withData((d) => d.clients.list(listQuery as never, SCOPE_ALL).map((c) => c.displayName))).not.toContain('Pia Attempt')
+
+    // The host session reads none of A's research, with a pending row in the profile just as without it.
+    expect(result<unknown[]>(await hostCall(w.live, w.host, 'listClients', listQuery))).toEqual([])
+    expect(result<unknown[]>(await hostCall(w.live, w.host, 'listCases', everything))).toEqual([])
+  })
+})
+
+describe('host-only backup and restore for remote people (#255)', () => {
+  it('refuses createBackup and restoreBackup to a remote Owner and a remote Researcher with 403 host-only, writes no backup and restores nothing', async () => {
+    const w = await boot({ signedIn: ['o', 'b'] })
+    const ids = await populate(w.live, sessionOf(w, 'b'), 'Bravo')
+    const before = manifestNow()
+    for (const key of ['o', 'b'] as const) {
+      for (const name of ['createBackup', 'restoreBackup'] as const) {
+        const reply = await pcall(w.live, sessionOf(w, key), name, ...(name === 'restoreBackup' ? [randomUUID()] : []))
+        expect(reply.status, `${key} ${name}`).toBe(403)
+        expect(reply.json(), `${key} ${name}`).toEqual({ error: 'host-only' })
+      }
+    }
+    const backups = join(dataDir, 'backups')
+    expect(existsSync(backups) ? readdirSync(backups) : []).toEqual([])
+    expect(diffManifests(before, manifestNow())).toEqual([])
+    // A restore would have ended every session: both are still signed in and B still reads own research.
+    expect(result<AppUser>(await pcall(w.live, sessionOf(w, 'o'), 'getMyAccount')).id).toBe(w.users.o.id)
+    expect(result<{ id: string }>(await pcall(w.live, sessionOf(w, 'b'), 'getClient', ids.clientId)).id).toBe(ids.clientId)
+  })
+})
+
+describe('restoring a v10 backup made while a grant existed, after the grant was revoked (#255)', () => {
+  it('brings back exactly the grants in the backup and evaluates access from the restored rows', async () => {
+    initLanTestProfile(dataDir)
+    const seeded = withData((d) => {
+      const a = activeUser(d, 'sub-a', 'Owner A', 'owner')
+      const b = activeUser(d, 'sub-b', 'Researcher B')
+      const c = activeUser(d, 'sub-c', 'Researcher C')
+      const clientId = newClient(d, 'Alfa Client', a.id)
+      const caseId = newCase(d, clientId, 'Alfa Case')
+      expect(d.ownership.setClientGrant({ clientId, granteeUserId: b.id, permission: 'viewer', grantedBy: a.id }).ok).toBe(true)
+      return { a, b, c, clientId, caseId }
+    })
+    const live = await startServer({ mode: 'plain' })
+    const host = await signIn(live)
+    const made = await call<{ ok: true; fileName: string }>(live, host, 'createBackup')
+    expect(made.ok).toBe(true)
+
+    // After the backup: the grant is revoked and a new client appears. The restore must undo both.
+    withData((d) => {
+      expect(d.ownership.revokeClientGrant({ clientId: seeded.clientId, granteeUserId: seeded.b.id, revokedBy: seeded.a.id })).toMatchObject({ ok: true, revoked: true })
+      newClient(d, 'Added After Backup', seeded.a.id)
+    })
+    const scopedNames = (d: AppData, userId: string) =>
+      createDataServices(() => d).forScope({ kind: 'user', userId }).clients.list(listQuery as never).map((x) => x.displayName)
+    expect(withData((d) => scopedNames(d, seeded.b.id))).toEqual([])
+
+    const headers = { ...writeHeaders(live, host), 'Content-Type': 'application/octet-stream' }
+    const uploaded = (await send(live, 'POST', '/api/v1/backup/upload', headers, readFileSync(join(dataDir, 'backups', made.fileName)))).json() as { result: { token: string } }
+    expect(await call(live, host, 'restoreBackup', uploaded.result.token)).toMatchObject({ ok: true, clients: 1 })
+
+    withData((d) => {
+      // The restored grant is present and is the only grant anywhere.
+      expect(d.ownership.listGrants({ clientId: seeded.clientId }).map((g) => [g.granteeUserId, g.permission])).toEqual([[seeded.b.id, 'viewer']])
+      expect((d.db.prepare('SELECT count(*) AS n FROM client_grants').get() as { n: number }).n).toBe(1)
+      expect((d.db.prepare('SELECT count(*) AS n FROM case_grants').get() as { n: number }).n).toBe(0)
+      expect(d.ownership.listEvents(seeded.clientId).map((e) => e.action)).toEqual(['owned-on-create', 'grant-created'])
+      // Access follows the restored rows: B reads, the owner owns, C (no grant in the backup) sees nothing.
+      expect(scopedNames(d, seeded.b.id)).toEqual(['Alfa Client'])
+      expect(scopedNames(d, seeded.a.id)).toEqual(['Alfa Client'])
+      expect(scopedNames(d, seeded.c.id)).toEqual([])
+      expect(createDataServices(() => d).forScope({ kind: 'user', userId: seeded.c.id }).cases.get(seeded.caseId)).toBeNull()
+    })
+    // The host still reads no research in a profile with users. Remote sessions are ended by a restore
+    // (live-host.ts: userSessions.deleteAll); that is asserted with a session spy in live-google-sessions.test.ts,
+    // because a restore is refused while the HTTPS listener is on.
+    expect(result<unknown[]>(await hostCall(live, host, 'listClients', listQuery))).toEqual([])
   })
 })
