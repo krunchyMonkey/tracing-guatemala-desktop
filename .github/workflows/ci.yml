@@ -77,6 +77,8 @@ jobs:
       # IPv4 for the LAN-origin demo tests).
       - name: Playwright (browser-demo, web-live)
         run: npx playwright test --project browser-demo --project web-live
+      # Failed tests only: error context, #250 selection logs, and for web-live a trace and a
+      # screenshot. Fictional test data from this throwaway runner; kept 3 days.
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
