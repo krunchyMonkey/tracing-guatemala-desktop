@@ -9,7 +9,7 @@
 > - **Review follow-ups:**
 >   - #255: test gaps, transactional point checks, and docs on the backup exception.
 >   - #247: the stuck-global-timer case was added to its acceptance criteria.
-> - **#245 slice 1 → PR #257** (`feat/245-claim-legacy`, worktree `issue-245`): the offline `db:claim-legacy` command, CI green. It awaits a security review and separate owner merge authorization, and is never run on real data. #256 tracks a pre-existing renderer flake in `NotebookReleaseA.test.tsx`.
+> - **#245 slice 1 → PR #257** (`feat/245-claim-legacy`, worktree `issue-245`): the offline `db:claim-legacy` command. It was independently reviewed twice; all 10 findings are fixed, CI is green, and it is **recommended for merge pending the owner's authorization**. It is never run on real data before the #211 gates and the recorded researcher consent. **#246-a → PR #258** (`feat/246-owner-research-ux`, worktree `issue-246`): the session `research` field, the host-session notice and readable refusals; CI green, open for review. #256 tracks a pre-existing renderer flake in `NotebookReleaseA.test.tsx`.
 > - **Before any real cutover**, the #211 gates must be met. After `db:migrate` on real data, all historical research stays unreachable until `db:claim-legacy` (#245) runs in the same maintenance window.
 > - **Order:**
 >   1. #245 `db:claim-legacy`: explicit ids, atomic per client, resumable audited batches; the target is an active, bound account.
