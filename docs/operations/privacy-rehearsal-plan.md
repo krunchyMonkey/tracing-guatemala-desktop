@@ -58,6 +58,7 @@ Steps 11–13 are run once #247, #212 and #246 have landed. Until then they are 
 - No content, names, paths, hashes of real rows, or screenshots of real data.
 
 ## Exit criteria for the real cutover (still needs the owner)
+- Every security-sensitive PR in the release passed the [final owner + ChatGPT security review gate](../engineering/security-review-gate.md) at the SHA that merged. Source-merge approval alone authorizes none of the steps below.
 - Every step passes in Stage A and Stage B.
 - The #211 checklist is complete.
 - An authorized maintenance window is set, with writes frozen.
