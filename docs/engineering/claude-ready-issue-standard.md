@@ -12,6 +12,7 @@
 6. **Data/security rules:** fictional data only in public code/CI/demo; no real names, records, screenshots, logs, addresses, session cookies, keys, secrets or backend paths exposed. Respect HTTPS-only privacy approvals, user auth, backup, client isolation, browser origin/CSP controls. Do not use remote/cloud resources without authorized design.
 7. **Branch/worktree/PR delivery:** inspect `git worktree list --porcelain` and GitHub open branches/PRs; reuse existing worktree where possible; never reset/clean/delete the user's work. Target `main` unless a clearly declared stacked PR dependency is needed.
 8. **Final merge contract:** include the mandatory merge-on-completion instructions below *in every implementation ticket*, not merely the epic or the handoff.
+9. **Security review gate:** if the work is security-sensitive (auth, identity, ownership/authorization, migrations, backup/restore, research privacy, sessions, production config), say so in the ticket. Its PR then stops at the [final owner + ChatGPT security review gate](security-review-gate.md) instead of merging on completion.
 
 ## Mandatory closeout language (paste into each issue)
 
@@ -21,6 +22,7 @@
 > - Implement one scoped, testable PR with appropriate regression/security tests. Run relevant lint, typecheck, unit, integration, browser E2E and builds; report genuine results, known flaky failures and skipped/unrun checks.
 > - **Do not stop at a locally completed branch or an open PR.** When acceptance criteria are satisfied, all required automated checks/reviews pass, dependencies are merged, and no owner/researcher/security gate remains, **squash-merge the PR into `main` promptly** under the owner's standing routine-PR authorization.
 > - After merging, **verify on GitHub that the PR is merged**, the commit is present on `main`, and issue state reflects actual completion. Update `CLAUDE_HANDOFF.md` when project status or architectural direction changes. Report PR/commit and next unblocked issue.
+> - **Security-sensitive PRs stop before merge.** If the PR touches auth, identity, ownership/authorization, migrations, backup/restore, research privacy, sessions or production config, follow [`docs/engineering/security-review-gate.md`](security-review-gate.md): independent review, CI for the exact SHA, a review package, status `Awaiting owner + ChatGPT security review`, then wait for the owner's explicit source-merge authorization. Standing routine authorization does not cover these PRs.
 > - **Do not bypass manual gates:** never merge a failing/blocked PR; never merge an unresolved review or assume researcher approval (#21/#157), HTTPS real-data approval (#168/#169), public-demo launch approval, production migration/cutover approval, or required owner security/privacy decisions. If gated, leave PR unmerged, identify the exact hold and affected issue, and proceed only with independent permitted work. Exclude unrelated PR #111 from this authorization.
 
 ## Explicit distinction: merge vs deployment
@@ -33,5 +35,6 @@ A merged commit on `main` is not automatically deployed. A private Live release 
 - [ ] Measurable acceptance, failure modes, tests and security considerations.
 - [ ] Worktree/reuse rules, implementation files and relevant current specs.
 - [ ] **Mandatory final-delivery contract included** in issue body.
+- [ ] Security-sensitive scope is flagged, so the PR follows the [final security review gate](security-review-gate.md).
 - [ ] If scope requires approval, explicitly state the owner/researcher approval gate without imposing approval on unrelated work.
 - [ ] Future reader can begin implementation without a discovery meeting; handoff updated when needed.
