@@ -1,67 +1,46 @@
 import type { Page, TestInfo } from '@playwright/test'
 
-// Test-only diagnostics for the notebook selection flake (#250). Installs a small recorder in
-// the page that logs, with timestamps: the DOM selection, the editor's (ProseMirror) selection
-// and how the editor maps the DOM selection, focus, key presses, mouse downs, editor
-// transactions, and the editor-view calls that write the editor's selection into the DOM
-// (view.focus with its caller, view.updateState). Kept light on purpose: stack traces on every
-// keystroke or DOM-selection write changed the timing enough to make the journey fail 13/15.
-// The log stays in the page; it is only read and attached to the test when something fails.
+// Test-only, failure-only diagnostics for the notebook selection steps (#250). A small recorder
+// in the page logs, with timestamps, the DOM selection next to the editor's selection on
+// selection changes, focus changes, mouse downs and editor transactions. It only listens:
+// it does not wrap or patch any editor method and reads no editor internals, so it cannot
+// change how the editor behaves. (An earlier, heavier version that captured stack traces
+// changed the timing enough to make the journey fail 13 of 15 times.) The log stays in the
+// page and is attached to the test only when a wrapped step fails.
 // Fictional test data only: the log holds the page's fictional text and nothing else.
 
 export interface SelectionEvent {
   t: number
   kind: string
   detail?: unknown
-  dom: { text: string; collapsed: boolean; anchor: string; anchorOffset: number; focus: string; focusOffset: number } | null
-  pm: { from: number; to: number; type: string; text: string } | null
+  dom: { text: string; collapsed: boolean } | null
+  pm: { from: number; to: number; text: string } | null
   editorFocused: boolean | null
-  active: string
 }
 
-const LOG_LIMIT = 1500
+const LOG_LIMIT = 500
 
 /** Starts recording in the page (once per document; safe to call again). Call when the notebook page shows. */
 export async function recordSelection(page: Page): Promise<void> {
   await page.evaluate((limit) => {
-    interface PmSelection {
-      from: number
-      to: number
-      constructor: { name: string }
-      toJSON(): { type: string }
-    }
-    interface PmView {
-      focus(): void
-      updateState(state: unknown): void
-    }
     interface PmEditor {
-      state: { selection: PmSelection; doc: { textBetween(from: number, to: number, sep: string): string } }
-      view: PmView & { __tgPatched?: boolean }
+      state: { selection: { from: number; to: number }; doc: { textBetween(from: number, to: number, sep: string): string } }
       isFocused: boolean
-      on(event: 'transaction', fn: (props: { transaction: { docChanged: boolean; selectionSet: boolean; meta?: Record<string, unknown> } }) => void): void
+      on(event: 'transaction', fn: (props: { transaction: { docChanged: boolean; selectionSet: boolean } }) => void): void
     }
-    const w = window as unknown as { __tgSelection?: { log: unknown[]; t0: number; editors: WeakSet<object> } }
-    if (!w.__tgSelection) {
-      w.__tgSelection = { log: [], t0: performance.now(), editors: new WeakSet() }
-    }
+    const w = window as unknown as { __tgSelection?: { log: unknown[]; t0: number; editors: WeakSet<object>; listening: boolean } }
+    w.__tgSelection ??= { log: [], t0: performance.now(), editors: new WeakSet(), listening: false }
     const rec = w.__tgSelection
-    const describe = (node: Node | null): string => {
-      if (!node) return 'none'
-      const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
-      const tag = element ? element.tagName.toLowerCase() : '?'
-      const cls = element && typeof element.className === 'string' && element.className ? `.${element.className.split(/\s+/).join('.')}` : ''
-      const kind = node.nodeType === Node.TEXT_NODE ? `#text("${(node.textContent ?? '').slice(0, 40)}") in ` : ''
-      return `${kind}${tag}${cls}`
-    }
+    // The editor library exposes the editor on its root element.
     const editorOf = (): PmEditor | null => (document.querySelector('.ProseMirror') as unknown as { editor?: PmEditor } | null)?.editor ?? null
     const snap = (kind: string, detail?: unknown): void => {
       const ed = editorOf()
       const sel = document.getSelection()
-      let pm: { from: number; to: number; type: string; text: string } | null = null
+      let pm: { from: number; to: number; text: string } | null = null
       try {
         if (ed) {
           const s = ed.state.selection
-          pm = { from: s.from, to: s.to, type: s.toJSON().type, text: ed.state.doc.textBetween(s.from, s.to, '\n') }
+          pm = { from: s.from, to: s.to, text: ed.state.doc.textBetween(s.from, s.to, '\n') }
         }
       } catch {
         pm = null
@@ -70,80 +49,29 @@ export async function recordSelection(page: Page): Promise<void> {
         t: Math.round(performance.now() - rec.t0),
         kind,
         detail,
-        dom: sel
-          ? {
-              text: sel.toString(),
-              collapsed: sel.isCollapsed,
-              anchor: describe(sel.anchorNode),
-              anchorOffset: sel.anchorOffset,
-              focus: describe(sel.focusNode),
-              focusOffset: sel.focusOffset
-            }
-          : null,
+        dom: sel ? { text: sel.toString(), collapsed: sel.isCollapsed } : null,
         pm,
-        editorFocused: ed ? ed.isFocused : null,
-        active: describe(document.activeElement)
+        editorFocused: ed ? ed.isFocused : null
       })
       if (rec.log.length > limit) rec.log.shift()
     }
-    const stack = (): string[] => (new Error().stack ?? '').split('\n').slice(3, 9).map((line) => line.trim())
+    const tag = (target: EventTarget | null): string => (target instanceof Element ? target.tagName.toLowerCase() : 'none')
 
-    if (!(rec as { listening?: boolean }).listening) {
-      ;(rec as { listening?: boolean }).listening = true
-      // Capture phase: runs before the editor's own selectionchange listener, so this sees the
-      // DOM selection the editor is about to read, and how the editor maps it to positions.
-      document.addEventListener(
-        'selectionchange',
-        () => {
-          const ed = editorOf() as unknown as {
-            view?: {
-              docView?: { posFromDOM(node: Node, offset: number, bias: number): number }
-              domObserver?: { currentSelection?: { anchorNode: Node | null; anchorOffset: number; focusNode: Node | null; focusOffset: number } }
-            }
-          } | null
-          const sel = document.getSelection()
-          let mapped: unknown = null
-          try {
-            const docView = ed?.view?.docView
-            if (docView && sel?.anchorNode && sel.focusNode) {
-              mapped = { anchorPos: docView.posFromDOM(sel.anchorNode, sel.anchorOffset, 1), headPos: docView.posFromDOM(sel.focusNode, sel.focusOffset, 1) }
-            }
-          } catch (error) {
-            mapped = { error: String(error) }
-          }
-          const cur = ed?.view?.domObserver?.currentSelection
-          snap('selectionchange:pre', {
-            mapped,
-            observerHad: cur ? { anchor: describe(cur.anchorNode), anchorOffset: cur.anchorOffset, focus: describe(cur.focusNode), focusOffset: cur.focusOffset } : null
-          })
-        },
-        true
-      )
+    if (!rec.listening) {
+      rec.listening = true
       document.addEventListener('selectionchange', () => snap('selectionchange'))
-      document.addEventListener('keydown', (event) => snap('keydown', { key: event.key, shift: event.shiftKey, ctrl: event.ctrlKey }), true)
-      document.addEventListener('mousedown', (event) => snap('mousedown', { target: describe(event.target as Node) }), true)
-      document.addEventListener('focusin', (event) => snap('focusin', { target: describe(event.target as Node) }), true)
-      document.addEventListener('focusout', (event) => snap('focusout', { target: describe(event.target as Node) }), true)
+      document.addEventListener('mousedown', (event) => snap('mousedown', { target: tag(event.target), clicks: event.detail }), true)
+      document.addEventListener('focusin', (event) => snap('focusin', { target: tag(event.target) }), true)
+      document.addEventListener('focusout', (event) => snap('focusout', { target: tag(event.target) }), true)
     }
 
     const ed = editorOf()
     if (ed && !rec.editors.has(ed)) {
       rec.editors.add(ed)
-      ed.on('transaction', ({ transaction }) =>
-        snap('transaction', { docChanged: transaction.docChanged, selectionSet: transaction.selectionSet, meta: Object.keys(transaction.meta ?? {}) })
-      )
-      const view = ed.view
-      const focus = view.focus.bind(view)
-      const updateState = view.updateState.bind(view)
-      view.focus = () => {
-        snap('view.focus:before', { stack: stack() })
-        focus()
-        snap('view.focus:after')
-      }
-      view.updateState = (state) => {
-        updateState(state)
-        snap('view.updateState')
-      }
+      ed.on('transaction', ({ transaction }) => {
+        // Typing is not logged: only transactions that move the selection without editing.
+        if (!transaction.docChanged && transaction.selectionSet) snap('transaction:selection')
+      })
     }
     snap('recorder-installed')
   }, LOG_LIMIT)
@@ -187,8 +115,7 @@ export async function withSelectionLog<T>(page: Page, testInfo: TestInfo, label:
   } catch (error) {
     const log = await readSelectionLog(page)
     await testInfo.attach(`selection-log-${label}`, { body: JSON.stringify(log, null, 2), contentType: 'application/json' })
-    const keep = log.filter((e) => e.kind !== 'keydown' && !(e.kind === 'transaction' && (e.detail as { docChanged?: boolean } | undefined)?.docChanged))
-    console.log(`[#250 selection log: ${label}] last events (typing omitted; full log attached):\n${keep.slice(-80).map((e) => JSON.stringify(e)).join('\n')}`)
+    console.log(`[#250 selection log: ${label}] last 40 events (full log attached):\n${log.slice(-40).map((e) => JSON.stringify(e)).join('\n')}`)
     throw error
   }
 }
