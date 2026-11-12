@@ -308,19 +308,19 @@ test('links records and creates a task from the selection, without ever duplicat
     await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
     await markSelection(page, 'after toolbar click')
     await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
+    await taskDialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.locator('.note-reference')).toHaveCount(2)
+    await markSelection(page, 'before second toolbar click')
+    await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
+    await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
+    await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
+    await expect(editor(page)).toContainText('Request the 1884 baptism index')
+    // The three references show readable labels.
+    await expect(editor(page).locator('.note-reference-label')).toHaveCount(3)
+    // The new task's reference sits right after the selected line, before the two earlier links.
+    await expect(editor(page).locator('.note-reference-label')).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
   })
-  await taskDialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.locator('.note-reference')).toHaveCount(2)
-  await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
-  await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
-  await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
-  await expect(editor(page)).toContainText('Request the 1884 baptism index')
-
-  // The three references show readable labels.
   const labels = editor(page).locator('.note-reference-label')
-  await expect(labels).toHaveCount(3)
-  // The new task's reference sits right after the selected line, before the two earlier links.
-  await expect(labels).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
   await expect(status(page)).toHaveText(SAVED)
 
   // Activating a reference opens the case at that record.

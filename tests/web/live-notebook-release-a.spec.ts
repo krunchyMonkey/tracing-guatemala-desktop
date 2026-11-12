@@ -501,15 +501,15 @@ test('Release A: one realistic journey from first notebook to backup, archive an
       await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
       await markSelection(page, 'after toolbar click')
       await expect(taskDialog.getByLabel('What needs doing')).toHaveValue('Request the 1884 baptism index')
+      // Nothing exists until the person confirms.
+      await taskDialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(editor(page).locator('.note-reference')).toHaveCount(2)
+      await markSelection(page, 'before second toolbar click')
+      await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
+      await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
+      await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
+      await expect(editor(page).locator('.note-reference-label')).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
     })
-    // Nothing exists until the person confirms.
-    await taskDialog.getByRole('button', { name: 'Cancel' }).click()
-    await expect(editor(page).locator('.note-reference')).toHaveCount(2)
-    await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
-    await page.getByRole('dialog', { name: 'Create a task from your notes' }).getByRole('button', { name: 'Create task' }).click()
-    await expect(page.getByText(/Task “Request the 1884 baptism index” created and linked here/)).toBeVisible()
-    const labels = editor(page).locator('.note-reference-label')
-    await expect(labels).toHaveText(['Task · Request the 1884 baptism index (pending)', 'Task · Order microfilm (pending)', /^Journal · .* · Archive search$/])
     await hostHasText(page, alpha.id, letterId, 'Request the 1884 baptism index')
     await expect(status(page)).toHaveText(SAVED)
 

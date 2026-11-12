@@ -17,7 +17,7 @@ export interface SelectionEvent {
   active: string
 }
 
-const LOG_LIMIT = 400
+const LOG_LIMIT = 1500
 
 /** Starts recording in the page (once per document; safe to call again). Call when the notebook page shows. */
 export async function recordSelection(page: Page): Promise<void> {
@@ -88,7 +88,47 @@ export async function recordSelection(page: Page): Promise<void> {
 
     if (!(rec as { listening?: boolean }).listening) {
       ;(rec as { listening?: boolean }).listening = true
+      // Capture phase: runs before the editor's own selectionchange listener, so this sees the
+      // DOM selection the editor is about to read, and how the editor maps it to positions.
+      document.addEventListener(
+        'selectionchange',
+        () => {
+          const ed = editorOf() as unknown as {
+            view?: {
+              docView?: { posFromDOM(node: Node, offset: number, bias: number): number }
+              domObserver?: { currentSelection?: { anchorNode: Node | null; anchorOffset: number; focusNode: Node | null; focusOffset: number } }
+            }
+          } | null
+          const sel = document.getSelection()
+          let mapped: unknown = null
+          try {
+            const docView = ed?.view?.docView
+            if (docView && sel?.anchorNode && sel.focusNode) {
+              mapped = { anchorPos: docView.posFromDOM(sel.anchorNode, sel.anchorOffset, 1), headPos: docView.posFromDOM(sel.focusNode, sel.focusOffset, 1) }
+            }
+          } catch (error) {
+            mapped = { error: String(error) }
+          }
+          const cur = ed?.view?.domObserver?.currentSelection
+          snap('selectionchange:pre', {
+            mapped,
+            observerHad: cur ? { anchor: describe(cur.anchorNode), anchorOffset: cur.anchorOffset, focus: describe(cur.focusNode), focusOffset: cur.focusOffset } : null
+          })
+        },
+        true
+      )
       document.addEventListener('selectionchange', () => snap('selectionchange'))
+      // Every script write to the DOM selection, with who made it.
+      const proto = Selection.prototype as unknown as Record<string, (...args: unknown[]) => unknown>
+      for (const name of ['collapse', 'setPosition', 'setBaseAndExtent', 'addRange', 'removeAllRanges', 'extend', 'collapseToStart', 'collapseToEnd', 'selectAllChildren']) {
+        const original = proto[name]
+        if (typeof original !== 'function') continue
+        proto[name] = function (this: Selection, ...args: unknown[]) {
+          const result = original.apply(this, args)
+          snap(`dom.${name}`, { stack: stack() })
+          return result
+        }
+      }
       document.addEventListener('keydown', (event) => snap('keydown', { key: event.key, shift: event.shiftKey, ctrl: event.ctrlKey }), true)
       document.addEventListener('mousedown', (event) => snap('mousedown', { target: describe(event.target as Node) }), true)
       document.addEventListener('focusin', (event) => snap('focusin', { target: describe(event.target as Node) }), true)
@@ -156,7 +196,8 @@ export async function withSelectionLog<T>(page: Page, testInfo: TestInfo, label:
   } catch (error) {
     const log = await readSelectionLog(page)
     await testInfo.attach(`selection-log-${label}`, { body: JSON.stringify(log, null, 2), contentType: 'application/json' })
-    console.log(`[#250 selection log: ${label}] last events:\n${log.slice(-60).map((e) => JSON.stringify(e)).join('\n')}`)
+    const keep = log.filter((e) => e.kind !== 'keydown' && !(e.kind === 'transaction' && (e.detail as { docChanged?: boolean } | undefined)?.docChanged))
+    console.log(`[#250 selection log: ${label}] last events (typing omitted; full log attached):\n${keep.slice(-80).map((e) => JSON.stringify(e)).join('\n')}`)
     throw error
   }
 }
