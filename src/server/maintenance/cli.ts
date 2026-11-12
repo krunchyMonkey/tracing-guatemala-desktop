@@ -114,7 +114,7 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
       for (const id of report.remaining) io.log(`  remaining ${id}`)
       io.log(`The snapshot and report are kept in ${report.folder}/.`)
       if (report.failure !== null) {
-        io.error(`The batch stopped (${report.failure}). Run the same command again to claim what remains.`)
+        io.error(`The batch stopped (${report.failure}). Run --preview again and confirm with its new phrase to claim what remains.`)
         return 1
       }
       return 0
