@@ -186,6 +186,61 @@ describe('session research reach', () => {
   })
 })
 
+const sessionBody = async (live: RunningLiveServer, cookie?: string) =>
+  (await viaProxy(live, 'GET', '/api/v1/session', cookie ? { Cookie: cookie } : {})).json() as Record<string, unknown>
+
+function dropOwnershipTables(): void {
+  const raw = new DatabaseSync(join(dataDir, 'data', DATABASE_FILE_NAME))
+  try {
+    raw.exec('PRAGMA foreign_keys = ON; DROP TABLE case_grants; DROP TABLE client_grants; DROP TABLE ownership_events; DROP TABLE client_ownership;')
+  } finally {
+    raw.close()
+  }
+}
+
+describe('session research reach, edge cases', () => {
+  it('carries no research field for a disabled user, a user who never got approved, or a user whose role changed', async () => {
+    initLanTestProfile(dataDir)
+    const users = withData((d) => ({ o: activeUser(d, 'sub-o', 'Person O', 'owner'), p: activeUser(d, 'sub-p', 'Person P', 'researcher'), r: activeUser(d, 'sub-r', 'Person R', 'researcher') }))
+    const live = await startServer('google')
+    const o = await signInAs(live, 'o')
+    const p = await signInAs(live, 'p')
+    const r = await signInAs(live, 'r')
+    expect(await sessionBody(live, o.cookie)).toMatchObject({ authenticated: true, research: 'own' })
+    expect(await sessionBody(live, p.cookie)).toMatchObject({ authenticated: true, research: 'own' })
+    withData((d) => {
+      const disabled = d.users.setStatus(users.p.id, 'disabled', 'host', users.p.version)
+      expect(disabled.ok).toBe(true)
+      const changed = d.users.setRole(users.r.id, 'owner', 'host', users.r.version)
+      expect(changed.ok).toBe(true)
+    })
+    for (const who of [p, r]) {
+      const body = await sessionBody(live, who.cookie)
+      expect(body.authenticated).toBe(false)
+      expect('research' in body).toBe(false)
+    }
+    // A sign-in that is not an approved account never gets a session at all (the pending case).
+    const started = await viaProxy(live, 'GET', '/api/v1/auth/google/start', nav)
+    const callback = await viaProxy(live, 'GET', '/api/v1/auth/google/callback?code=code-x&state=s', { Cookie: cookieOf(started, '__Host-tg_login')!, ...cb })
+    expect(cookieOf(callback, '__Host-tg_session')).toBeNull()
+    const none = await sessionBody(live)
+    expect(none.authenticated).toBe(false)
+    expect('research' in none).toBe(false)
+  })
+
+  it('reports none for a host session and for a Google user when the research schema is not ready', async () => {
+    initLanTestProfile(dataDir)
+    withData((d) => activeUser(d, 'sub-o', 'Person O', 'owner'))
+    const live = await startServer('google')
+    const host = await signIn(live)
+    const o = await signInAs(live, 'o')
+    expect(await sessionBody(live, o.cookie)).toMatchObject({ research: 'own' })
+    dropOwnershipTables()
+    expect(await sessionBody(live, o.cookie)).toMatchObject({ authenticated: true, research: 'none' })
+    expect(await hostSessionResearch(live, host)).toBe('none')
+  })
+})
+
 describe('an Owner researches as the same account', () => {
   async function world() {
     initLanTestProfile(dataDir)
@@ -207,6 +262,7 @@ describe('an Owner researches as the same account', () => {
     const named = { ...clientIn('Alfa Client'), ownerUserId: w.users.p.id }
     const refused = await pcall(w.live, w.o, 'createClient', named)
     expect(refused.status).toBe(400)
+    expect(refused.json()).toEqual({ error: 'invalid-arguments' })
     expect(clientRows()).toBe(before)
     const made = result<{ ok: boolean; client: { id: string } }>(await pcall(w.live, w.o, 'createClient', clientIn('Alfa Client')))
     expect(made.ok).toBe(true)
@@ -215,6 +271,39 @@ describe('an Owner researches as the same account', () => {
     expect(result<{ id: string }[]>(await pcall(w.live, w.o, 'listClients', listQuery)).map((c) => c.id)).toEqual([id])
     expect(result<{ id: string }>(await pcall(w.live, w.o, 'getClient', id)).id).toBe(id)
     expect(result<AppUser[]>(await pcall(w.live, w.o, 'listUsers'))).toHaveLength(3)
+  })
+
+  it('refuses a case-variant owner key, an own __proto__ key, and an extra argument, writing nothing', async () => {
+    const w = await world()
+    const clientRows = () => withData((d) => (d.db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n)
+    const before = clientRows()
+    const raw = (body: string) =>
+      viaProxy(w.live, 'POST', '/api/v1/call/createClient', { 'Content-Type': 'application/json', Origin: ORIGIN, Cookie: w.o.cookie, 'X-TG-CSRF': w.o.csrf }, body)
+    const base = JSON.stringify(clientIn('Variant Client')).slice(0, -1)
+    const bodies = [
+      JSON.stringify({ args: [{ ...clientIn('Variant Client'), OwnerUserId: w.users.p.id }] }),
+      // JSON.parse makes "__proto__" an own key here (an object literal would set the prototype instead).
+      `{"args":[${base},"__proto__":{"ownerUserId":"${w.users.p.id}"}}]}`
+    ]
+    for (const body of bodies) {
+      const reply = await raw(body)
+      expect(reply.status, reply.text).toBe(400)
+      expect(reply.json()).toEqual({ error: 'invalid-arguments' })
+    }
+    const extra = await pcall(w.live, w.o, 'createClient', clientIn('Variant Client'), w.users.p.id)
+    expect(extra.status).toBe(400)
+    expect(extra.json()).toEqual({ error: 'invalid-arguments' })
+    expect(clientRows()).toBe(before)
+  })
+
+  it('refuses updateClient with an owner key and leaves the owner unchanged', async () => {
+    const w = await world()
+    const id = result<{ client: { id: string } }>(await pcall(w.live, w.o, 'createClient', clientIn('Alfa Client'))).client.id
+    const reply = await pcall(w.live, w.o, 'updateClient', id, { ...clientIn('Alfa Renamed'), ownerUserId: w.users.p.id })
+    expect(reply.status).toBe(400)
+    expect(reply.json()).toEqual({ error: 'invalid-arguments' })
+    expect(withData((d) => d.ownership.getClientOwner(id))).toMatchObject({ ownerUserId: w.users.o.id })
+    expect(result<{ displayName: string }>(await pcall(w.live, w.o, 'getClient', id)).displayName).toBe('Alfa Client')
   })
 
   it('hides it from a second Owner and from a Researcher', async () => {

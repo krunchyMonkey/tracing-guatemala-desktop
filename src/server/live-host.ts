@@ -345,10 +345,10 @@ export function createLiveHost(options: LiveHostOptions): LiveHost {
    * of it only while the profile has no users. An unready schema reports 'none'.
    */
   function researchReach(kind: 'user' | 'local'): 'own' | 'all' | 'none' {
-    if (kind === 'user') return 'own'
     try {
       const db = data().db
       if (!researchSchemaReady(db)) return 'none'
+      if (kind === 'user') return 'own'
       return localScope(db).kind === 'all' ? 'all' : 'none'
     } catch {
       return 'none'
