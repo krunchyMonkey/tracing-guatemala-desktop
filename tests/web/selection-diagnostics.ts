@@ -1,9 +1,11 @@
 import type { Page, TestInfo } from '@playwright/test'
 
 // Test-only diagnostics for the notebook selection flake (#250). Installs a small recorder in
-// the page that logs, with timestamps: the DOM selection, the editor's (ProseMirror) selection,
-// focus, key presses, mouse downs on the page, editor transactions, and the two editor-view
-// calls that can write the editor's selection back into the DOM (view.focus, view.updateState).
+// the page that logs, with timestamps: the DOM selection, the editor's (ProseMirror) selection
+// and how the editor maps the DOM selection, focus, key presses, mouse downs, editor
+// transactions, and the editor-view calls that write the editor's selection into the DOM
+// (view.focus with its caller, view.updateState). Kept light on purpose: stack traces on every
+// keystroke or DOM-selection write changed the timing enough to make the journey fail 13/15.
 // The log stays in the page; it is only read and attached to the test when something fails.
 // Fictional test data only: the log holds the page's fictional text and nothing else.
 
@@ -118,17 +120,6 @@ export async function recordSelection(page: Page): Promise<void> {
         true
       )
       document.addEventListener('selectionchange', () => snap('selectionchange'))
-      // Every script write to the DOM selection, with who made it.
-      const proto = Selection.prototype as unknown as Record<string, (...args: unknown[]) => unknown>
-      for (const name of ['collapse', 'setPosition', 'setBaseAndExtent', 'addRange', 'removeAllRanges', 'extend', 'collapseToStart', 'collapseToEnd', 'selectAllChildren']) {
-        const original = proto[name]
-        if (typeof original !== 'function') continue
-        proto[name] = function (this: Selection, ...args: unknown[]) {
-          const result = original.apply(this, args)
-          snap(`dom.${name}`, { stack: stack() })
-          return result
-        }
-      }
       document.addEventListener('keydown', (event) => snap('keydown', { key: event.key, shift: event.shiftKey, ctrl: event.ctrlKey }), true)
       document.addEventListener('mousedown', (event) => snap('mousedown', { target: describe(event.target as Node) }), true)
       document.addEventListener('focusin', (event) => snap('focusin', { target: describe(event.target as Node) }), true)
@@ -139,7 +130,7 @@ export async function recordSelection(page: Page): Promise<void> {
     if (ed && !rec.editors.has(ed)) {
       rec.editors.add(ed)
       ed.on('transaction', ({ transaction }) =>
-        snap('transaction', { docChanged: transaction.docChanged, selectionSet: transaction.selectionSet, meta: Object.keys(transaction.meta ?? {}), stack: stack() })
+        snap('transaction', { docChanged: transaction.docChanged, selectionSet: transaction.selectionSet, meta: Object.keys(transaction.meta ?? {}) })
       )
       const view = ed.view
       const focus = view.focus.bind(view)
@@ -151,7 +142,7 @@ export async function recordSelection(page: Page): Promise<void> {
       }
       view.updateState = (state) => {
         updateState(state)
-        snap('view.updateState', { stack: stack() })
+        snap('view.updateState')
       }
     }
     snap('recorder-installed')

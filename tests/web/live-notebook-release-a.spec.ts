@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { endOfFirstParagraph, selectLine } from './notebook-selection'
 import { markSelection, recordSelection, withSelectionLog } from './selection-diagnostics'
 
 // Phase 3 Release A, integrated verification (#145): one realistic, serial journey through
@@ -490,13 +491,13 @@ test('Release A: one realistic journey from first notebook to backup, archive an
 
     const taskDialog = page.getByRole('dialog', { name: 'Create a task from your notes' })
     await withSelectionLog(page, test.info(), 'release-a-step-8', async () => {
-      await editor(page).locator('p').first().click()
-      await page.keyboard.press('Control+End')
+      await endOfFirstParagraph(page)
       await page.keyboard.press('Enter')
       await page.keyboard.type('Request the 1884 baptism index')
-      await page.keyboard.press('Shift+Home')
-      // Wait until the editor really holds the selection before using the toolbar (CI race, #190).
-      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Request the 1884 baptism index')
+      // The new line sits right after the first paragraph, before the two references.
+      const line = editor(page).locator('p').nth(1)
+      await expect(line).toHaveText('Request the 1884 baptism index')
+      await selectLine(line)
       await markSelection(page, 'before toolbar click')
       await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
       await markSelection(page, 'after toolbar click')

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { endOfFirstParagraph, selectLine } from './notebook-selection'
 import { markSelection, recordSelection, withSelectionLog } from './selection-diagnostics'
 
 // Resilient autosave, conflicts, history and the case workflow bridge (#149) in the built
@@ -297,13 +298,13 @@ test('links records and creates a task from the selection, without ever duplicat
   // (Click on the first paragraph: a click on a reference opens its record.)
   const taskDialog = page.getByRole('dialog', { name: 'Create a task from your notes' })
   await withSelectionLog(page, test.info(), 'autosave-bridge', async () => {
-    await editor(page).locator('p').first().click()
-    await page.keyboard.press('Control+End')
+    await endOfFirstParagraph(page)
     await page.keyboard.press('Enter')
     await page.keyboard.type('Request the 1884 baptism index')
-    await page.keyboard.press('Shift+Home')
-    // Wait until the editor really holds the selection: clicking the toolbar first was a CI race (#190).
-    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe('Request the 1884 baptism index')
+    // The new line sits right after the first paragraph, before the two references.
+    const line = editor(page).locator('p').nth(1)
+    await expect(line).toHaveText('Request the 1884 baptism index')
+    await selectLine(line)
     await markSelection(page, 'before toolbar click')
     await toolbar(page).getByRole('button', { name: 'Create task from selection' }).click()
     await markSelection(page, 'after toolbar click')
