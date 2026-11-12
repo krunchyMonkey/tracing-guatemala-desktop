@@ -338,7 +338,7 @@ describe('device enrollment and sessions', () => {
     expect(paired.cookie.startsWith(`tg_lan_${live.port}=`)).toBe(true)
 
     const session = (await lanSend(live.port, 'GET', '/api/v1/session', { Cookie: paired.cookie })).json()
-    expect(session).toEqual({ authenticated: true, csrfToken: paired.csrf, demoUrl: null, remote: true, device: { name: 'Kitchen tablet' } })
+    expect(session).toEqual({ authenticated: true, csrfToken: paired.csrf, demoUrl: null, remote: true, device: { name: 'Kitchen tablet' }, research: 'all' })
 
     const created = await lanCall(live, paired, 'createClient', [clientInput])
     expect(created.status, created.text).toBe(200)

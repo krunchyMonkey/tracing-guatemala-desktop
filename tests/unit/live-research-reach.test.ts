@@ -199,10 +199,16 @@ describe('an Owner researches as the same account', () => {
     return { live, host, users, o: await signInAs(live, 'o'), p: await signInAs(live, 'p'), r: await signInAs(live, 'r') }
   }
 
-  it('stores the session account as owner (a body owner is ignored), and keeps user administration', async () => {
+  it('stores the session account as owner (a body naming another owner is refused), and keeps user administration', async () => {
     const w = await world()
-    const named = { ...clientIn('Alfa Client'), ownerUserId: w.users.p.id, ownership: { ownerUserId: w.users.p.id } }
-    const made = result<{ ok: boolean; client: { id: string } }>(await pcall(w.live, w.o, 'createClient', named))
+    // The request can't name an owner: the strict argument schema refuses the extra field, and nothing is written.
+    const clientRows = () => withData((d) => (d.db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n)
+    const before = clientRows()
+    const named = { ...clientIn('Alfa Client'), ownerUserId: w.users.p.id }
+    const refused = await pcall(w.live, w.o, 'createClient', named)
+    expect(refused.status).toBe(400)
+    expect(clientRows()).toBe(before)
+    const made = result<{ ok: boolean; client: { id: string } }>(await pcall(w.live, w.o, 'createClient', clientIn('Alfa Client')))
     expect(made.ok).toBe(true)
     const id = made.client.id
     expect(withData((d) => d.ownership.getClientOwner(id))).toMatchObject({ ownerUserId: w.users.o.id })
