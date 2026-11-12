@@ -65,7 +65,7 @@ function repositoryNotebook(): { api: NotebookApi; clock: ReturnType<typeof manu
     email: null,
     otherContact: null,
     preferredContactChannel: 'unspecified'
-  })
+  }, { kind: 'unowned' })
   if (!client.ok) throw new Error('fixture client invalid')
   const created = new CaseRepository(db, setup).create(client.client.id, { title: 'Parity case', goal: null, orderReference: null, dueDate: null })
   if (!created.ok) throw new Error('fixture case invalid')

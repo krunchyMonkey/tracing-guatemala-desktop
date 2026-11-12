@@ -85,7 +85,8 @@ void app.whenReady().then(() => {
     if (!data) throw new Error('Data is closed')
     return data
   }
-  const { clients, notes } = createDataServices(current)
+  // Electron is the single-operator app: its scope is resolved from the profile on every call (#210).
+  const { clients, notes } = createDataServices(current).forLocalOperator()
 
   hardenSession(session.defaultSession, target)
   if (target.mode === 'production') {

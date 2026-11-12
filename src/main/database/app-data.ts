@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync } from 'node:fs'
+import { copyFileSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { CaseBriefRepository } from './case-brief-repository'
@@ -9,10 +9,13 @@ import { CaseTimeRepository } from './case-time-repository'
 import { StudioSummaryRepository } from './studio-summary-repository'
 import { CaseRepository } from './case-repository'
 import { ClientRepository } from './client-repository'
+import { BackupInvalidError, openBackupReadOnly, tableExists } from './backup-file'
 import { APPLICATION_ID, configureConnection, dataDirectory, openAppDatabase, type OpenedDatabase, type OpenOptions } from './connection'
 import { getSchemaVersion, migrate, migrations, type Migration } from './migrations'
 import { NoteRepository } from './note-repository'
 import { NotebookRepository } from './notebook-repository'
+import { SCOPE_ALL } from './research-access'
+import { OwnershipRepository } from './ownership-repository'
 import { UserRepository } from './user-repository'
 
 // Owns the live database connection and its repositories, and makes and
@@ -27,15 +30,9 @@ export interface BackupSummary {
   schemaVersion: number
 }
 
-export type BackupProblem = 'not-a-backup' | 'damaged' | 'too-new'
-
-/** The file is not a usable backup. Carries no path or content. */
-export class BackupInvalidError extends Error {
-  constructor(readonly problem: BackupProblem) {
-    super(`Backup rejected: ${problem}`)
-    this.name = 'BackupInvalidError'
-  }
-}
+// Defined in backup-file.ts (shared with the legacy ownership claim); re-exported for existing callers.
+export { BackupInvalidError }
+export type { BackupProblem } from './backup-file'
 
 /** Restoring failed; the previous data was put back. */
 export class RestoreFailedError extends Error {
@@ -45,9 +42,6 @@ export class RestoreFailedError extends Error {
   }
 }
 
-const SQLITE_HEADER = 'SQLite format 3\u0000'
-const MAX_BACKUP_BYTES = 2 * 1024 ** 3
-
 function timestampForFileName(date: Date): string {
   return date.toISOString().replace(/[:.]/g, '-')
 }
@@ -56,27 +50,22 @@ function removeDatabaseFiles(file: string): void {
   for (const suffix of ['', '-wal', '-shm', '-journal']) rmSync(`${file}${suffix}`, { force: true })
 }
 
-function readsAsSqlite(file: string): boolean {
-  const size = statSync(file).size
-  if (size < 512 || size > MAX_BACKUP_BYTES) return false
-  const header = Buffer.alloc(SQLITE_HEADER.length)
-  const fd = openSync(file, 'r')
-  try {
-    readSync(fd, header, 0, header.length, 0)
-  } finally {
-    closeSync(fd)
-  }
-  return header.toString('latin1') === SQLITE_HEADER
-}
+type CountedTable =
+  | 'clients'
+  | 'client_notes'
+  | 'research_cases'
+  | 'notebook_pages'
+  | 'app_users'
+  | 'client_ownership'
+  | 'client_grants'
+  | 'case_grants'
+  | 'ownership_events'
 
-type CountedTable = 'clients' | 'client_notes' | 'research_cases' | 'notebook_pages' | 'app_users'
-
-function hasTable(db: DatabaseSync, table: CountedTable): boolean {
-  return db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !== undefined
-}
+/** Tables added by migration 10; absent (counted as 0) in backups from older versions. */
+const OWNERSHIP_TABLES = ['client_ownership', 'client_grants', 'case_grants', 'ownership_events'] as const
 
 function count(db: DatabaseSync, table: CountedTable): number {
-  if (!hasTable(db, table)) return 0
+  if (!tableExists(db, table)) return 0
   return (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 }
 
@@ -86,38 +75,27 @@ export function inspectBackup(file: string): BackupSummary {
   return { clients, notes, schemaVersion }
 }
 
-/** inspectBackup plus the case and notebook page counts, which restore verifies but the public summary doesn't carry. */
-function inspectBackupContents(file: string): BackupSummary & { cases: number; notebookPages: number; users: number } {
-  if (!existsSync(file) || !readsAsSqlite(file)) throw new BackupInvalidError('not-a-backup')
-
-  let db: DatabaseSync
+/** inspectBackup plus the counts that restore verifies but the public summary doesn't carry. */
+function inspectBackupContents(file: string): BackupSummary & {
+  cases: number
+  notebookPages: number
+  users: number
+  ownership: Record<(typeof OWNERSHIP_TABLES)[number], number>
+} {
+  const { db, schemaVersion } = openBackupReadOnly(file)
   try {
-    db = new DatabaseSync(file, { readOnly: true })
-  } catch {
-    throw new BackupInvalidError('damaged')
-  }
-  try {
-    let healthy: boolean
-    try {
-      const rows = db.prepare('PRAGMA integrity_check').all() as { integrity_check: string }[]
-      healthy = rows.length === 1 && rows[0]?.integrity_check === 'ok'
-    } catch {
-      healthy = false
-    }
-    if (!healthy) throw new BackupInvalidError('damaged')
-
-    const appId = (db.prepare('PRAGMA application_id').get() as { application_id: number }).application_id
-    if (appId !== APPLICATION_ID) throw new BackupInvalidError('not-a-backup')
-    const schemaVersion = getSchemaVersion(db)
-    if (schemaVersion > migrations.length) throw new BackupInvalidError('too-new')
-    if (schemaVersion < 1 || !hasTable(db, 'clients')) throw new BackupInvalidError('not-a-backup')
-
     return {
       clients: count(db, 'clients'),
       notes: count(db, 'client_notes'),
       cases: count(db, 'research_cases'),
       notebookPages: count(db, 'notebook_pages'),
       users: count(db, 'app_users'),
+      ownership: {
+        client_ownership: count(db, 'client_ownership'),
+        client_grants: count(db, 'client_grants'),
+        case_grants: count(db, 'case_grants'),
+        ownership_events: count(db, 'ownership_events')
+      },
       schemaVersion
     }
   } finally {
@@ -150,6 +128,7 @@ export class AppData {
   notebook: NotebookRepository
   studio: StudioSummaryRepository
   users: UserRepository
+  ownership: OwnershipRepository
 
   constructor(
     private readonly userDataDir: string,
@@ -169,6 +148,7 @@ export class AppData {
     this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
     this.users = new UserRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
+    this.ownership = new OwnershipRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
   }
 
   private openOptions(tolerate?: OpenOptions['tolerate']): OpenOptions {
@@ -255,7 +235,7 @@ export class AppData {
       // The replaced file is still here until the restore is verified; startup would refuse
       // it (restore-interrupted), so this reopen names it as known.
       this.reopen({ replacedFile: basename(replaced) })
-      const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }).length
+      const restoredClients = this.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL).length
       if (restoredClients !== expected.clients) throw new Error('restored client count differs from the backup')
       if (count(this.opened.db, 'research_cases') !== expected.cases) {
         throw new Error('restored case count differs from the backup')
@@ -265,6 +245,11 @@ export class AppData {
       }
       if (count(this.opened.db, 'app_users') !== expected.users) {
         throw new Error('restored user count differs from the backup')
+      }
+      for (const table of OWNERSHIP_TABLES) {
+        if (count(this.opened.db, table) !== expected.ownership[table]) {
+          throw new Error(`restored ${table} count differs from the backup`)
+        }
       }
       options.verify?.(this)
     } catch (error) {
@@ -302,5 +287,6 @@ export class AppData {
     this.notebook = new NotebookRepository(this.opened.db)
     this.studio = new StudioSummaryRepository(this.opened.db)
     this.users = new UserRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
+    this.ownership = new OwnershipRepository(this.opened.db, { now: () => this.now(), newId: () => randomUUID() })
   }
 }

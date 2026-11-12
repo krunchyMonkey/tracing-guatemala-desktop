@@ -83,7 +83,7 @@ describe('migration 9', () => {
     db.exec(`INSERT INTO clients (id, display_name, source, status, preferred_contact_channel, created_at, updated_at)
              VALUES ('${'a'.repeat(36)}', 'Ana Ejemplo', 'direct', 'active', 'email', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`)
     expect(getSchemaVersion(db)).toBe(8)
-    expect(migrate(db)).toEqual({ from: 8, to: 9 })
+    expect(migrate(db)).toEqual({ from: 8, to: migrations.length })
     expect((db.prepare('SELECT count(*) AS n FROM app_users').get() as { n: number }).n).toBe(0)
     expect((db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n).toBe(1)
     db.close()

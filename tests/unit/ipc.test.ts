@@ -66,7 +66,7 @@ describe('registerIpcHandlers', () => {
     )
 
     await expect(handlers.get(IpcChannel.createClient)!(trustedEvent, input)).resolves.toEqual({ ok: true, client })
-    expect(clients.create).toHaveBeenCalledWith(input)
+    expect(clients.create).toHaveBeenCalledWith(input, { kind: 'unowned' })
     await handlers.get(IpcChannel.updateClient)!(trustedEvent, client.id, input)
     expect(clients.update).toHaveBeenCalledWith(client.id, input)
     await expect(handlers.get(IpcChannel.listClients)!(trustedEvent, defaultQuery)).resolves.toEqual([client])

@@ -1,3 +1,4 @@
+import { SCOPE_ALL } from '../../src/main/database/research-access'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -98,7 +99,7 @@ function memoryDb(): DatabaseSync {
 const count = (db: DatabaseSync, table: string) => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 
 function seedCase(db: DatabaseSync, title = 'Case A', displayName = 'Ana Ejemplo'): { clientId: string; caseId: string } {
-  const client = new ClientRepository(db).create({ ...clientInput, displayName })
+  const client = new ClientRepository(db).create({ ...clientInput, displayName }, { kind: 'unowned' })
   if (!client.ok) throw new Error('fixture client invalid')
   const made = new CaseRepository(db).create(client.client.id, { ...caseInput, title })
   if (!made.ok) throw new Error('fixture case invalid')
@@ -761,9 +762,9 @@ describe('backup and restore with hours', () => {
   })
 
   function seed(title: string): string {
-    let clientId = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' })[0]?.id
+    let clientId = data.clients.list({ text: '', status: 'all', sources: [], sort: 'name' }, SCOPE_ALL)[0]?.id
     if (!clientId) {
-      const created = data.clients.create(clientInput)
+      const created = data.clients.create(clientInput, { kind: 'unowned' })
       if (!created.ok) throw new Error('fixture client invalid')
       clientId = created.client.id
     }
