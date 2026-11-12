@@ -27,7 +27,7 @@ import type { NoteContent } from '../../src/shared/note-content'
 import type { AppUser } from '../../src/shared/users'
 import { buildLegacyProfile, LEGACY, migrateLegacyProfileForTest } from './helpers/legacy-fixture'
 import { MigrationRequiredError } from '../../src/main/database/schema-preflight'
-import { activeUser, caseInput, clientInput, newCase, newClient } from './helpers/ownership-helpers'
+import { activeUser, caseInput, clientInput, newCase, newClient, pendingUser } from './helpers/ownership-helpers'
 
 // Research authorization at the repository and service level (#210): the access function, scoped
 // lists, nested-id isolation and the timer rules. Real HTTP is in live-authorization.test.ts.
@@ -524,6 +524,34 @@ describe('reads and writes by id', () => {
       const denied = probes(as(w.uma), id)
       for (const [index, answer] of denied.entries()) expect(answer, `${label}, probe ${index}`).toEqual(reference[index])
       expect(JSON.stringify(denied), label).not.toContain(id)
+    }
+  })
+})
+
+describe('a pending or never-approved person (#255)', () => {
+  it('reaches no client, case, list, search or summary row, and nothing by id', () => {
+    const w = world()
+    const pia = pendingUser(data, 'Pia Fictional')
+    expect(pia.status).toBe('pending')
+    // A sign-in request from a stranger is not an app_users row at all: it grants nothing either.
+    const request = data.users.recordSignInRequest({ provider: 'google', subject: 'sub-stranger', email: 'stranger@example.test', emailVerified: true, emailAuthoritative: false, name: 'Stranger Fictional' })
+    expect(request.ok).toBe(true)
+    const nobody: ResearchScope = { kind: 'user', userId: '00000000-0000-4000-8000-000000000199' }
+
+    for (const [label, scope] of [['pending', scopeOf(pia)], ['never approved', nobody]] as const) {
+      for (const clientId of [w.c1, w.c2, w.legacyClient]) {
+        expect(clientAccess(data.db, scope, clientId), `${label} client`).toBe('none')
+      }
+      for (const caseId of [w.k1, w.k2, w.k3, w.legacyCase]) {
+        expect(caseAccess(data.db, scope, caseId), `${label} case`).toBe('none')
+      }
+      const own = services().forScope(scope)
+      expect(own.clients.list(everyone), label).toEqual([])
+      expect(own.clients.list({ ...everyone, text: 'Client' }), label).toEqual([])
+      expect(own.clients.get(w.c1), label).toBeNull()
+      expect(own.cases.list(allCases), label).toEqual([])
+      expect(own.cases.get(w.k1), label).toBeNull()
+      expect(own.studio.summary().counts.activeClients, label).toBe(0)
     }
   })
 })

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   contracts,
@@ -8,8 +11,11 @@ import {
   type ClientService,
   type NoteService
 } from '../../src/main/ipc'
+import { createDataServices } from '../../src/main/data-services'
+import { AppData } from '../../src/main/database/app-data'
 import { defaultQuery, type Client, type ClientInput, type ClientNote, type NoteInput } from '../../src/shared/client-model'
 import { IpcChannel } from '../../src/shared/ipc'
+import { activeUser } from './helpers/ownership-helpers'
 
 const trustedOrigin = 'app://renderer'
 const isTrustedSender = (url: string) => url.startsWith(`${trustedOrigin}/`)
@@ -295,5 +301,48 @@ describe('backup contracts', () => {
     }))
     await rejection(handler(trustedEvent))
     vi.restoreAllMocks()
+  })
+})
+
+describe('Electron IPC createClient once the profile has users (#255)', () => {
+  it('is refused through registerIpcHandlers and writes no client row', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tg-ipc-owner-required-'))
+    const data = new AppData(join(dir, 'profile'))
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const local = createDataServices(() => data).forLocalOperator()
+      const handlers = new Map<string, (event: never, ...args: unknown[]) => Promise<unknown>>()
+      registerIpcHandlers(
+        { handle: (channel, listener) => void handlers.set(channel, listener as never) },
+        { isTrustedSender, getAppInfo: () => appInfo, clients: local.clients, notes: local.notes, backup: fakeBackup() }
+      )
+      const count = () => (data.db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n
+      const owners = () => (data.db.prepare('SELECT count(*) AS n FROM client_ownership').get() as { n: number }).n
+
+      // Before any user exists the single operator may still create (unchanged behavior).
+      await expect(handlers.get(IpcChannel.createClient)!(trustedEvent, { ...input, displayName: 'Solo Operator Client' })).resolves.toMatchObject({ ok: true })
+      expect(count()).toBe(1)
+
+      activeUser(data, 'sub-owner-a', 'Owner A', 'owner')
+      await expect(handlers.get(IpcChannel.createClient)!(trustedEvent, { ...input, displayName: 'Refused Client' })).rejects.toThrow(IpcRejectedError)
+      // The refusal is the host/device one: the service threw owner-required (the handler logs only the error name).
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining('ClientOwnershipError'))
+      expect(count()).toBe(1)
+      expect(owners()).toBe(0)
+      const direct = (() => {
+        try {
+          local.clients.create(input, { kind: 'unowned' })
+        } catch (error) {
+          return error as { reason?: string }
+        }
+        return null
+      })()
+      expect(direct?.reason).toBe('owner-required')
+      expect(count()).toBe(1)
+    } finally {
+      logged.mockRestore()
+      data.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

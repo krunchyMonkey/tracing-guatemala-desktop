@@ -65,6 +65,24 @@ Be honest about what this does not protect:
 - The loopback host session, in a profile with users, can administer users and make backups but sees no research content through the API.
 - The app-level `owner` role administers accounts; it does not read researchers' content and cannot download other people's data (backups remain host-only).
 
+## Host-only backup and restore: the exception
+
+Backup and restore are the one place where the per-user rules do not apply, on purpose (#255):
+
+- **A backup contains every user's research** (clients, cases, notes, journals, notebooks, hours) and the whole user, ownership and grant tables. It is as sensitive as the live database.
+- **A restore can bring back older ownership and grant rows.** A grant revoked after the backup was made is back after the restore, and a user disabled or approved since then is back to the state in the backup. Access is always re-evaluated from the restored rows, never cached, and every session is cleared by the restore. After any restore, re-check access and re-apply the revokes made since that backup.
+- **Both calls are host-only.** `createBackup` and `restoreBackup` (and the upload and download routes) are in `NEVER_REMOTE_CALLS`: a remote Owner and a remote Researcher both get 403 `host-only`, and no file is written and nothing is restored. `tests/unit/live-authorization.test.ts` covers this end to end, and the restore round trip with a revoked grant.
+
+### The single-process assumption
+
+The `canRead*` and `canWrite*` point checks run **outside** the repository's write transaction. That is safe only because:
+
+- `src/main/data-services.ts` and `src/main/database/research-access.ts` are fully synchronous (no `async`, `await` or Promise, and `node:sqlite` is synchronous), so a check and the write that follows run in one uninterrupted turn and no revoke or disable can land between them. A test fails if either file becomes asynchronous.
+- Exactly **one web process** holds the data-folder lock for the Live profile, and every maintenance command takes the same lock, so there is no second writer.
+- **Electron must never open the Live profile.** It does not take the data-folder lock; it uses its own profile folder.
+
+Any multi-writer or multi-node work (Phase 2.8, #183 and #186) must first move the checks into the write transaction (or enforce them in SQL in the write itself). Until then this is a time-of-check to time-of-use gap by design.
+
 ## Deny matrix
 
 `RESEARCH_CLASS` in `src/server/auth/research-policy.ts` classifies **every** call name (`Record<CallName, ResearchClass>`, so an unclassified call is a compile error). `tests/unit/live-authorization.test.ts` has a matrix entry for every name in `CALL_NAMES` and fails if one is missing. For every research call, a caller who may not use record A's ids gets a response byte-identical (status and body) to the same call with fresh random ids, for valid and invalid input, and a manifest of every table is unchanged afterwards. This runs for another researcher, for an app-owner-role user, for the host (users profile) and for viewers' writes.
