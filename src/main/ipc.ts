@@ -27,6 +27,7 @@ import type {
   ResearchCase
 } from '../shared/case-model'
 import type { Client, ClientInput, ClientNote, DirectoryQuery, DuplicateCandidate, NoteInput } from '../shared/client-model'
+import type { ClientCreateOwnership } from './database/client-repository'
 import type {
   AppInfo,
   BackupChoice,
@@ -78,7 +79,8 @@ export function createValidatedHandler<Args extends z.ZodTuple, Result extends z
 export interface ClientService {
   list(query: DirectoryQuery): Client[]
   get(id: string): Client | null
-  create(input: ClientInput): ClientMutationResult
+  /** `ownership` is required: callers state who owns the new client (#209); there is no default. */
+  create(input: ClientInput, ownership: ClientCreateOwnership): ClientMutationResult
   update(id: string, input: ClientInput): ClientMutationResult
   archive(id: string): ClientMutationResult
   restore(id: string): ClientMutationResult
@@ -192,7 +194,8 @@ export function registerIpcHandlers(ipcMain: Pick<IpcMain, 'handle'>, deps: IpcD
   register(c.getAppInfo, () => deps.getAppInfo())
   register(c.listClients, ([query]) => clients.list(query))
   register(c.getClient, ([id]) => clients.get(id))
-  register(c.createClient, ([input]) => clients.create(input))
+  // Electron is the single-operator app: no signed-in user, so its clients are explicitly unowned.
+  register(c.createClient, ([input]) => clients.create(input, { kind: 'unowned' }))
   register(c.updateClient, ([id, input]) => clients.update(id, input))
   register(c.archiveClient, ([id]) => clients.archive(id))
   register(c.restoreClient, ([id]) => clients.restore(id))

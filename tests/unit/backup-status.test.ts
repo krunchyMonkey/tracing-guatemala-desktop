@@ -57,7 +57,7 @@ describe('backup status file', () => {
   })
 
   it('records a verified backup: when, which file, how many clients and notes', () => {
-    data.clients.create(input)
+    data.clients.create(input, { kind: 'unowned' })
     const at = new Date('2026-10-29T15:04:05.000Z')
     const service = createWebBackupService(dataDir, () => data, () => at)
     const made = service.create()

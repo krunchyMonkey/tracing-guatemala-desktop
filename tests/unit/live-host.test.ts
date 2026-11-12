@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localIPv4Addresses, isPrivateIPv4 } from '../../scripts/demo-server.mjs'
 import { backupFileName, isBackupFileName } from '../../src/server/backup'
@@ -182,6 +183,39 @@ describe('user directory (#179)', () => {
     const list = await call<{ id: string }[]>(live, host, 'listUsers')
     expect(list.map((u) => u.id)).toEqual([ana.user.id])
     expect(JSON.stringify(list)).not.toContain('subject')
+  })
+
+  it('creates an unclaimed client from the host session while the profile has no users, and refuses once it has one', async () => {
+    const live = await start()
+    const host = await signIn(live)
+    const first = await call<{ ok: true; client: { id: string } }>(live, host, 'createClient', input)
+    expect(first.ok).toBe(true)
+
+    // Even a pending, not-yet-signed-in user makes the profile a multi-user one: no silent owner.
+    await call(live, host, 'createUser', { displayName: 'Ana Example', role: 'owner' })
+    const refused = await send(
+      live,
+      'POST',
+      '/api/v1/call/createClient',
+      writeHeaders(live, host),
+      JSON.stringify({ args: [{ ...input, displayName: 'Bruno Ficticio', fiverrUsername: 'fictional_buyer_02' }] })
+    )
+    expect(refused.status).toBe(409)
+    expect(refused.json()).toEqual({ error: 'owner-required' })
+    expect(refused.text).not.toContain('Bruno')
+    // #210: once the profile has users, the host session has no implicit read of research content, so the
+    // unclaimed client is sealed from it (it is still in the database, checked below) until it is reconciled.
+    expect(await call<{ id: string }[]>(live, host, 'listClients', everyone)).toEqual([])
+    expect(await call(live, host, 'getClient', first.client.id)).toBeNull()
+
+    await server!.close()
+    server = null
+    const db = new DatabaseSync(join(dataDir, 'data', 'tracing-guatemala.sqlite'), { readOnly: true })
+    const owned = (db.prepare('SELECT count(*) AS n FROM client_ownership').get() as { n: number }).n
+    const events = (db.prepare('SELECT count(*) AS n FROM ownership_events').get() as { n: number }).n
+    const clients = (db.prepare('SELECT count(*) AS n FROM clients').get() as { n: number }).n
+    db.close()
+    expect([owned, events, clients]).toEqual([0, 0, 1])
   })
 
   it('rejects malformed user calls', async () => {

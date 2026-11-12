@@ -91,7 +91,7 @@ describe('NotebookRepository', () => {
     return created.case.id
   }
   const newClient = (displayName: string): string => {
-    const created = clients.create({ ...clientInput, displayName })
+    const created = clients.create({ ...clientInput, displayName }, { kind: 'unowned' })
     if (!created.ok) throw new Error('fixture client invalid')
     return created.client.id
   }
@@ -573,7 +573,7 @@ describe('on disk', () => {
   })
 
   function seed(data: AppData): string {
-    const client = data.clients.create(clientInput)
+    const client = data.clients.create(clientInput, { kind: 'unowned' })
     if (!client.ok) throw new Error('fixture client invalid')
     const created = data.cases.create(client.client.id, caseInput)
     if (!created.ok) throw new Error('fixture case invalid')
@@ -611,9 +611,9 @@ describe('on disk', () => {
       const first = openAppDatabase(userData)
       first.db.close()
       const db = new DatabaseSync(first.file)
-      db.exec('DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; PRAGMA user_version = 7;')
+      db.exec('DROP TABLE ownership_events; DROP TABLE case_grants; DROP TABLE client_grants; DROP TABLE client_ownership; DROP TABLE user_events; DROP TABLE sign_in_requests; DROP TABLE user_identities; DROP TABLE app_users; DROP TABLE notebook_page_revisions; DROP TABLE notebook_pages; DROP TABLE notebook_sections; DROP TABLE case_notebooks; PRAGMA user_version = 7;')
       const clients = new ClientRepository(db)
-      const client = clients.create(clientInput)
+      const client = clients.create(clientInput, { kind: 'unowned' })
       if (!client.ok) throw new Error('fixture client invalid')
       const created = new CaseRepository(db).create(client.client.id, caseInput)
       if (!created.ok) throw new Error('fixture case invalid')
@@ -698,7 +698,7 @@ describe('on disk', () => {
       configureConnection(old)
       migrate(old, {}, migrations.slice(0, 7))
       old.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-      const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' })
+      const client = new ClientRepository(old).create({ ...clientInput, displayName: 'Older Backup Client' }, { kind: 'unowned' })
       if (!client.ok) throw new Error('fixture client invalid')
       const oldCase = new CaseRepository(old).create(client.client.id, caseInput)
       if (!oldCase.ok) throw new Error('fixture case invalid')
