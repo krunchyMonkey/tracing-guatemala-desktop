@@ -35,7 +35,10 @@ export interface MaintenanceArgs {
 }
 
 export interface MaintenanceIo {
+  /** stdin is a terminal: prompting is possible. */
   isTTY: boolean
+  /** stdout is a terminal (#245): names are never printed into a pipe or a redirected file. */
+  outputIsTTY?: boolean
   log(message: string): void
   error(message: string): void
   prompt(question: string): Promise<string>
@@ -77,8 +80,9 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
         ...(args.operator !== undefined ? { operator: args.operator } : {})
       }
       const plan = planClaim(options)
-      const showNames = args.showNames === true && io.isTTY
-      if (args.showNames === true && !io.isTTY) io.log('--show-names is ignored: this is not an interactive terminal. Ids and counts only.')
+      const interactive = io.isTTY && io.outputIsTTY === true
+      const showNames = args.showNames === true && interactive
+      if (args.showNames === true && !interactive) io.log('--show-names is ignored: input and output must both be an interactive terminal. Ids and counts only.')
       if (args.preview === true) {
         for (const line of formatPlan(plan, showNames)) io.log(line)
         io.log('Preview only. Nothing was changed.')

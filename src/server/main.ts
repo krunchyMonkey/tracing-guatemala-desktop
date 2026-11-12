@@ -98,6 +98,7 @@ if (values['migrate-database'] || values['revert-migration'] || values['claim-le
     },
     {
       isTTY: process.stdin.isTTY === true,
+      outputIsTTY: process.stdout.isTTY === true,
       log: (message) => console.log(message),
       error: (message) => console.error(message),
       prompt: (question) => prompts.question(question)

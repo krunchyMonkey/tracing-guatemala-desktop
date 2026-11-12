@@ -90,12 +90,13 @@ interface Run {
 
 async function run(
   extra: Partial<MaintenanceArgs>,
-  options: { tty?: boolean; answer?: string; fault?: (point: ClaimFaultPoint) => void } = {}
+  options: { tty?: boolean; outputTty?: boolean; answer?: string; fault?: (point: ClaimFaultPoint) => void } = {}
 ): Promise<Run> {
   const out: string[] = []
   const err: string[] = []
   const io: MaintenanceIo = {
     isTTY: options.tty ?? false,
+    outputIsTTY: options.outputTty ?? options.tty ?? false,
     log: (m) => out.push(m),
     error: (m) => err.push(m),
     prompt: async (q) => {
@@ -147,6 +148,10 @@ describe('preview', () => {
     expect(piped.code).toBe(0)
     expect(piped.out).not.toContain('Fictional')
     expect(piped.out).toContain('--show-names is ignored')
+    // A terminal for input but output redirected to a file (`> log.txt`): still no names.
+    const redirected = await run({ targetUser: w.a, clients: [ana], preview: true, showNames: true }, { tty: true, outputTty: false })
+    expect(redirected.out).not.toContain('Fictional')
+    expect(redirected.out).toContain('--show-names is ignored')
     const plain = await run({ targetUser: w.a, clients: [ana], preview: true }, { tty: true })
     expect(plain.out).not.toContain('Fictional')
     expect(state()).toEqual(before)
