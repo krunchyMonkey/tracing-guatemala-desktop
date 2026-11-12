@@ -1,24 +1,20 @@
 # Claude handoff — Web-first (updated 2026-11-05 for Phase 2.7 identity; 2026-10-31 for Phase 2.9 + Claude-ready PR delivery policy)
 
-> **PHASE FIX STATUS - 2026-11-07 (latest, verified on GitHub):** Nothing merged; nothing deployed. Live untouched: node 73676 on 127.0.0.1:4190-4192, caddy 62388 on :443, checkout `e12c732`.
-> - **#249 (#248) is at `e5b2f5b`, still draft.** Both final re-review items are done:
->   - A durable, fail-closed profile marker. Refusal code `profile-marker-unwritable`; research is never served without the marker.
->   - The preserved original is content-verified after the swap. A mismatch gives `verify-failed`, keeps the marker and repairs nothing.
->   - [CI 42421455129](https://github.com/krunchyMonkey/tracing-guatemala-desktop/actions/runs/42421455129) passed on the first attempt: Ubuntu Vitest 1879 passed / 6 skipped; Windows migration safety 87/87; Playwright 147 passed / 4 skipped. Electron E2E was not run.
->   - Awaiting the owner's final review and merge authorization.
-> - **#244 is at `5e7cc5a`** (contains #238 `10f22e9`):
->   - Required repository scopes (`76bc4ae`).
->   - Owner-as-researcher tests (test-only): one Owner both administers users and does its own research; two Owners are isolated; a legacy claim leaves an Owner's account unchanged.
->   - [CI 42421459443](https://github.com/krunchyMonkey/tracing-guatemala-desktop/actions/runs/42421459443) green.
-> - **Integration ([PR #244 comment](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/244#issuecomment-6714002313)):**
->   - Merge #249 first.
->   - Then rebase #244 onto main. Expect conflicts in `app-data.ts` and six `tests/unit/case*/database` tests. **Port #238's `ownership-migration.test.ts`** from the in-place `openAppDatabase` upgrade to `db:migrate`/revert/marker.
->   - Merge #244 as the single unit (it carries #238). #238 never merges alone.
-> - **#246:** readiness matrix and recovery gaps are in [#246 comment](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/246#issuecomment-6714002593).
->   - An account holds one identity (`already-bound`), and identities are immutable, so a changed or misbound Google identity has **no recovery path yet**. That is the real #246 work.
->   - The first #246 PR: host "attach sign-in to existing account" confirmation + Owner research entry and error text.
-> - **#245:** the offline `db:claim-legacy` slice is proposed. It may target an active Owner without a role change, and must refuse a target with no bound identity. Not claude-ready.
-> - **Next safe task once #249 is merged:** the #244 rebase with the migration-test port. Docs follow-up: `lan-live.md` / `web-first-runtime.md` should describe the test-hook allowlist.
+> **PHASE FIX STATUS - 2026-11-12 (latest, verified on GitHub):** Nothing merged; nothing deployed. Live untouched (read-only listener check only): node 73676 on 127.0.0.1:4190-4192, caddy 62388 on :443, checkout `e12c732`.
+> - **#249 (#248) at `1a4535a`: ready for an authorized source merge.** It is mergeable and clean, with no open threads. [Final assessment](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/249#issuecomment-6834532592). [CI 42421894333](https://github.com/krunchyMonkey/tracing-guatemala-desktop/actions/runs/42421894333) is green (its one rerun was the #250 flake). Electron E2E was not run. It waits only on the owner's merge authorization; the #211 cutover gates still apply.
+> - **#250 → PR #252 at `1624f4b`: ready for review, test-only.** The cause was unreliable keyboard steps (`Control+End` around reference blocks; the `Shift+Home` DOM/editor selection lag). The fix uses pointer-driven caret and selection plus failure-only trace and logs. Evidence: **220/220** zero-retry repetitions, and CI 43305941605 green on the first attempt. No application defect is confirmed.
+> - **#253 (temporary integration, `integration/249-privacy-ownership`, worktree `wt/integration-249-privacy`).** Code is at `312acbb`: #249 + #244 `5e7cc5a` (which carries #238), with the migration tests ported to `db:migrate`. CI 43295231225 is green. [Security review](https://github.com/krunchyMonkey/tracing-guatemala-desktop/pull/253#issuecomment-6835914644): no defects; a v9 profile is never auto-upgraded.
+> - **Landing order:**
+>   1. Merge #249 with a merge commit.
+>   2. Retarget #253 to `main`, retitle it, run full CI on the final HEAD, and review.
+>   3. Squash-merge #253 as one unit. This needs its own owner authorization.
+>   4. Close #238 and #244 as superseded.
+>
+>   **#238 is never merged alone.** If #249 is squash-merged, merge `main` into #253 first.
+> - **#245 / #246: not claude-ready** (dependency-gated). The PR boundaries and test matrices are in [#245](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/245#issuecomment-6835899844) and [#246](https://github.com/krunchyMonkey/tracing-guatemala-desktop/issues/246#issuecomment-6835900604).
+>   - **Owner decisions needed:** whether #245 bulk claims are all-or-nothing and take explicit client ids only; and whether #246-c recovery of a misbound identity may relax the immutable-identities rule.
+>   - An unbound account can already be attached through the host-approved `approveSignInRequest`.
+> - **Next safe task once #249 is merged:** retarget #253 and run CI. After the unit lands, start #245 `db:claim-legacy` and #246-a, the owner-required/Owner research-entry UX.
 >
 > **OWNER ACCOUNT IS ALSO PRIMARY RESEARCHER — PRODUCT CLARIFICATION 2026-11-07:** The primary researcher likely has an existing single app-level `owner` role; actual Live account metadata has NOT been inspected or verified. **Do not downgrade her, create a second `researcher` account, force a role switch or grant all Owner accounts blanket research access.** In `src/shared/users.ts`, `owner|researcher` are app-admin roles; in the Phase FIX #209/#210 model research ownership/grants are separate and tied to the same validated stable `app_users.id`. An active authenticated `owner` must be able to administer users AND research clients explicitly owned/shared to that account, while any other Owner sees none without grants. #246 owns verified existing-account/Google-binding continuity and normal signed-in Owner UX on any device; #245's consented, backup-verified offline legacy-claim command may target an explicitly confirmed **active Owner** account without changing role; #247 timers and #212 sharing must support Owner-as-researcher; #211 requires private preflight to verify actual account ID/status/identity linkage, no email/role inference, exact legacy-client ownership consent, complete research visibility/new writes/admin capability before resuming Live. #183/#240 must preserve the exact app user ID/role/identity/ACLs when eventually migrating to PostgreSQL. If identity is missing/disabled/ambiguous, HALT and use separately authorized #246 recovery—not automatic attribution. All tests use fictional accounts; **no operating Live access, DB inspection, user changes, data claims or deployment** without fresh explicit owner instruction.
 >
