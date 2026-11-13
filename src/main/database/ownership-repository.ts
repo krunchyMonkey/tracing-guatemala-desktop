@@ -177,6 +177,56 @@ function readScope(db: DatabaseSync, clientId: string): TreeScope {
   return { counts, ids, scopeToken }
 }
 
+function serializeValue(value: unknown): string {
+  if (value === null || value === undefined) return 'N;'
+  if (typeof value === 'bigint') return `I${value.toString()};`
+  if (typeof value === 'number') return `R${Object.is(value, -0) ? '-0' : String(value)};`
+  if (typeof value === 'string') return `T${Buffer.byteLength(value)}:${value};`
+  if (value instanceof Uint8Array) return `B${value.byteLength}:${Buffer.from(value).toString('hex')};`
+  return 'U;'
+}
+
+/**
+ * SHA-256 over the full content of the client's row and every row of its record tree (all columns,
+ * type-tagged and length-prefixed, rows ordered by id). A table missing from an older schema
+ * contributes an explicit marker. Only the hash leaves this function, never content.
+ */
+export function scopeContentDigest(db: DatabaseSync, clientId: string): string {
+  const hash = createHash('sha256')
+  const feed = (text: string): void => {
+    hash.update(serializeValue(text))
+  }
+  const columnsOf = (table: string): string[] => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+  const select = (columns: string[]): string => columns.map((c) => `"${c.replaceAll('"', '""')}"`).join(', ')
+  const feedRows = (sql: string, columns: string[]): void => {
+    const statement = db.prepare(sql)
+    statement.setReadBigInts(true)
+    for (const row of statement.iterate(clientId) as Iterable<Record<string, unknown>>) {
+      for (const column of columns) hash.update(serializeValue(row[column]))
+      hash.update('\n')
+    }
+  }
+
+  feed('clients')
+  const clientColumns = columnsOf('clients')
+  for (const column of clientColumns) feed(column)
+  hash.update(`COLS${clientColumns.length};ROWS;`)
+  feedRows(`SELECT ${select(clientColumns)} FROM clients WHERE id = ?`, clientColumns)
+  for (const t of TREE) {
+    feed(t.table)
+    if (!tableExists(db, t.table)) {
+      hash.update('MISSING;')
+      continue
+    }
+    const columns = columnsOf(t.table)
+    for (const column of columns) feed(column)
+    hash.update(`COLS${columns.length};ROWS;`)
+    feedRows(`SELECT ${select(columns)} FROM ${t.table} WHERE ${t.scope} ORDER BY ${t.id}`, columns)
+    hash.update('END;')
+  }
+  return hash.digest('hex')
+}
+
 export interface UnclaimedClient {
   id: string
   displayName: string
@@ -225,6 +275,8 @@ export interface ClaimInput {
   confirmation: string
   /** Who performs the claim, recorded in the audit event ('host' for the host-local operator). */
   actor: string
+  /** Groups the claims of one operator batch (#245). A UUID when given; recorded in the event detail. */
+  batchId?: string
 }
 
 export type ClaimFailure =
@@ -237,6 +289,7 @@ export type ClaimFailure =
 export type ClaimResult = { ok: true; owner: ResourceOwner } | { ok: false; reason: ClaimFailure }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function validEvidence(backup: BackupEvidence): boolean {
   return (
@@ -446,6 +499,7 @@ export class OwnershipRepository {
     }
     if (!validEvidence(input.backup)) return { ok: false, reason: 'invalid-input' }
     if (typeof input.actor !== 'string' || input.actor.length < 1 || input.actor.length > 36) return { ok: false, reason: 'invalid-input' }
+    if (input.batchId !== undefined && (typeof input.batchId !== 'string' || !UUID.test(input.batchId))) return { ok: false, reason: 'invalid-input' }
 
     return this.transaction((): ClaimResult => {
       const target = this.db.prepare('SELECT status FROM app_users WHERE id = ?').get(input.targetUserId) as { status: string } | undefined
@@ -477,7 +531,8 @@ export class OwnershipRepository {
             backupBytes: input.backup.bytes,
             schemaVersion: input.backup.schemaVersion,
             scopeToken: scope.scopeToken,
-            counts: scope.counts
+            counts: scope.counts,
+            ...(input.batchId === undefined ? {} : { batchId: input.batchId })
           }
         },
         at

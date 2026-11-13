@@ -55,6 +55,12 @@ const { values } = parseArgs({
     'init-lan-test-profile': { type: 'boolean' },
     'migrate-database': { type: 'boolean' },
     'revert-migration': { type: 'boolean' },
+    'claim-legacy': { type: 'boolean' },
+    'target-user': { type: 'string' },
+    client: { type: 'string', multiple: true },
+    operator: { type: 'string' },
+    preview: { type: 'boolean' },
+    'show-names': { type: 'boolean' },
     'expect-from': { type: 'string' },
     'expect-to': { type: 'string' },
     confirm: { type: 'string' }
@@ -73,12 +79,18 @@ if (!hooksGuard.ok) {
 // Operator maintenance (#248): upgrade or revert an existing profile. Needs an explicit
 // --data-dir, never starts the server and exits when done. No environment variable can
 // confirm or bypass anything here.
-if (values['migrate-database'] || values['revert-migration']) {
+if (values['migrate-database'] || values['revert-migration'] || values['claim-legacy']) {
   const prompts = createInterface({ input: process.stdin, output: process.stdout })
   const code = await runMaintenanceCommand(
     {
       migrate: values['migrate-database'] === true,
       revert: values['revert-migration'] === true,
+      claim: values['claim-legacy'] === true,
+      targetUser: values['target-user'],
+      clients: values.client ?? [],
+      operator: values.operator,
+      preview: values.preview === true,
+      showNames: values['show-names'] === true,
       dataDir: values['data-dir'],
       expectFrom: values['expect-from'],
       expectTo: values['expect-to'],
@@ -86,6 +98,7 @@ if (values['migrate-database'] || values['revert-migration']) {
     },
     {
       isTTY: process.stdin.isTTY === true,
+      outputIsTTY: process.stdout.isTTY === true,
       log: (message) => console.log(message),
       error: (message) => console.error(message),
       prompt: (question) => prompts.question(question)

@@ -103,4 +103,4 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npx vitest run tests/unit/migration-safety.test.ts tests/unit/schema-wal.test.ts
+      - run: npx vitest run tests/unit/migration-safety.test.ts tests/unit/schema-wal.test.ts tests/unit/claim-legacy.test.ts

@@ -35,7 +35,8 @@
     "lan:rehearsal": "node --disable-warning=ExperimentalWarning scripts/lan-rehearsal.mjs",
     "web:local": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs",
     "db:migrate": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --migrate-database",
-    "db:revert-migration": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --revert-migration"
+    "db:revert-migration": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --revert-migration",
+    "db:claim-legacy": "node --disable-warning=ExperimentalWarning dist-web/server/main.mjs --claim-legacy"
   },
   "dependencies": {
     "@tiptap/core": "3.31.4",

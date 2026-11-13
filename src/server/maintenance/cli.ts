@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import type { Migration } from '../../main/database/migrations'
 import { DataDirInUseError } from '../data-dir'
+import { applyClaim, formatPlan, planClaim, type ClaimDeps } from './claim-legacy'
 import {
   confirmationPhrase,
   MaintenanceError,
@@ -23,10 +24,21 @@ export interface MaintenanceArgs {
   expectFrom: string | undefined
   expectTo: string | undefined
   confirm: string | undefined
+  /** db:claim-legacy (#245). */
+  claim?: boolean
+  targetUser?: string | undefined
+  clients?: readonly string[] | undefined
+  operator?: string | undefined
+  preview?: boolean | undefined
+  /** Adds display names to the plan output, only in an interactive terminal. */
+  showNames?: boolean | undefined
 }
 
 export interface MaintenanceIo {
+  /** stdin is a terminal: prompting is possible. */
   isTTY: boolean
+  /** stdout is a terminal (#245): names are never printed into a pipe or a redirected file. */
+  outputIsTTY?: boolean
   log(message: string): void
   error(message: string): void
   prompt(question: string): Promise<string>
@@ -34,6 +46,7 @@ export interface MaintenanceIo {
 
 /** In-code seams for tests; the real command passes none. */
 export interface MaintenanceDeps {
+  claim?: ClaimDeps
   migrations?: readonly Migration[]
   now?: () => Date
 }
@@ -44,8 +57,8 @@ function wholeNumber(value: string | undefined): number | null {
 
 /** Runs one maintenance command and returns the process exit code (0 done, 1 refused or failed). */
 export async function runMaintenanceCommand(args: MaintenanceArgs, io: MaintenanceIo, deps: MaintenanceDeps = {}): Promise<number> {
-  if (args.migrate && args.revert) {
-    io.error('Use --migrate-database or --revert-migration, not both. Nothing was changed.')
+  if ([args.migrate, args.revert, args.claim === true].filter(Boolean).length > 1) {
+    io.error('Use only one of --migrate-database, --revert-migration and --claim-legacy. Nothing was changed.')
     return 1
   }
   if (args.dataDir === undefined) {
@@ -55,6 +68,58 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
   const dataDir = resolve(args.dataDir)
 
   try {
+    if (args.claim === true) {
+      if (args.targetUser === undefined || (args.clients ?? []).length === 0) {
+        io.error('--claim-legacy needs --target-user <id> and at least one --client <id>. Nothing was changed.')
+        return 1
+      }
+      const options = {
+        dataDir,
+        targetUserId: args.targetUser,
+        clientIds: args.clients ?? [],
+        ...(args.operator !== undefined ? { operator: args.operator } : {})
+      }
+      const plan = planClaim(options)
+      const interactive = io.isTTY && io.outputIsTTY === true
+      const showNames = args.showNames === true && interactive
+      if (args.showNames === true && !interactive) io.log('--show-names is ignored: input and output must both be an interactive terminal. Ids and counts only.')
+      if (args.preview === true) {
+        for (const line of formatPlan(plan, showNames)) io.log(line)
+        io.log('Preview only. Nothing was changed.')
+        return 0
+      }
+      if (plan.pending === 0) {
+        for (const line of formatPlan(plan, showNames)) io.log(line)
+        return 0
+      }
+      let confirm = args.confirm
+      if (confirm === undefined) {
+        if (!io.isTTY) {
+          io.error('Not an interactive terminal: pass --confirm "<phrase>". Nothing was changed.')
+          return 1
+        }
+        for (const line of formatPlan(plan, showNames)) io.log(line)
+        io.log('Stop the web app first and keep your own off-host copy of the data folder.')
+        io.log('Confirm the researcher has agreed to each listed client.')
+        confirm = await io.prompt(`Type ${plan.phrase} to continue: `)
+      }
+      const report = applyClaim({ ...options, confirm }, deps.claim ?? {})
+      if (report.nothingToDo) {
+        io.log('Nothing to do: every listed client is already claimed by this account.')
+        return 0
+      }
+      io.log(`Batch ${report.batchId}: claimed ${report.claimed.length}, already done ${report.done.length}, remaining ${report.remaining.length}.`)
+      for (const id of report.claimed) io.log(`  claimed ${id}`)
+      for (const id of report.done) io.log(`  done ${id}`)
+      for (const id of report.remaining) io.log(`  remaining ${id}`)
+      io.log(`The snapshot and report are kept in ${report.folder}/.`)
+      if (report.failure !== null) {
+        io.error(`The batch stopped (${report.failure}). Run --preview again and confirm with its new phrase to claim what remains.`)
+        return 1
+      }
+      return 0
+    }
+
     if (args.migrate) {
       const expectFrom = wholeNumber(args.expectFrom)
       const expectTo = wholeNumber(args.expectTo)
@@ -105,7 +170,17 @@ export async function runMaintenanceCommand(args: MaintenanceArgs, io: Maintenan
       return 0
     }
   } catch (error) {
-    if (error instanceof MaintenanceError) io.error(error.message)
+    if (error instanceof MaintenanceError) {
+      const detail = error.detail
+      if (detail) {
+        io.log(`Batch ${detail.batchId}: claimed ${detail.claimed.length}, already done ${detail.done.length}, remaining ${detail.remaining.length}.`)
+        for (const id of detail.claimed) io.log(`  claimed ${id}`)
+        for (const id of detail.done) io.log(`  done ${id}`)
+        for (const id of detail.remaining) io.log(`  remaining ${id}`)
+        io.log(`The snapshot and report are kept in ${detail.folder}/.`)
+      }
+      io.error(error.message)
+    }
     else if (error instanceof DataDirInUseError) io.error('Tracing Guatemala is running with this data. Stop it first. Nothing was changed.')
     // Only the error name: SQLite messages can quote stored values.
     else io.error(`The maintenance command failed: ${error instanceof Error ? error.name : 'unknown error'}. See docs/operations/database-migration.md.`)
