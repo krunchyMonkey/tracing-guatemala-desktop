@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppData } from '../../src/main/database/app-data'
 import { dataDirectory, DATABASE_FILE_NAME } from '../../src/main/database/connection'
 import { migrations } from '../../src/main/database/migrations'
+import { scopeContentDigest } from '../../src/main/database/ownership-repository'
 import { caseAccess, clientAccess, type ResearchScope } from '../../src/main/database/research-access'
 import { acquireDataDirLock } from '../../src/server/data-dir'
 import { RESEARCH_CLASS } from '../../src/server/auth/research-policy'
@@ -324,6 +325,82 @@ describe('apply', () => {
     const previewed = await run({ targetUser: w.a, clients: ALL, preview: true })
     expect(previewed.out).toContain('done')
     expect(state()).toEqual(before)
+  })
+
+  describe('a stale phrase after the content changed', () => {
+    const edit = (sql: string, ...params: (string | number)[]): void => {
+      const db = new DatabaseSync(live())
+      try {
+        db.prepare(sql).run(...params)
+      } finally {
+        db.close()
+      }
+    }
+    const { anaActive } = LEGACY.cases
+    const edits: [string, string, (string | number)[]][] = [
+      ['notebook page content', 'UPDATE notebook_pages SET content = ? WHERE id = ?', ['{"version":1,"blocks":[]}', LEGACY.pages.anaMain]],
+      ['client note body', 'UPDATE client_notes SET body = ? WHERE id = ?', ['Fictional edited note.', fid(211)]],
+      ['journal entry body', 'UPDATE case_journal_entries SET body = ? WHERE id = ?', ['Fictional edited entry.', fid(321)]],
+      ['time entry minutes', 'UPDATE case_time_entries SET duration_minutes = ? WHERE id = ?', [46, fid(341)]],
+      ['task title', 'UPDATE case_tasks SET title = ? WHERE id = ?', ['Fictional edited task', fid(331)]],
+      ['case brief facts', 'UPDATE case_briefs SET facts = ? WHERE case_id = ?', ['Fictional edited facts.', anaActive]],
+      ['case title', 'UPDATE research_cases SET title = ? WHERE id = ?', ['Fictional edited title', anaActive]],
+      ['client row display name', 'UPDATE clients SET display_name = ? WHERE id = ?', ['Ana Edited Fictional', ana]]
+    ]
+
+    it.each(edits)('refuses after an edit to %s', async (_name, sql, params) => {
+      const w = world()
+      const phrase = phraseFor(w.a, [ana])
+      edit(sql, ...params)
+      const before = state()
+      const result = await run({ targetUser: w.a, clients: [ana], confirm: phrase })
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('confirmation phrase did not match')
+      expect(state()).toEqual(before)
+      expect(ownershipCount()).toBe(0)
+    })
+
+    it('an edit to a client that is not in the batch keeps the phrase valid', async () => {
+      const w = world()
+      const phrase = phraseFor(w.a, [ana])
+      edit('UPDATE client_notes SET body = ? WHERE id = ?', 'Fictional edited elsewhere.', fid(213))
+      edit('UPDATE case_journal_entries SET body = ? WHERE id = ?', 'Fictional edited elsewhere too.', fid(323))
+      const result = await run({ targetUser: w.a, clients: [ana], confirm: phrase })
+      expect(result.code).toBe(0)
+      expect(ownerOf(ana)).toEqual([{ owner_user_id: w.a }])
+      expect(ownerOf(beto)).toEqual([])
+    })
+
+    it('a fresh preview phrase succeeds after a refused stale apply', async () => {
+      const w = world()
+      const stale = phraseFor(w.a, [ana])
+      edit('UPDATE client_notes SET body = ? WHERE id = ?', 'Fictional edited note.', fid(211))
+      expect((await run({ targetUser: w.a, clients: [ana], confirm: stale })).code).toBe(1)
+      const fresh = phraseFor(w.a, [ana])
+      expect(fresh).not.toBe(stale)
+      const result = await run({ targetUser: w.a, clients: [ana], confirm: fresh })
+      expect(result.code).toBe(0)
+      expect(ownerOf(ana)).toEqual([{ owner_user_id: w.a }])
+    })
+
+    it('scopeContentDigest is deterministic, follows tree content and ignores other clients', () => {
+      world()
+      const digestOf = (clientId: string): string => {
+        const db = new DatabaseSync(live(), { readOnly: true })
+        try {
+          return scopeContentDigest(db, clientId)
+        } finally {
+          db.close()
+        }
+      }
+      const first = digestOf(ana)
+      expect(first).toMatch(/^[0-9a-f]{64}$/)
+      expect(digestOf(ana)).toBe(first)
+      edit('UPDATE client_notes SET body = ? WHERE id = ?', 'Fictional edited elsewhere.', fid(213))
+      expect(digestOf(ana)).toBe(first)
+      edit('UPDATE notebook_pages SET content = ? WHERE id = ?', '{"version":1,"blocks":[]}', LEGACY.pages.anaMain)
+      expect(digestOf(ana)).not.toBe(first)
+    })
   })
 })
 

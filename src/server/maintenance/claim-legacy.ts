@@ -8,6 +8,7 @@ import { getSchemaVersion, migrations } from '../../main/database/migrations'
 import {
   claimConfirmationPhrase,
   OwnershipRepository,
+  scopeContentDigest,
   type BackupEvidence,
   type ClaimPreview
 } from '../../main/database/ownership-repository'
@@ -119,13 +120,20 @@ export const claimActor = (operator: string): string => `cli:${operator}`
 export const batchPhrase = (count: number, targetUserId: string, fingerprint: string): string =>
   `CLAIM ${count} CLIENTS FOR ${targetUserId} ${fingerprint}`
 
-/** Covers the target's version, auth version, role, status and identity pairs, and each pending client's scope and status. */
+/**
+ * Covers the target's version, auth version, role, status and identity pairs, and each pending
+ * client's scope token, status and a digest of the full content of its row and record tree, so an
+ * edit between preview and apply changes the phrase.
+ */
 function fingerprintOf(
   target: { id: string; version: number; auth_version: number; role: string; status: string },
   identityDigest: string,
-  pending: ClaimPreview[]
+  pending: ClaimPreview[],
+  contentDigests: Map<string, string>
 ): string {
-  const triples = pending.map((p): [string, string, string] => [p.clientId, p.scopeToken, p.clientStatus]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  const triples = pending
+    .map((p): [string, string, string, string] => [p.clientId, p.scopeToken, p.clientStatus, contentDigests.get(p.clientId) ?? ''])
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   return createHash('sha256')
     .update(JSON.stringify({ target: [target.id, target.version, target.auth_version, target.role, target.status, identityDigest], clients: triples }))
     .digest('hex')
@@ -173,6 +181,7 @@ function buildPlan(db: DatabaseSync, input: Normalized): Planned {
   const repo = new OwnershipRepository(db)
   const clients: PlanClient[] = []
   const pendingPreviews: ClaimPreview[] = []
+  const contentDigests = new Map<string, string>()
   for (const clientId of input.clientIds) {
     const row = db.prepare('SELECT display_name FROM clients WHERE id = ?').get(clientId) as { display_name: string } | undefined
     if (!row) throw new MaintenanceError('client-not-found')
@@ -185,6 +194,7 @@ function buildPlan(db: DatabaseSync, input: Normalized): Planned {
     }
     const c = result.preview.counts
     pendingPreviews.push(result.preview)
+    contentDigests.set(clientId, scopeContentDigest(db, clientId))
     clients.push({
       id: clientId,
       displayName: row.display_name,
@@ -199,7 +209,7 @@ function buildPlan(db: DatabaseSync, input: Normalized): Planned {
       }
     })
   }
-  const fingerprint = pendingPreviews.length === 0 ? '' : fingerprintOf(target, identityDigest, pendingPreviews)
+  const fingerprint = pendingPreviews.length === 0 ? '' : fingerprintOf(target, identityDigest, pendingPreviews, contentDigests)
   return {
     pendingPreviews,
     plan: {

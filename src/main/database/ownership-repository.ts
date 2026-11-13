@@ -177,6 +177,54 @@ function readScope(db: DatabaseSync, clientId: string): TreeScope {
   return { counts, ids, scopeToken }
 }
 
+function serializeValue(value: unknown): string {
+  if (value === null || value === undefined) return 'N;'
+  if (typeof value === 'bigint') return `I${value.toString()};`
+  if (typeof value === 'number') return `R${Object.is(value, -0) ? '-0' : String(value)};`
+  if (typeof value === 'string') return `T${Buffer.byteLength(value)}:${value};`
+  if (value instanceof Uint8Array) return `B${value.byteLength}:${Buffer.from(value).toString('hex')};`
+  return 'U;'
+}
+
+/**
+ * SHA-256 over the full content of the client's row and every row of its record tree (all columns,
+ * type-tagged and length-prefixed, rows ordered by id). A table missing from an older schema
+ * contributes an explicit marker. Only the hash leaves this function, never content.
+ */
+export function scopeContentDigest(db: DatabaseSync, clientId: string): string {
+  const hash = createHash('sha256')
+  const feed = (text: string): void => {
+    hash.update(serializeValue(text))
+  }
+  const columnsOf = (table: string): string[] => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+  const select = (columns: string[]): string => columns.map((c) => `"${c.replaceAll('"', '""')}"`).join(', ')
+  const feedRows = (sql: string, columns: string[]): void => {
+    const statement = db.prepare(sql)
+    statement.setReadBigInts(true)
+    for (const row of statement.iterate(clientId) as Iterable<Record<string, unknown>>) {
+      for (const column of columns) hash.update(serializeValue(row[column]))
+      hash.update('\n')
+    }
+  }
+
+  feed('clients')
+  const clientColumns = columnsOf('clients')
+  for (const column of clientColumns) feed(column)
+  feedRows(`SELECT ${select(clientColumns)} FROM clients WHERE id = ?`, clientColumns)
+  for (const t of TREE) {
+    feed(t.table)
+    if (!tableExists(db, t.table)) {
+      hash.update('MISSING;')
+      continue
+    }
+    const columns = columnsOf(t.table)
+    for (const column of columns) feed(column)
+    feedRows(`SELECT ${select(columns)} FROM ${t.table} WHERE ${t.scope} ORDER BY ${t.id}`, columns)
+    hash.update('END;')
+  }
+  return hash.digest('hex')
+}
+
 export interface UnclaimedClient {
   id: string
   displayName: string
