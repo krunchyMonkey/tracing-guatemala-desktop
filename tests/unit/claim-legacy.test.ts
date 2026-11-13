@@ -422,7 +422,9 @@ describe('apply', () => {
           fault: (point) => {
             if (point !== 'before-writer-lock') return
             edit('UPDATE client_notes SET body = ? WHERE id = ?', 'Fictional edited in the gap.', fid(211))
-            atFault = state()
+            // Taken while the command holds the data-folder lock; the lock file is released after the run.
+            const s = state()
+            atFault = { ...s, names: s.names.filter((n) => n !== 'web-host.lock') }
           }
         }
       )
