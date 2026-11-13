@@ -157,7 +157,13 @@ function requireCurrent(dataDir: string): void {
   const latest = migrations.length
   // A leftover write-ahead log means an unclean close. Refuse before anything opens the file:
   // even the exclusive in-use probe would checkpoint it, and a preview must write nothing.
-  if (walSize(liveFileOf(dataDir)) > 0) throw new MaintenanceError('not-cleanly-closed')
+  const liveFile = liveFileOf(dataDir)
+  if (walSize(liveFile) > 0) throw new MaintenanceError('not-cleanly-closed')
+  // Any side file at all (even an empty -wal or a -shm) means another program may have the file open or it was
+  // not closed cleanly, and our own connections would delete it on close. Refuse so that a preview leaves the
+  // folder as it found it: with none present, every side file that appears is ours and tidySideFiles removes
+  // only those.
+  if (existsSync(`${liveFile}-wal`) || existsSync(`${liveFile}-shm`)) throw new MaintenanceError('side-files-present')
   const state = inspectProfile(dataDir, latest)
   if (state.kind === 'unsafe') throw new MaintenanceError(`unsafe:${state.reason}`)
   if (state.kind === 'too-new') throw new MaintenanceError('too-new')

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -124,6 +124,8 @@ describe('preview', () => {
   it('prints the plan and leaves the profile byte-identical, with no maintenance folder', async () => {
     const w = world()
     const before = state()
+    expect(existsSync(`${live()}-wal`)).toBe(false)
+    expect(existsSync(`${live()}-shm`)).toBe(false)
     const result = await run({ targetUser: w.a, clients: ALL, preview: true })
     expect(result.code).toBe(0)
     expect(result.out).toContain(w.a)
@@ -137,6 +139,8 @@ describe('preview', () => {
     expect(result.out).toContain(`CLAIM 3 CLIENTS FOR ${w.a} `)
     expectClean(result)
     expect(state()).toEqual(before)
+    expect(existsSync(`${live()}-wal`)).toBe(false)
+    expect(existsSync(`${live()}-shm`)).toBe(false)
   })
 
   it('shows display names only with --show-names in an interactive terminal', async () => {
@@ -180,6 +184,40 @@ describe('preview', () => {
       holder.close()
     }
     expect(ownershipCount()).toBe(0)
+  })
+
+  describe('pre-existing side files', () => {
+    const SHM = () => Buffer.alloc(32768, 7)
+    const fixtures: [string, { wal?: Buffer; shm?: Buffer }][] = [
+      ['an empty -wal and a -shm', { wal: Buffer.alloc(0), shm: SHM() }],
+      ['a -shm only', { shm: SHM() }],
+      ['an empty -wal only', { wal: Buffer.alloc(0) }]
+    ]
+
+    it.each(fixtures)('refuses %s for preview and apply, leaving every byte and name as found', async (_name, files) => {
+      const w = world()
+      const phrase = phraseFor(w.a, [ana])
+      const walPath = `${live()}-wal`
+      const shmPath = `${live()}-shm`
+      expect(existsSync(walPath)).toBe(false)
+      expect(existsSync(shmPath)).toBe(false)
+      if (files.wal) writeFileSync(walPath, files.wal)
+      if (files.shm) writeFileSync(shmPath, files.shm)
+      const before = state()
+      for (const extra of [{ preview: true }, { confirm: phrase }]) {
+        const result = await run({ targetUser: w.a, clients: [ana], ...extra })
+        expect(result.code).toBe(1)
+        expect(result.err).toContain('another program may have it open')
+        expectClean(result)
+      }
+      expect(state()).toEqual(before)
+      expect(existsSync(walPath)).toBe(files.wal !== undefined)
+      expect(existsSync(shmPath)).toBe(files.shm !== undefined)
+      if (files.wal) expect(readFileSync(walPath).equals(files.wal)).toBe(true)
+      if (files.shm) expect(readFileSync(shmPath).equals(files.shm)).toBe(true)
+      // Last: reading ownership opens a connection, which may create side files.
+      expect(ownershipCount()).toBe(0)
+    })
   })
 })
 
@@ -488,9 +526,13 @@ describe('refusals write nothing', () => {
     const holder = new DatabaseSync(live())
     holder.prepare('SELECT count(*) AS n FROM clients').get()
     try {
+      // The holder's WAL-mode connection has its -wal/-shm in place, so the side-file check refuses first.
+      const before = readFileSync(live())
       const result = await run({ targetUser: w.a, clients: [ana], confirm: 'x' })
       expect(result.code).toBe(1)
-      expect(result.err).toContain('Another program has this data open')
+      expect(result.err).toContain('another program may have it open')
+      expect(readFileSync(live()).equals(before)).toBe(true)
+      expect(existsSync(join(dataDirectory(root), 'maintenance'))).toBe(false)
     } finally {
       holder.close()
     }

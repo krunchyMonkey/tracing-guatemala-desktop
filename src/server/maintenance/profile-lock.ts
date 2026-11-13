@@ -16,6 +16,7 @@ export type MaintenanceCode =
   | 'version-mismatch'
   | 'too-new'
   | 'not-cleanly-closed'
+  | 'side-files-present'
   | 'in-use'
   | 'changed-during-migration'
   | 'not-confirmed'
@@ -48,6 +49,8 @@ const MESSAGES: Record<string, string> = {
   'too-new': 'The data was saved by a newer version than this build. Nothing was changed.',
   'not-cleanly-closed':
     'The data was not closed cleanly. Start and stop the current app version once, then try again. Nothing was changed.',
+  'side-files-present':
+    'The data folder has leftover database side files (-wal or -shm): another program may have it open, or it was not closed cleanly. Stop every copy of the app, start and stop the current app version once, then try again. Nothing was changed.',
   'in-use': 'Another program has this data open. Stop every copy of the app, then try again. Nothing was changed.',
   'changed-during-migration':
     'The data changed while the migration was running. The live data was not changed by the migration; the snapshot was kept.',
