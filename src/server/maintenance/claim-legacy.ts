@@ -41,7 +41,7 @@ const OPERATOR_PATTERN = /^[A-Za-z0-9._-]{1,30}$/
 export const DEFAULT_OPERATOR = 'host'
 
 /** Test-only fault seam. `before-client-<k>` is 1-based over the pending clients, in the order given. */
-export type ClaimFaultPoint = 'after-snapshot' | 'before-verify' | `before-client-${number}`
+export type ClaimFaultPoint = 'before-probe' | 'before-writer-lock' | 'after-snapshot' | 'before-verify' | `before-client-${number}`
 
 export interface ClaimDeps {
   /** Called at each point; a test throws from it to simulate a failure. Never wired to the environment. */
@@ -234,9 +234,10 @@ export function planClaim(options: ClaimOptions): ClaimPlan {
   return withLockedProfile(options.dataDir, () => readPlan(options.dataDir, input).plan)
 }
 
-function readPlan(dataDir: string, input: Normalized): Planned {
+function readPlan(dataDir: string, input: Normalized, fault?: (point: ClaimFaultPoint) => void): Planned {
   const live = liveFileOf(dataDir)
   requireCurrent(dataDir)
+  fault?.('before-probe')
   assertNoOtherConnections(live)
   let db: DatabaseSync | null = null
   try {
@@ -341,26 +342,24 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
 
   return withLockedProfile(dataDir, () => {
     const live = liveFileOf(dataDir)
-    const { plan, pendingPreviews } = readPlan(dataDir, input)
+    const { plan, pendingPreviews } = readPlan(dataDir, input, fault)
     const done = plan.clients.filter((c) => c.status === 'done').map((c) => c.id)
     if (plan.pending === 0) {
       return { nothingToDo: true, batchId: null, folder: null, claimed: [], done, remaining: [], failure: null }
     }
     if (options.confirm !== plan.phrase) throw new MaintenanceError('not-confirmed')
     assertNoOtherConnections(live)
+    fault('before-writer-lock')
 
     // a-b. One read-write connection holds the exclusive lock from before the snapshot until
     // the last claim, so nothing else can write in between.
     const maintenanceDir = maintenanceDirOf(dataDir)
-    mkdirSync(maintenanceDir, { recursive: true })
-    const base = `claim-${stamped(now())}`
-    let folderName = base
-    for (let n = 2; existsSync(join(maintenanceDir, folderName)); n += 1) folderName = `${base}-${n}`
-    const stampDir = join(maintenanceDir, folderName)
-    mkdirSync(stampDir)
     const version = migrations.length
     const snapshotName = `snapshot-v${version}.sqlite`
-    const snapshot = join(stampDir, snapshotName)
+    // Created only after the lock, the health check and the fingerprint re-check, so a refusal there writes nothing.
+    let folderName!: string
+    let stampDir!: string
+    let snapshot!: string
 
     const batchId = randomUUID()
     const actor = claimActor(input.operator)
@@ -381,6 +380,13 @@ export function applyClaim(options: ApplyOptions, deps: ClaimDeps = {}): ClaimRe
         if (!isHealthy(writer)) throw new MaintenanceError('source-damaged')
         // Nothing can have changed since the plan, but the fingerprint is cheap to re-check under the exclusive lock.
         if (buildPlan(writer, input).plan.fingerprint !== plan.fingerprint) throw new MaintenanceError('not-confirmed')
+        mkdirSync(maintenanceDir, { recursive: true })
+        const base = `claim-${stamped(now())}`
+        folderName = base
+        for (let n = 2; existsSync(join(maintenanceDir, folderName)); n += 1) folderName = `${base}-${n}`
+        stampDir = join(maintenanceDir, folderName)
+        mkdirSync(stampDir)
+        snapshot = join(stampDir, snapshotName)
         before = computeManifest(writer)
         targetBefore = readTarget(writer, input.targetUserId)
         writer.prepare('VACUUM INTO ?').run(snapshot)

@@ -210,6 +210,7 @@ export function scopeContentDigest(db: DatabaseSync, clientId: string): string {
   feed('clients')
   const clientColumns = columnsOf('clients')
   for (const column of clientColumns) feed(column)
+  hash.update(`COLS${clientColumns.length};ROWS;`)
   feedRows(`SELECT ${select(clientColumns)} FROM clients WHERE id = ?`, clientColumns)
   for (const t of TREE) {
     feed(t.table)
@@ -219,6 +220,7 @@ export function scopeContentDigest(db: DatabaseSync, clientId: string): string {
     }
     const columns = columnsOf(t.table)
     for (const column of columns) feed(column)
+    hash.update(`COLS${columns.length};ROWS;`)
     feedRows(`SELECT ${select(columns)} FROM ${t.table} WHERE ${t.scope} ORDER BY ${t.id}`, columns)
     hash.update('END;')
   }

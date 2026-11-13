@@ -71,8 +71,19 @@ function state(): { sha: string; names: string[] } {
   return { sha: createHash('sha256').update(readFileSync(live())).digest('hex'), names: listing(root) }
 }
 
+/**
+ * A read-only connection leaves an empty -wal and a -shm behind when it closes, and the claim command
+ * refuses a profile with side files. So read through a normal connection set to query_only: as the last
+ * connection its close removes the side files again.
+ */
+function openForRead(): DatabaseSync {
+  const db = new DatabaseSync(live())
+  db.exec('PRAGMA query_only = ON')
+  return db
+}
+
 function rows(sql: string, ...params: string[]): unknown[] {
-  const db = new DatabaseSync(live(), { readOnly: true })
+  const db = openForRead()
   try {
     return db.prepare(sql).all(...params)
   } finally {
@@ -381,6 +392,9 @@ describe('apply', () => {
       ['journal entry body', 'UPDATE case_journal_entries SET body = ? WHERE id = ?', ['Fictional edited entry.', fid(321)]],
       ['time entry minutes', 'UPDATE case_time_entries SET duration_minutes = ? WHERE id = ?', [46, fid(341)]],
       ['task title', 'UPDATE case_tasks SET title = ? WHERE id = ?', ['Fictional edited task', fid(331)]],
+      ['case notebook updated_at', 'UPDATE case_notebooks SET updated_at = ? WHERE id = ?', ['2026-09-09T10:00:00.000Z', LEGACY.notebooks.ana]],
+      ['notebook section title', 'UPDATE notebook_sections SET title = ? WHERE id = ?', ['Fictional edited section', LEGACY.sections.anaNotes]],
+      ['active timer seconds', 'UPDATE case_active_timer SET accumulated_seconds = ? WHERE case_id = ?', [121, LEGACY.cases.anaIntake]],
       ['case brief facts', 'UPDATE case_briefs SET facts = ? WHERE case_id = ?', ['Fictional edited facts.', anaActive]],
       ['case title', 'UPDATE research_cases SET title = ? WHERE id = ?', ['Fictional edited title', anaActive]],
       ['client row display name', 'UPDATE clients SET display_name = ? WHERE id = ?', ['Ana Edited Fictional', ana]]
@@ -395,6 +409,28 @@ describe('apply', () => {
       expect(result.code).toBe(1)
       expect(result.err).toContain('confirmation phrase did not match')
       expect(state()).toEqual(before)
+      expect(ownershipCount()).toBe(0)
+    })
+
+    it('refuses an edit made between the confirmation check and the writer lock, writing nothing', async () => {
+      const w = world()
+      const phrase = phraseFor(w.a, [ana])
+      let atFault: ReturnType<typeof state> | null = null
+      const result = await run(
+        { targetUser: w.a, clients: [ana], confirm: phrase },
+        {
+          fault: (point) => {
+            if (point !== 'before-writer-lock') return
+            edit('UPDATE client_notes SET body = ? WHERE id = ?', 'Fictional edited in the gap.', fid(211))
+            atFault = state()
+          }
+        }
+      )
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('confirmation phrase did not match')
+      expect(atFault).not.toBeNull()
+      expect(state()).toEqual(atFault)
+      expect(claimFolders()).toEqual([])
       expect(ownershipCount()).toBe(0)
     })
 
@@ -424,7 +460,7 @@ describe('apply', () => {
     it('scopeContentDigest is deterministic, follows tree content and ignores other clients', () => {
       world()
       const digestOf = (clientId: string): string => {
-        const db = new DatabaseSync(live(), { readOnly: true })
+        const db = openForRead()
         try {
           return scopeContentDigest(db, clientId)
         } finally {
@@ -527,15 +563,41 @@ describe('refusals write nothing', () => {
     holder.prepare('SELECT count(*) AS n FROM clients').get()
     try {
       // The holder's WAL-mode connection has its -wal/-shm in place, so the side-file check refuses first.
-      const before = readFileSync(live())
+      const before = state()
       const result = await run({ targetUser: w.a, clients: [ana], confirm: 'x' })
       expect(result.code).toBe(1)
-      expect(result.err).toContain('another program may have it open')
-      expect(readFileSync(live()).equals(before)).toBe(true)
-      expect(existsSync(join(dataDirectory(root), 'maintenance'))).toBe(false)
+      expect(result.err).toContain('leftover database side files')
+      // The holder's own side files are in both listings; nothing else changed and no claim folder appeared.
+      expect(state()).toEqual(before)
+      expect(claimFolders()).toEqual([])
     } finally {
       holder.close()
     }
+    expect(ownershipCount()).toBe(0)
+  })
+
+  it('refuses as in use while another connection holds the profile during the probe', async () => {
+    const w = world()
+    const phrase = phraseFor(w.a, [ana])
+    let holder: DatabaseSync | null = null
+    try {
+      const result = await run(
+        { targetUser: w.a, clients: [ana], confirm: phrase },
+        {
+          fault: (point) => {
+            if (point !== 'before-probe') return
+            holder = new DatabaseSync(live())
+            holder.exec('PRAGMA locking_mode = EXCLUSIVE')
+            holder.exec('BEGIN EXCLUSIVE')
+          }
+        }
+      )
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('Another program has this data open')
+    } finally {
+      ;(holder as DatabaseSync | null)?.close()
+    }
+    expect(claimFolders()).toEqual([])
     expect(ownershipCount()).toBe(0)
   })
 
